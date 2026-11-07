@@ -68,7 +68,10 @@ export class JobScratchDirectory {
         return;
       } catch (err: any) {
         if (attempt === maxRetries) {
-          console.warn(`[JobScratchDirectory] Could not fully remove ${this.dirPath}:`, err.message);
+          console.warn(
+            `[JobScratchDirectory] Could not fully remove ${this.dirPath}:`,
+            err.message
+          );
         } else {
           // Synchronous spin-wait before retry
           const start = Date.now();
@@ -116,7 +119,9 @@ export class JobScratchDirectory {
             if (now - stats.mtimeMs > maxAgeMs) {
               fs.rmSync(fullPath, { recursive: true, force: true });
               purgedCount++;
-              console.log(`[JobScratchDirectory] Purged stale job scratch directory: ${entry.name}`);
+              console.log(
+                `[JobScratchDirectory] Purged stale job scratch directory: ${entry.name}`
+              );
             }
           } catch {
             // Ignore individual stat errors
@@ -130,4 +135,3 @@ export class JobScratchDirectory {
     return purgedCount;
   }
 }
-

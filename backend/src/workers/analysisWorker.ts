@@ -33,7 +33,9 @@ export function startAnalysisWorker() {
     'analysis',
     async (job: Job<AnalysisJobPayload>) => {
       const { jobId, projectId, assetId, rawKey, userId } = job.data;
-      console.log(`[AnalysisWorker] Starting analysis pipeline for asset ${assetId} (job: ${jobId})`);
+      console.log(
+        `[AnalysisWorker] Starting analysis pipeline for asset ${assetId} (job: ${jobId})`
+      );
 
       // Ensure isolated per-job temporary scratch directory
       const scratch = new JobScratchDirectory(jobId);
@@ -112,7 +114,11 @@ export function startAnalysisWorker() {
         console.log(`[AnalysisWorker] Generating 480p proxy preview video...`);
         const proxyKey = StorageKeys.proxyVideo(userId, projectId, assetId);
         try {
-          await MediaProbeService.generateProxy480p(localRawPath, localProxyPath, !!metadata.audioCodec);
+          await MediaProbeService.generateProxy480p(
+            localRawPath,
+            localProxyPath,
+            !!metadata.audioCodec
+          );
           await S3Service.uploadFile(proxyKey, localProxyPath, 'video/mp4');
           asset.s3.proxyKey = proxyKey;
         } catch (proxyErr: any) {
@@ -132,7 +138,9 @@ export function startAnalysisWorker() {
         let loudness = { integratedLufs: -16.0, truePeakDb: -1.0 };
 
         if (metadata.audioCodec) {
-          console.log(`[AnalysisWorker] Extracting 16kHz mono WAV for audio intelligence: ${audioKey}...`);
+          console.log(
+            `[AnalysisWorker] Extracting 16kHz mono WAV for audio intelligence: ${audioKey}...`
+          );
           try {
             await MediaProbeService.extractAudioWav(localRawPath, localAudioPath);
             await S3Service.uploadFile(audioKey, localAudioPath, 'audio/wav');
@@ -179,10 +187,7 @@ export function startAnalysisWorker() {
           );
         }
 
-        const captionHash = crypto
-          .createHash('sha256')
-          .update(JSON.stringify(cues))
-          .digest('hex');
+        const captionHash = crypto.createHash('sha256').update(JSON.stringify(cues)).digest('hex');
 
         const captionSet = await CaptionSetModel.findOneAndUpdate(
           { projectId: project._id, assetId: asset._id },
@@ -338,7 +343,10 @@ export function startAnalysisWorker() {
               await S3Service.uploadFile(previewKey, localCaptionedPreviewPath, 'video/mp4');
             }
           } catch (renderErr: any) {
-            console.warn('[AnalysisWorker] Subtitle burn notice, falling back to proxy preview:', renderErr.message);
+            console.warn(
+              '[AnalysisWorker] Subtitle burn notice, falling back to proxy preview:',
+              renderErr.message
+            );
             await S3Service.uploadFile(previewKey, localProxyPath, 'video/mp4');
           }
         } else if (fs.existsSync(localProxyPath)) {
@@ -381,7 +389,9 @@ export function startAnalysisWorker() {
           previewKey,
         });
 
-        console.log(`[AnalysisWorker] Successfully completed analysis and captioned preview for asset ${assetId}`);
+        console.log(
+          `[AnalysisWorker] Successfully completed analysis and captioned preview for asset ${assetId}`
+        );
       } catch (err: any) {
         console.error(`[AnalysisWorker] Pipeline error on asset ${assetId}:`, err);
         const errorCode = err.code || 'ANALYSIS_FAILED';
@@ -402,15 +412,9 @@ export function startAnalysisWorker() {
           }
         );
 
-        await AssetModel.updateOne(
-          { publicId: assetId },
-          { $set: { status: 'failed' } }
-        );
+        await AssetModel.updateOne({ publicId: assetId }, { $set: { status: 'failed' } });
 
-        await ProjectModel.updateOne(
-          { publicId: projectId },
-          { $set: { status: 'error' } }
-        );
+        await ProjectModel.updateOne({ publicId: projectId }, { $set: { status: 'error' } });
 
         await JobEventsPublisher.publishProgress(jobId, {
           jobId,

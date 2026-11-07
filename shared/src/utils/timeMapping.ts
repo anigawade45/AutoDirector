@@ -3,7 +3,7 @@ import { Marker, Timeline, Track } from '../types/timeline.js';
 
 export interface KeepSegment {
   srcStart: number; // in seconds
-  srcEnd: number;   // in seconds
+  srcEnd: number; // in seconds
   speed: number;
 }
 
@@ -213,10 +213,10 @@ export function buildKeepSegments(
     }
 
     // Match applicable speed factor
-    const matchingSpeed = speeds.find(
-      (sp) => sp.range.start <= start && sp.range.end >= end
-    );
-    const speed = matchingSpeed?.params?.factor ? Math.max(0.25, Math.min(4.0, matchingSpeed.params.factor)) : 1.0;
+    const matchingSpeed = speeds.find((sp) => sp.range.start <= start && sp.range.end >= end);
+    const speed = matchingSpeed?.params?.factor
+      ? Math.max(0.25, Math.min(4.0, matchingSpeed.params.factor))
+      : 1.0;
 
     return {
       srcStart: Number(start.toFixed(3)),
@@ -484,7 +484,11 @@ export function verifyTimelineInvariants(
       prevEndMs = clipEndMs;
 
       // Invariant 2: srcOutMs - srcInMs divided by speed equals durMs for video/audio
-      if ((clip.type === 'video' || clip.type === 'audio') && clip.srcInMs !== undefined && clip.srcOutMs !== undefined) {
+      if (
+        (clip.type === 'video' || clip.type === 'audio') &&
+        clip.srcInMs !== undefined &&
+        clip.srcOutMs !== undefined
+      ) {
         const speed = clip.speed || 1.0;
         const expectedDur = Math.round((clip.srcOutMs - clip.srcInMs) / speed);
         if (Math.abs(expectedDur - clip.durMs) > 2) {

@@ -71,4 +71,3 @@ bootstrap().catch((err) => {
   console.error('[Fatal Error] Failed to bootstrap application:', err);
   process.exit(1);
 });
-

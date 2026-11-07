@@ -44,4 +44,3 @@ const CatalogSchema = new Schema<ICatalogDocument>(
 CatalogSchema.index({ kind: 1, active: 1, tags: 1 });
 
 export const CatalogModel = mongoose.model<ICatalogDocument>('Catalog', CatalogSchema);
-

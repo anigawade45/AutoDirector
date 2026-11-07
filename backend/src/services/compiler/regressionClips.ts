@@ -55,14 +55,16 @@ export class RegressionClipService {
 
     const cutLayers = plan.layers.filter((l) => l.enabled && l.layer === 'cut') as any[];
     const speedLayers = plan.layers.filter((l) => l.enabled && l.layer === 'speed') as any[];
-    const transitionLayers = plan.layers.filter((l) => l.enabled && l.layer === 'transition') as any[];
+    const transitionLayers = plan.layers.filter(
+      (l) => l.enabled && l.layer === 'transition'
+    ) as any[];
     const introLayer = plan.layers.find((l) => l.enabled && l.layer === 'intro') as any;
     const outroLayer = plan.layers.find((l) => l.enabled && l.layer === 'outro') as any;
 
     const keepSegments = buildKeepSegments(cutLayers, totalAssetSec, speedLayers, fps);
 
-    const introDur = introLayer ? introLayer.params?.duration ?? 5 : 0;
-    const outroDur = outroLayer ? outroLayer.params?.duration ?? 5 : 0;
+    const introDur = introLayer ? (introLayer.params?.duration ?? 5) : 0;
+    const outroDur = outroLayer ? (outroLayer.params?.duration ?? 5) : 0;
 
     // Segment duration summing with speed
     let segsDur = 0;
@@ -95,7 +97,9 @@ export class RegressionClipService {
     // Check outro transition
     if (outroLayer && keepSegments.length > 0) {
       const lastSeg = keepSegments[keepSegments.length - 1];
-      const outroTrans = transitionLayers.find((t) => Math.abs(t.params?.at - lastSeg.srcEnd) < 0.2);
+      const outroTrans = transitionLayers.find(
+        (t) => Math.abs(t.params?.at - lastSeg.srcEnd) < 0.2
+      );
       if (outroTrans) {
         transitionOverlap += outroTrans.params?.duration || 0.5;
       }
@@ -193,4 +197,3 @@ export class RegressionClipService {
     };
   }
 }
-

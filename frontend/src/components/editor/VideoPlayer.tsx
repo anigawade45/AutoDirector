@@ -81,11 +81,7 @@ export const VideoPlayer: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input, textarea, or contentEditable
       const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return;
       }
 
@@ -152,7 +148,17 @@ export const VideoPlayer: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, stepFrame, setCurrentTime, playback.currentTime, playback.duration, playback.rate, setPlaybackRate, setPlaybackStatus, toggleMute]);
+  }, [
+    togglePlay,
+    stepFrame,
+    setCurrentTime,
+    playback.currentTime,
+    playback.duration,
+    playback.rate,
+    setPlaybackRate,
+    setPlaybackStatus,
+    toggleMute,
+  ]);
 
   // rAF loop: sampling currentTime at ~30Hz master clock
   useEffect(() => {
@@ -191,11 +197,21 @@ export const VideoPlayer: React.FC = () => {
 
       // Title Safe (90%)
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
-      ctx.strokeRect(canvas.width * 0.05, canvas.height * 0.05, canvas.width * 0.9, canvas.height * 0.9);
+      ctx.strokeRect(
+        canvas.width * 0.05,
+        canvas.height * 0.05,
+        canvas.width * 0.9,
+        canvas.height * 0.9
+      );
 
       // Action Safe (80%)
       ctx.strokeStyle = 'rgba(234, 179, 8, 0.35)';
-      ctx.strokeRect(canvas.width * 0.1, canvas.height * 0.1, canvas.width * 0.8, canvas.height * 0.8);
+      ctx.strokeRect(
+        canvas.width * 0.1,
+        canvas.height * 0.1,
+        canvas.width * 0.8,
+        canvas.height * 0.8
+      );
 
       // Center crosshair
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
@@ -253,7 +269,11 @@ export const VideoPlayer: React.FC = () => {
       ctx.textBaseline = 'middle';
       ctx.font = '900 60px Montserrat, sans-serif';
       ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-      ctx.fillText(outroLayer.params?.text || 'THANKS FOR WATCHING', canvas.width / 2, canvas.height * 0.45);
+      ctx.fillText(
+        outroLayer.params?.text || 'THANKS FOR WATCHING',
+        canvas.width / 2,
+        canvas.height * 0.45
+      );
 
       if (outroLayer.params?.subtext) {
         ctx.font = '500 26px Inter, sans-serif';
@@ -320,7 +340,9 @@ export const VideoPlayer: React.FC = () => {
     }
 
     // 5. Derive Subtitle Overlays from Subtitle Layer (Word-Pop & Multi-Line)
-    const subtitleLayer = effectivePlan.layers.find((l) => l.enabled && l.layer === 'subtitle') as any;
+    const subtitleLayer = effectivePlan.layers.find(
+      (l) => l.enabled && l.layer === 'subtitle'
+    ) as any;
     if (subtitleLayer) {
       const p = subtitleLayer.params;
       const cues = project?.analysisSummary?.cues;
@@ -335,7 +357,7 @@ export const VideoPlayer: React.FC = () => {
 
       let yPos = canvas.height * 0.86;
       if (pos === 'top') yPos = canvas.height * 0.14;
-      if (pos === 'center') yPos = canvas.height * 0.50;
+      if (pos === 'center') yPos = canvas.height * 0.5;
 
       ctx.save();
       ctx.font = `800 ${fontSize}px ${fontFamily}, -apple-system, sans-serif`;
@@ -349,7 +371,7 @@ export const VideoPlayer: React.FC = () => {
         if (activeCue.words && activeCue.words.length > 0) {
           // Break words into lines based on maxWordsPerLine
           const allWords = activeCue.words;
-          const lines: typeof allWords[] = [];
+          const lines: (typeof allWords)[] = [];
           for (let i = 0; i < allWords.length; i += maxWordsPerLine) {
             lines.push(allWords.slice(i, i + maxWordsPerLine));
           }
@@ -402,7 +424,9 @@ export const VideoPlayer: React.FC = () => {
     }
 
     // 6. Derive Transition cue (if within transition duration window)
-    const transitionLayers = effectivePlan.layers.filter((l) => l.enabled && l.layer === 'transition') as any[];
+    const transitionLayers = effectivePlan.layers.filter(
+      (l) => l.enabled && l.layer === 'transition'
+    ) as any[];
     for (const tr of transitionLayers) {
       const at = tr.params?.at || 0;
       const dur = tr.params?.duration || 0.5;
@@ -433,7 +457,10 @@ export const VideoPlayer: React.FC = () => {
   const playbackRates = [0.5, 1.0, 1.25, 1.5, 2.0];
 
   return (
-    <main ref={containerRef} className="flex-1 flex flex-col bg-black relative overflow-hidden select-none">
+    <main
+      ref={containerRef}
+      className="flex-1 flex flex-col bg-black relative overflow-hidden select-none"
+    >
       {/* Video Canvas Container */}
       <div className="flex-1 relative flex items-center justify-center p-4">
         <div className="relative aspect-video max-h-full max-w-full bg-[#05080E] rounded-xl overflow-hidden shadow-2xl border border-surfaceBorder">
@@ -475,8 +502,8 @@ export const VideoPlayer: React.FC = () => {
               {preview.mode === 'proxy' && !preview.stale
                 ? 'Rendered 480p Preview'
                 : preview.stale
-                ? 'Live Approximation (Plan modified)'
-                : 'Live Realtime Preview'}
+                  ? 'Live Approximation (Plan modified)'
+                  : 'Live Realtime Preview'}
             </span>
           </div>
 

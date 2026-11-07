@@ -114,7 +114,9 @@ export const ProjectPanel: React.FC = () => {
           </div>
           <div>
             <span className="text-slate-500 block text-[10px]">Duration</span>
-            <span className="font-mono text-slate-300">{formatTime((project?.durationSec || 60) * 1000)}</span>
+            <span className="font-mono text-slate-300">
+              {formatTime((project?.durationSec || 60) * 1000)}
+            </span>
           </div>
         </div>
 
@@ -124,7 +126,9 @@ export const ProjectPanel: React.FC = () => {
               <HardDrive className="w-3 h-3 text-slate-500" />
               <span>Base Asset</span>
             </span>
-            <span className="font-mono text-slate-300 truncate max-w-[120px]">{project.assetId}</span>
+            <span className="font-mono text-slate-300 truncate max-w-[120px]">
+              {project.assetId}
+            </span>
           </div>
         )}
       </div>
@@ -264,4 +268,3 @@ export const ProjectPanel: React.FC = () => {
     </div>
   );
 };
-

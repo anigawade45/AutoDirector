@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  EditPlan,
-  snapToBeat,
-  snapCutsToBeatGrid,
-} from '@ai-video/shared';
+import { EditPlan, snapToBeat, snapCutsToBeatGrid } from '@ai-video/shared';
 import { FFmpegCompiler } from '../services/compiler/ffmpegCompiler.js';
 import { PlanNormalizer } from '../services/planner/planNormalizer.js';
 import { PatchEngine } from '../services/planner/patchEngine.js';
@@ -66,7 +62,9 @@ vi.mock('../services/queue/queueService.js', () => ({
 
 vi.mock('../services/storage/s3Service.js', () => ({
   S3Service: {
-    getPresignedDownloadUrl: vi.fn().mockResolvedValue('https://s3.mock/renders/job_123.mp4?signed=true'),
+    getPresignedDownloadUrl: vi
+      .fn()
+      .mockResolvedValue('https://s3.mock/renders/job_123.mp4?signed=true'),
   },
 }));
 
@@ -146,12 +144,21 @@ describe('Phase 7 — Audio, History and Export Acceptance Suite', () => {
             params: { trackId: 'mus_calm_01', volume: 0.35, duckUnderSpeech: true, beatSync: true },
           },
         ],
-        meta: { prompt: 'Cut silence with beat sync', model: 'ai-planner', createdAt: new Date().toISOString() },
+        meta: {
+          prompt: 'Cut silence with beat sync',
+          model: 'ai-planner',
+          createdAt: new Date().toISOString(),
+        },
       };
 
       const normalized = PlanNormalizer.normalize(rawPlan, {
         assetDurationSec: 30,
-        catalog: { templates: [], luts: [], music: [{ id: 'mus_calm_01', name: 'Calm', mood: 'calm' }], fonts: ['Inter'] },
+        catalog: {
+          templates: [],
+          luts: [],
+          music: [{ id: 'mus_calm_01', name: 'Calm', mood: 'calm' }],
+          fonts: ['Inter'],
+        },
         beats: { bpm: 120, grid: beatGridMs },
       });
 
@@ -202,7 +209,11 @@ describe('Phase 7 — Audio, History and Export Acceptance Suite', () => {
             },
           },
         ],
-        meta: { prompt: 'Cinematic music with speech ducking', model: 'ai', createdAt: new Date().toISOString() },
+        meta: {
+          prompt: 'Cinematic music with speech ducking',
+          model: 'ai',
+          createdAt: new Date().toISOString(),
+        },
       };
 
       const compiled = FFmpegCompiler.compile(
@@ -233,7 +244,9 @@ describe('Phase 7 — Audio, History and Export Acceptance Suite', () => {
       expect(filterComplex).toContain('afade=t=out:st=26.50:d=3.50');
 
       // 3. Sidechain Compression (> 8 dB ducking)
-      expect(filterComplex).toContain('sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400');
+      expect(filterComplex).toContain(
+        'sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400'
+      );
 
       // Verify mathematical ducking attenuation:
       // threshold = 0.05 (-26 dB), ratio = 8:1
@@ -390,7 +403,12 @@ describe('Phase 7 — Audio, History and Export Acceptance Suite', () => {
 
       mockReq = {
         params: { id: 'prj_test', v: '1' },
-        user: { _id: 'mock_user_id' as any, id: 'mock_user_id', email: 'test@example.com', tier: 'pro' },
+        user: {
+          _id: 'mock_user_id' as any,
+          id: 'mock_user_id',
+          email: 'test@example.com',
+          tier: 'pro',
+        },
         id: 'req_undo_1',
       };
 
@@ -508,7 +526,17 @@ describe('Phase 7 — Audio, History and Export Acceptance Suite', () => {
 
       const compiled = FFmpegCompiler.compile(
         plan,
-        { durationMs: 10000, width: 3840, height: 2160, fps: 30, silences: [], sceneCuts: [], beats: { bpm: 120, grid: [] }, loudness: { integratedLufs: -16, truePeakDb: -1.5 }, transcriptExcerpt: [] },
+        {
+          durationMs: 10000,
+          width: 3840,
+          height: 2160,
+          fps: 30,
+          silences: [],
+          sceneCuts: [],
+          beats: { bpm: 120, grid: [] },
+          loudness: { integratedLufs: -16, truePeakDb: -1.5 },
+          transcriptExcerpt: [],
+        },
         'final_4k'
       );
 
@@ -560,12 +588,18 @@ describe('Phase 7 — Audio, History and Export Acceptance Suite', () => {
         id: 'req_cb_1',
       };
 
-      await WorkerEventsController.handleWorkerEvent(callbackReq as unknown as Request, mockRes as unknown as Response, nextFn);
+      await WorkerEventsController.handleWorkerEvent(
+        callbackReq as unknown as Request,
+        mockRes as unknown as Response,
+        nextFn
+      );
 
       expect(nextFn).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(mockJob.state).toBe('completed');
-      expect(mockJob.output.key).toBe('users/u1/projects/p1/renders/job_672b1234567890abcdef1234.mp4');
+      expect(mockJob.output.key).toBe(
+        'users/u1/projects/p1/renders/job_672b1234567890abcdef1234.mp4'
+      );
 
       // Project publishedVersion updated to 2
       expect(ProjectModel.updateOne).toHaveBeenCalledWith(
@@ -576,7 +610,11 @@ describe('Phase 7 — Audio, History and Export Acceptance Suite', () => {
       // 2. Duplicate callback delivery returns duplicate: true without re-executing
       jsonMock.mockClear();
       statusMock.mockClear();
-      await WorkerEventsController.handleWorkerEvent(callbackReq as unknown as Request, mockRes as unknown as Response, nextFn);
+      await WorkerEventsController.handleWorkerEvent(
+        callbackReq as unknown as Request,
+        mockRes as unknown as Response,
+        nextFn
+      );
 
       expect(statusMock).toHaveBeenCalledWith(200);
       const duplicateData = jsonMock.mock.calls[0][0].data;
@@ -591,7 +629,11 @@ describe('Phase 7 — Audio, History and Export Acceptance Suite', () => {
         id: 'req_down_1',
       };
 
-      await JobsController.getJobDownload(downloadReq as unknown as Request, mockRes as unknown as Response, nextFn);
+      await JobsController.getJobDownload(
+        downloadReq as unknown as Request,
+        mockRes as unknown as Response,
+        nextFn
+      );
 
       expect(nextFn).not.toHaveBeenCalled();
       expect(statusMock).toHaveBeenCalledWith(200);

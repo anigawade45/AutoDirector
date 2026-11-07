@@ -103,7 +103,11 @@ export class MediaProbeService {
   /**
    * Generates a fast 480p preview proxy for real-time browser timeline scrubbing.
    */
-  static async generateProxy480p(inputPath: string, outputPath: string, hasAudio: boolean = true): Promise<void> {
+  static async generateProxy480p(
+    inputPath: string,
+    outputPath: string,
+    hasAudio: boolean = true
+  ): Promise<void> {
     const args = [
       '-y',
       '-i',
@@ -186,7 +190,10 @@ export class MediaProbeService {
           currentStart = valMs;
         } else if (type === 'end') {
           const endMs = valMs;
-          const startMs = currentStart !== null ? currentStart : Math.max(0, endMs - Math.round(minDurationSec * 1000));
+          const startMs =
+            currentStart !== null
+              ? currentStart
+              : Math.max(0, endMs - Math.round(minDurationSec * 1000));
           silences.push({
             startMs,
             endMs,

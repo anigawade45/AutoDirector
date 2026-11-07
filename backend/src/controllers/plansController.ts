@@ -43,7 +43,11 @@ export class PlansController {
       const { patch } = req.body;
 
       if (!Array.isArray(patch)) {
-        throw new AppError(400, 'BAD_REQUEST', 'Patch must be an array of RFC 6902 patch operations');
+        throw new AppError(
+          400,
+          'BAD_REQUEST',
+          'Patch must be an array of RFC 6902 patch operations'
+        );
       }
 
       const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
@@ -185,7 +189,11 @@ export class PlansController {
       });
 
       if (!targetPlanDoc) {
-        throw new AppError(404, 'PLAN_NOT_FOUND', `Target edit plan version ${targetVersion} not found`);
+        throw new AppError(
+          404,
+          'PLAN_NOT_FOUND',
+          `Target edit plan version ${targetVersion} not found`
+        );
       }
 
       const nextVersion = project.headVersion + 1;
@@ -269,4 +277,3 @@ export class PlansController {
     }
   }
 }
-

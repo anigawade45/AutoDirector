@@ -113,7 +113,9 @@ describe('Phase 9 — Release and Handover Acceptance Suite', () => {
 
       const content = fs.readFileSync(templatePath, 'utf8');
       expect(content).toContain('JWT_SECRET=__INJECT_VIA_SECRETS_MANAGER_MIN_32_CHARS__');
-      expect(content).toContain('INTERNAL_WORKER_SECRET=__INJECT_VIA_SECRETS_MANAGER_MIN_32_CHARS__');
+      expect(content).toContain(
+        'INTERNAL_WORKER_SECRET=__INJECT_VIA_SECRETS_MANAGER_MIN_32_CHARS__'
+      );
       expect(content).toContain('MONGODB_URI=mongodb://app_user:__INJECT_MONGO_PASSWORD__');
       expect(content).toContain('REDIS_PASSWORD=__INJECT_REDIS_PASSWORD__');
       expect(content).toContain('AWS_ACCESS_KEY_ID=__INJECT_AWS_IAM_ACCESS_KEY__');
@@ -187,7 +189,10 @@ describe('Phase 9 — Release and Handover Acceptance Suite', () => {
         { _id: new mongoose.Types.ObjectId('672b22222222222222222222') },
       ]);
 
-      const result = await PurgeService.purgeProjectData('672b00000000000000000001', 'prj_purge_test');
+      const result = await PurgeService.purgeProjectData(
+        '672b00000000000000000001',
+        'prj_purge_test'
+      );
 
       expect(result.success).toBe(true);
       expect(result.projectId).toBe('prj_purge_test');

@@ -1,10 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Request, Response } from 'express';
 import { compare, Operation } from 'fast-json-patch';
-import {
-  EditPlan,
-  validateEditPlan,
-} from '@ai-video/shared';
+import { EditPlan, validateEditPlan } from '@ai-video/shared';
 import { PlansController } from '../controllers/plansController.js';
 import { ProjectsController } from '../controllers/projectsController.js';
 import { ProjectModel } from '../models/Project.js';
@@ -306,7 +303,7 @@ describe('Phase 6 Exit Criteria: Frontend Editor Experience & State Integrity Ac
       const draftV2: EditPlan = JSON.parse(JSON.stringify(planV2));
       const colLayer = draftV2.layers.find((l) => l.layer === 'color') as any;
       colLayer.params.contrast = 1.35;
-      colLayer.params.vignette = 0.40;
+      colLayer.params.vignette = 0.4;
 
       // Calculate RFC 6902 patch
       const rfcPatch: Operation[] = compare(planV2, draftV2);
@@ -345,7 +342,7 @@ describe('Phase 6 Exit Criteria: Frontend Editor Experience & State Integrity Ac
       expect(resData.version).toBe(3);
       expect(resData.parentVersion).toBe(2);
       expect(resData.plan.layers[0].params.contrast).toBe(1.35);
-      expect(resData.plan.layers[0].params.vignette).toBe(0.40);
+      expect(resData.plan.layers[0].params.vignette).toBe(0.4);
       expect(mockProject.headVersion).toBe(3);
     });
 

@@ -89,4 +89,3 @@ const ProjectSchema = new Schema<IProject>(
 ProjectSchema.index({ userId: 1, updatedAt: -1 });
 
 export const ProjectModel = mongoose.model<IProject>('Project', ProjectSchema);
-

@@ -1,13 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export type JobState =
-  | 'queued'
-  | 'active'
-  | 'processing'
-  | 'uploading_output'
-  | 'completed'
-  | 'failed'
-  | 'canceled';
+  'queued' | 'active' | 'processing' | 'uploading_output' | 'completed' | 'failed' | 'canceled';
 
 export type JobType = 'analysis' | 'preview' | 'render' | 'export';
 

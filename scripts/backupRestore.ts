@@ -62,3 +62,4 @@ if (process.argv[1]?.endsWith('backupRestore.ts') || process.argv[1]?.endsWith('
   console.table(result.checks);
   process.exit(result.allPassed ? 0 : 1);
 }
+

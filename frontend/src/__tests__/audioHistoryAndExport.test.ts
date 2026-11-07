@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  useEditorStore,
-  selectEffectivePlan,
-  selectMusicLayer,
-} from '../stores/editorStore';
+import { useEditorStore, selectEffectivePlan, selectMusicLayer } from '../stores/editorStore';
 import { EditPlan, MusicLayer } from '@ai-video/shared';
 
 describe('Phase 7 Frontend Suite: Audio, History & Export', () => {
@@ -185,7 +181,11 @@ describe('Phase 7 Frontend Suite: Audio, History & Export', () => {
         ...v2Plan,
         version: 4,
         parentVersion: 2,
-        meta: { prompt: 'Branched alternative', model: 'gemini', createdAt: '2026-11-04T10:15:00Z' },
+        meta: {
+          prompt: 'Branched alternative',
+          model: 'gemini',
+          createdAt: '2026-11-04T10:15:00Z',
+        },
       };
 
       useEditorStore.getState().setPlan(v4Plan);
@@ -243,4 +243,3 @@ describe('Phase 7 Frontend Suite: Audio, History & Export', () => {
     });
   });
 });
-

@@ -108,7 +108,11 @@ describe('Phase 2 — Media Analysis, Audio Intelligence & Captioned Preview', (
       const cuesNoFile = await TranscriptionService.transcribeAudio('', 60000, []);
       expect(cuesNoFile).toEqual([]);
 
-      const cuesNonExistent = await TranscriptionService.transcribeAudio('non_existent.wav', 60000, []);
+      const cuesNonExistent = await TranscriptionService.transcribeAudio(
+        'non_existent.wav',
+        60000,
+        []
+      );
       expect(cuesNonExistent).toEqual([]);
     });
 
@@ -261,7 +265,9 @@ lavfi.scene_score=0.781200
       (AssetModel.findOne as any).mockResolvedValue(mockAsset);
       (ProjectModel.findOne as any).mockResolvedValue(mockProject);
       (CaptionSetModel.findOneAndUpdate as any).mockResolvedValue({ _id: 'mock_caption_oid_01' });
-      (AnalysisResultModel.findOneAndUpdate as any).mockResolvedValue({ _id: 'mock_analysis_oid_01' });
+      (AnalysisResultModel.findOneAndUpdate as any).mockResolvedValue({
+        _id: 'mock_analysis_oid_01',
+      });
       (EditPlanModel.findOneAndUpdate as any).mockResolvedValue({ _id: 'mock_plan_oid_01' });
 
       // 1. Technical inspection returns 5-minute duration
@@ -341,4 +347,3 @@ lavfi.scene_score=0.781200
     });
   });
 });
-

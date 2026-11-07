@@ -9,4 +9,3 @@ export * from './CaptionSet.js';
 export * from './RenderJob.js';
 export * from './ChatMessage.js';
 export * from './Catalog.js';
-

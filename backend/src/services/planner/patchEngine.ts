@@ -36,9 +36,7 @@ export class PatchEngine {
         // If it's not a numeric index and not '-'
         if (!/^\d+$/.test(targetIdOrIndex) && targetIdOrIndex !== '-') {
           // Find index by id
-          let foundIndex = clonedPlan.layers.findIndex(
-            (l: any) => l.id === targetIdOrIndex
-          );
+          let foundIndex = clonedPlan.layers.findIndex((l: any) => l.id === targetIdOrIndex);
 
           // If not found by exact ID, try heuristic matching by layer type in id (e.g., 'sub', 'col', 'mus')
           if (foundIndex === -1) {

@@ -51,18 +51,27 @@ export class S3Service {
             await this.configureBucketLifecycle();
             return;
           } catch (createErr: any) {
-            console.warn(`[S3] Bucket creation error:`, createErr.message || createErr.name || createErr);
+            console.warn(
+              `[S3] Bucket creation error:`,
+              createErr.message || createErr.name || createErr
+            );
             return;
           }
         }
 
         // Connection failed or gateway booting
-        const innerErrors = err.errors ? err.errors.map((e: any) => e.message || e.code).join(', ') : '';
+        const innerErrors = err.errors
+          ? err.errors.map((e: any) => e.message || e.code).join(', ')
+          : '';
         if (attempt < maxRetries) {
-          console.log(`[S3] Waiting for S3 gateway at ${env.S3_ENDPOINT} (attempt ${attempt}/${maxRetries})...`);
+          console.log(
+            `[S3] Waiting for S3 gateway at ${env.S3_ENDPOINT} (attempt ${attempt}/${maxRetries})...`
+          );
           await new Promise((r) => setTimeout(r, 2500));
         } else {
-          console.warn(`[S3] Could not connect to S3 gateway at ${env.S3_ENDPOINT}: ${err.name} ${innerErrors || err.message}`);
+          console.warn(
+            `[S3] Could not connect to S3 gateway at ${env.S3_ENDPOINT}: ${err.name} ${innerErrors || err.message}`
+          );
         }
       }
     }
@@ -98,7 +107,9 @@ export class S3Service {
   /**
    * Configures AES256 default server-side encryption with Amazon S3 managed keys (SSE-S3).
    */
-  static async configureBucketEncryption(bucketName: string = env.S3_BUCKET_NAME): Promise<boolean> {
+  static async configureBucketEncryption(
+    bucketName: string = env.S3_BUCKET_NAME
+  ): Promise<boolean> {
     try {
       await s3Client.send(
         new PutBucketEncryptionCommand({
@@ -115,7 +126,9 @@ export class S3Service {
           },
         })
       );
-      console.log(`[S3] Configured AES256 default server-side encryption for bucket '${bucketName}'.`);
+      console.log(
+        `[S3] Configured AES256 default server-side encryption for bucket '${bucketName}'.`
+      );
       return true;
     } catch (err: any) {
       console.warn(`[S3] Note on bucket encryption configuration:`, err.message || err);
@@ -164,7 +177,9 @@ export class S3Service {
           },
         })
       );
-      console.log(`[S3] Configured bucket lifecycle rules (7-day preview expiry, 24h multipart abort) on '${bucketName}'.`);
+      console.log(
+        `[S3] Configured bucket lifecycle rules (7-day preview expiry, 24h multipart abort) on '${bucketName}'.`
+      );
       return true;
     } catch (err: any) {
       console.warn(`[S3] Note on bucket lifecycle configuration:`, err.message || err);
@@ -274,7 +289,9 @@ export class S3Service {
             if (upload.Key && upload.UploadId) {
               await this.abortMultipartUpload(upload.Key, upload.UploadId);
               abortedCount++;
-              console.log(`[S3] Aborted stale multipart upload: key=${upload.Key}, uploadId=${upload.UploadId}`);
+              console.log(
+                `[S3] Aborted stale multipart upload: key=${upload.Key}, uploadId=${upload.UploadId}`
+              );
             }
           }
         }
@@ -289,7 +306,9 @@ export class S3Service {
   /**
    * Cleans up preview videos older than specified retention (default 7 days) per Specification §4.7.
    */
-  static async cleanupStalePreviews(olderThanMs: number = 7 * 24 * 60 * 60 * 1000): Promise<number> {
+  static async cleanupStalePreviews(
+    olderThanMs: number = 7 * 24 * 60 * 60 * 1000
+  ): Promise<number> {
     // In production, S3 Lifecycle rules purge previews/ prefix automatically.
     // This programmatic sweep ensures compliance in local/testing environments.
     return 0;
@@ -315,7 +334,10 @@ export class S3Service {
   /**
    * Generates a 1-hour presigned GET URL for downloading rendered video.
    */
-  static async getPresignedDownloadUrl(key: string, expiresInSeconds: number = 3600): Promise<string> {
+  static async getPresignedDownloadUrl(
+    key: string,
+    expiresInSeconds: number = 3600
+  ): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: env.S3_BUCKET_NAME,
       Key: key,
@@ -341,7 +363,11 @@ export class S3Service {
   /**
    * Uploads a local file to S3.
    */
-  static async uploadFile(key: string, localFilePath: string, contentType: string = 'video/mp4'): Promise<void> {
+  static async uploadFile(
+    key: string,
+    localFilePath: string,
+    contentType: string = 'video/mp4'
+  ): Promise<void> {
     const fileStream = fs.createReadStream(localFilePath);
     const command = new PutObjectCommand({
       Bucket: env.S3_BUCKET_NAME,
@@ -356,7 +382,10 @@ export class S3Service {
    * Deletes all objects in S3 matching the given key prefix.
    * Handles pagination with ContinuationToken and batch deletion up to 1,000 objects per command.
    */
-  static async deleteObjectsByPrefix(prefix: string, bucketName: string = env.S3_BUCKET_NAME): Promise<number> {
+  static async deleteObjectsByPrefix(
+    prefix: string,
+    bucketName: string = env.S3_BUCKET_NAME
+  ): Promise<number> {
     let deletedCount = 0;
     try {
       let continuationToken: string | undefined = undefined;
@@ -398,4 +427,3 @@ export class S3Service {
     return await this.deleteObjectsByPrefix(userPrefix);
   }
 }
-

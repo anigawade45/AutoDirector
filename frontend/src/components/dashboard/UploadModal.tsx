@@ -177,7 +177,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Video File (MP4, MOV)</label>
+            <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              Video File (MP4, MOV)
+            </label>
             <div className="border-2 border-dashed border-surfaceBorder hover:border-blue-500/50 rounded-xl p-6 text-center cursor-pointer transition-colors relative">
               <input
                 type="file"
@@ -190,12 +192,18 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
               {file ? (
                 <div>
                   <p className="text-sm font-semibold text-slate-200">{file.name}</p>
-                  <p className="text-xs text-slate-400">{(file.size / (1024 * 1024)).toFixed(1)} MB</p>
+                  <p className="text-xs text-slate-400">
+                    {(file.size / (1024 * 1024)).toFixed(1)} MB
+                  </p>
                 </div>
               ) : (
                 <div>
-                  <p className="text-sm font-medium text-slate-300">Click to select or drag and drop</p>
-                  <p className="text-xs text-slate-500 mt-1">Up to 5GB • 480p proxy generated automatically</p>
+                  <p className="text-sm font-medium text-slate-300">
+                    Click to select or drag and drop
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Up to 5GB • 480p proxy generated automatically
+                  </p>
                 </div>
               )}
             </div>
@@ -240,4 +248,3 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
     </div>
   );
 };
-

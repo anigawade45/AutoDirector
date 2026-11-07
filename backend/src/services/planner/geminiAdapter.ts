@@ -42,7 +42,10 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       // Strip markdown code fences if model returned them
       text = text.trim();
       if (text.startsWith('```')) {
-        text = text.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '').trim();
+        text = text
+          .replace(/^```(json)?\n?/, '')
+          .replace(/\n?```$/, '')
+          .trim();
       }
 
       let structuredOutput: unknown;
@@ -63,7 +66,9 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       };
     } catch (err: any) {
       // If API fails due to network or missing remote access in test/local sandbox, fallback gracefully
-      console.warn(`[GeminiPlannerAdapter] Remote call failed (${err.message}). Falling back to heuristic planner.`);
+      console.warn(
+        `[GeminiPlannerAdapter] Remote call failed (${err.message}). Falling back to heuristic planner.`
+      );
       return this.generateHeuristicPlan(input);
     }
   }
@@ -85,7 +90,10 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     const totalDurationSec = (ctx.videoMeta?.durationMs || 60000) / 1000;
 
     // Check if this is a follow-up prompt on an existing plan and not a reset request
-    const isReset = instruction.includes('start over') || instruction.includes('from scratch') || instruction.includes('reset');
+    const isReset =
+      instruction.includes('start over') ||
+      instruction.includes('from scratch') ||
+      instruction.includes('reset');
     if (currentPlan && !isReset) {
       const patches: Array<{ op: string; path: string; value?: unknown }> = [];
 
@@ -94,7 +102,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         const subLayer = currentPlan.layers?.find((l: any) => l.layer === 'subtitle');
         const subId = subLayer?.id || 'lyr_sub_1';
 
-        if (instruction.includes('big') || instruction.includes('larger') || instruction.includes('size')) {
+        if (
+          instruction.includes('big') ||
+          instruction.includes('larger') ||
+          instruction.includes('size')
+        ) {
           const matchNum = instruction.match(/\b(\d{2})\b/);
           const size = matchNum ? parseInt(matchNum[1], 10) : 72;
           patches.push({ op: 'replace', path: `/layers/${subId}/params/size`, value: size });
@@ -105,9 +117,17 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         if (instruction.includes('top')) {
           patches.push({ op: 'replace', path: `/layers/${subId}/params/position`, value: 'top' });
         } else if (instruction.includes('center')) {
-          patches.push({ op: 'replace', path: `/layers/${subId}/params/position`, value: 'center' });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subId}/params/position`,
+            value: 'center',
+          });
         } else if (instruction.includes('bottom')) {
-          patches.push({ op: 'replace', path: `/layers/${subId}/params/position`, value: 'bottom' });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subId}/params/position`,
+            value: 'bottom',
+          });
         }
         if (instruction.includes('font')) {
           for (const f of ['inter', 'roboto', 'montserrat', 'playfair']) {
@@ -122,7 +142,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
           }
         }
         if (instruction.includes('yellow') || instruction.includes('highlight')) {
-          patches.push({ op: 'replace', path: `/layers/${subId}/params/highlightColor`, value: '#FFD84D' });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subId}/params/highlightColor`,
+            value: '#FFD84D',
+          });
         }
         if (instruction.includes('karaoke')) {
           patches.push({ op: 'replace', path: `/layers/${subId}/params/style`, value: 'karaoke' });
@@ -130,11 +154,21 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       }
 
       // Aspect ratio
-      if (instruction.includes('9:16') || instruction.includes('vertical') || instruction.includes('tiktok') || instruction.includes('reel') || instruction.includes('shorts')) {
+      if (
+        instruction.includes('9:16') ||
+        instruction.includes('vertical') ||
+        instruction.includes('tiktok') ||
+        instruction.includes('reel') ||
+        instruction.includes('shorts')
+      ) {
         patches.push({ op: 'replace', path: '/global/aspect', value: '9:16' });
       } else if (instruction.includes('1:1') || instruction.includes('square')) {
         patches.push({ op: 'replace', path: '/global/aspect', value: '1:1' });
-      } else if (instruction.includes('16:9') || instruction.includes('horizontal') || instruction.includes('youtube')) {
+      } else if (
+        instruction.includes('16:9') ||
+        instruction.includes('horizontal') ||
+        instruction.includes('youtube')
+      ) {
         patches.push({ op: 'replace', path: '/global/aspect', value: '16:9' });
       }
 
@@ -152,12 +186,12 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         const preset = instruction.includes('warm')
           ? 'warm'
           : instruction.includes('cool')
-          ? 'cool'
-          : instruction.includes('bw') || instruction.includes('monochrome')
-          ? 'bw'
-          : instruction.includes('vivid')
-          ? 'vivid'
-          : 'cinematic';
+            ? 'cool'
+            : instruction.includes('bw') || instruction.includes('monochrome')
+              ? 'bw'
+              : instruction.includes('vivid')
+                ? 'vivid'
+                : 'cinematic';
         if (colLayer) {
           patches.push({ op: 'replace', path: `/layers/${colId}/params/preset`, value: preset });
         } else {
@@ -176,11 +210,19 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       }
 
       // Music adjustment
-      if (instruction.includes('music') || instruction.includes('song') || instruction.includes('track')) {
+      if (
+        instruction.includes('music') ||
+        instruction.includes('song') ||
+        instruction.includes('track')
+      ) {
         const musLayer = currentPlan.layers?.find((l: any) => l.layer === 'music');
         const musId = musLayer?.id || 'lyr_mus_1';
 
-        if (instruction.includes('quieter') || instruction.includes('lower volume') || instruction.includes('soft')) {
+        if (
+          instruction.includes('quieter') ||
+          instruction.includes('lower volume') ||
+          instruction.includes('soft')
+        ) {
           if (musLayer) {
             patches.push({ op: 'replace', path: `/layers/${musId}/params/volume`, value: 0.15 });
           } else {
@@ -220,7 +262,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
               },
             });
           }
-        } else if (instruction.includes('remove') || instruction.includes('delete') || instruction.includes('mute')) {
+        } else if (
+          instruction.includes('remove') ||
+          instruction.includes('delete') ||
+          instruction.includes('mute')
+        ) {
           if (musLayer) {
             patches.push({ op: 'remove', path: `/layers/${musId}` });
           }
@@ -244,7 +290,10 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       }
 
       // Remove intro
-      if ((instruction.includes('remove') || instruction.includes('delete')) && instruction.includes('intro')) {
+      if (
+        (instruction.includes('remove') || instruction.includes('delete')) &&
+        instruction.includes('intro')
+      ) {
         const introLayer = currentPlan.layers?.find((l: any) => l.layer === 'intro');
         if (introLayer) {
           patches.push({ op: 'remove', path: `/layers/${introLayer.id}` });
@@ -252,10 +301,18 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       }
 
       // Speed adjustments
-      if (instruction.includes('faster') || instruction.includes('speed up') || instruction.includes('pacing')) {
+      if (
+        instruction.includes('faster') ||
+        instruction.includes('speed up') ||
+        instruction.includes('pacing')
+      ) {
         const spdLayer = currentPlan.layers?.find((l: any) => l.layer === 'speed');
         if (spdLayer) {
-          patches.push({ op: 'replace', path: `/layers/${spdLayer.id}/params/factor`, value: 1.25 });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${spdLayer.id}/params/factor`,
+            value: 1.25,
+          });
         } else {
           patches.push({
             op: 'add',
@@ -294,7 +351,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       aspect = '9:16';
     } else if (instruction.includes('1:1') || instruction.includes('square')) {
       aspect = '1:1';
-    } else if (instruction.includes('16:9') || instruction.includes('horizontal') || instruction.includes('youtube')) {
+    } else if (
+      instruction.includes('16:9') ||
+      instruction.includes('horizontal') ||
+      instruction.includes('youtube')
+    ) {
       aspect = '16:9';
     }
 
@@ -335,12 +396,12 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     const preset = instruction.includes('warm')
       ? 'warm'
       : instruction.includes('cool')
-      ? 'cool'
-      : instruction.includes('bw') || instruction.includes('monochrome')
-      ? 'bw'
-      : instruction.includes('vivid')
-      ? 'vivid'
-      : 'cinematic';
+        ? 'cool'
+        : instruction.includes('bw') || instruction.includes('monochrome')
+          ? 'bw'
+          : instruction.includes('vivid')
+            ? 'vivid'
+            : 'cinematic';
 
     layers.push({
       id: `lyr_col_${layerCounter++}`,
@@ -387,7 +448,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     }
 
     // 4. Transitions
-    if (instruction.includes('transition') || instruction.includes('smooth') || instruction.includes('cinematic')) {
+    if (
+      instruction.includes('transition') ||
+      instruction.includes('smooth') ||
+      instruction.includes('cinematic')
+    ) {
       const cuts = ctx.audioAnalysis?.sceneCutPointsSec || [12.4];
       for (const cutSec of cuts.slice(0, 3)) {
         if (cutSec < totalDurationSec - 1) {
@@ -411,7 +476,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     }
 
     // 5. Intro
-    if (instruction.includes('intro') || instruction.includes('title') || instruction.includes('engaging')) {
+    if (
+      instruction.includes('intro') ||
+      instruction.includes('title') ||
+      instruction.includes('engaging')
+    ) {
       const template = ctx.availableCatalog?.templates?.[0]?.id || 'cinematic';
       layers.push({
         id: `lyr_int_${layerCounter++}`,
@@ -428,7 +497,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     }
 
     // 6. Speed
-    if (instruction.includes('speed') || instruction.includes('fast') || instruction.includes('quick')) {
+    if (
+      instruction.includes('speed') ||
+      instruction.includes('fast') ||
+      instruction.includes('quick')
+    ) {
       const factor = instruction.includes('1.5') ? 1.5 : 1.25;
       layers.push({
         id: `lyr_spd_${layerCounter++}`,
@@ -441,7 +514,12 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     }
 
     // 7. Music
-    if (instruction.includes('music') || instruction.includes('audio') || instruction.includes('song') || instruction.includes('beat')) {
+    if (
+      instruction.includes('music') ||
+      instruction.includes('audio') ||
+      instruction.includes('song') ||
+      instruction.includes('beat')
+    ) {
       layers.push({
         id: `lyr_mus_${layerCounter++}`,
         layer: 'music',

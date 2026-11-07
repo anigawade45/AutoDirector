@@ -81,4 +81,3 @@ export const AUDIO_DEFAULTS = {
   musicFadeInSec: 1.5,
   musicFadeOutSec: 3.0,
 } as const;
-

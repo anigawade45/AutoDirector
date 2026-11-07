@@ -77,7 +77,11 @@ export class MetricsService {
       render: renderWaiting,
     };
 
-    if (analysisWaiting > backlogThreshold || previewWaiting > backlogThreshold || renderWaiting > backlogThreshold) {
+    if (
+      analysisWaiting > backlogThreshold ||
+      previewWaiting > backlogThreshold ||
+      renderWaiting > backlogThreshold
+    ) {
       this.triggerAlert({
         alertType: 'QUEUE_BACKLOG',
         severity: 'warning',
@@ -155,4 +159,3 @@ export class MetricsService {
     this.alertHistory = [];
   }
 }
-

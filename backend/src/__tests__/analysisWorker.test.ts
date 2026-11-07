@@ -160,7 +160,17 @@ describe('Analysis Worker - Media Probe & Asset Metadata Persistence', () => {
     await MediaProbeService.generateProxy480p('input.mp4', 'output_480p.mp4', true);
     expect(execSpy).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.arrayContaining(['-vf', 'scale=-2:480', '-c:v', 'libx264', '-crf', '28', '-c:a', 'aac', '+faststart'])
+      expect.arrayContaining([
+        '-vf',
+        'scale=-2:480',
+        '-c:v',
+        'libx264',
+        '-crf',
+        '28',
+        '-c:a',
+        'aac',
+        '+faststart',
+      ])
     );
 
     // Test proxy without audio
@@ -174,7 +184,16 @@ describe('Analysis Worker - Media Probe & Asset Metadata Persistence', () => {
     await MediaProbeService.extractAudioWav('input.mp4', 'audio_16k.wav');
     expect(execSpy).toHaveBeenLastCalledWith(
       expect.any(String),
-      expect.arrayContaining(['-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', 'audio_16k.wav'])
+      expect.arrayContaining([
+        '-vn',
+        '-acodec',
+        'pcm_s16le',
+        '-ar',
+        '16000',
+        '-ac',
+        '1',
+        'audio_16k.wav',
+      ])
     );
   });
 });

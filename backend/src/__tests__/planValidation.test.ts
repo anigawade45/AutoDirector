@@ -97,7 +97,9 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
 
       const res = validateEditPlan(plan, { assetDurationSec: 30 });
       expect(res.valid).toBe(false);
-      expect(res.errors.some((e) => e.includes('exceeds maximum allowed budget of 200'))).toBe(true);
+      expect(res.errors.some((e) => e.includes('exceeds maximum allowed budget of 200'))).toBe(
+        true
+      );
     });
 
     it('enforces singleton layer constraints (at most 1 color, subtitle, intro, outro)', () => {
@@ -113,7 +115,9 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
 
       const res = validateEditPlan(plan, { assetDurationSec: 30 });
       expect(res.valid).toBe(false);
-      expect(res.errors.some((e) => e.includes('cannot contain more than 1 color layer'))).toBe(true);
+      expect(res.errors.some((e) => e.includes('cannot contain more than 1 color layer'))).toBe(
+        true
+      );
     });
   });
 
@@ -131,7 +135,9 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
 
       const res = validateEditPlan(plan, { assetDurationSec: 30 });
       expect(res.valid).toBe(false);
-      expect(res.errors.some((e) => e.includes('range.end must be greater than range.start'))).toBe(true);
+      expect(res.errors.some((e) => e.includes('range.end must be greater than range.start'))).toBe(
+        true
+      );
     });
 
     it('rejects cut ranges that exceed the total source asset duration', () => {
@@ -180,7 +186,9 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
       const res = validateEditPlan(plan, { assetDurationSec: 30 });
       expect(res.valid).toBe(false);
       expect(res.errors.some((e) => e.includes('Contrast must be between 0.7 and 1.5'))).toBe(true);
-      expect(res.errors.some((e) => e.includes('Brightness must be between -0.3 and 0.3'))).toBe(true);
+      expect(res.errors.some((e) => e.includes('Brightness must be between -0.3 and 0.3'))).toBe(
+        true
+      );
       expect(res.errors.some((e) => e.includes('Grain must be between 0 and 0.5'))).toBe(true);
     });
 
@@ -197,7 +205,9 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
 
       const res = validateEditPlan(plan, { assetDurationSec: 30 });
       expect(res.valid).toBe(false);
-      expect(res.errors.some((e) => e.includes('Speed factor must be between 0.25 and 4.0'))).toBe(true);
+      expect(res.errors.some((e) => e.includes('Speed factor must be between 0.25 and 4.0'))).toBe(
+        true
+      );
     });
 
     it('validates subtitle size and color formats', () => {
@@ -208,8 +218,12 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
 
       const res = validateEditPlan(plan, { assetDurationSec: 30 });
       expect(res.valid).toBe(false);
-      expect(res.errors.some((e) => e.includes('Subtitle font size must be between 24 and 96'))).toBe(true);
-      expect(res.errors.some((e) => e.includes('primaryColor must be a valid hex color'))).toBe(true);
+      expect(
+        res.errors.some((e) => e.includes('Subtitle font size must be between 24 and 96'))
+      ).toBe(true);
+      expect(res.errors.some((e) => e.includes('primaryColor must be a valid hex color'))).toBe(
+        true
+      );
     });
 
     it('validates transition duration and positioning', () => {
@@ -225,8 +239,12 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
 
       const res = validateEditPlan(plan, { assetDurationSec: 30 });
       expect(res.valid).toBe(false);
-      expect(res.errors.some((e) => e.includes('Transition duration must be between 0.2 and 1.5s'))).toBe(true);
-      expect(res.errors.some((e) => e.includes('Transition "at" must be between 0 and asset duration'))).toBe(true);
+      expect(
+        res.errors.some((e) => e.includes('Transition duration must be between 0.2 and 1.5s'))
+      ).toBe(true);
+      expect(
+        res.errors.some((e) => e.includes('Transition "at" must be between 0 and asset duration'))
+      ).toBe(true);
     });
   });
 
@@ -274,4 +292,3 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
     });
   });
 });
-

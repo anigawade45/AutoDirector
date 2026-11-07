@@ -44,7 +44,8 @@ async function runEndToEndWorkerVerification() {
   });
 
   // Use the verified S3 video uploaded earlier
-  const existingS3Key = 'users/6aebf86cd37ab6c48f44c3c7/projects/prj_1qeXwqsG/raw/ast_Yj57e4ETQa.mp4';
+  const existingS3Key =
+    'users/6aebf86cd37ab6c48f44c3c7/projects/prj_1qeXwqsG/raw/ast_Yj57e4ETQa.mp4';
   const testAsset = await AssetModel.create({
     publicId: `ast_test_${nanoid(6)}`,
     projectId: testProject._id,
@@ -60,7 +61,9 @@ async function runEndToEndWorkerVerification() {
 
   testProject.baseAssetId = testAsset._id as any;
   await testProject.save();
-  console.log(`✓ Test project '${testProject.publicId}' created with asset '${testAsset.publicId}'\n`);
+  console.log(
+    `✓ Test project '${testProject.publicId}' created with asset '${testAsset.publicId}'\n`
+  );
 
   // Step 4: Submit real Analysis Job to BullMQ
   console.log('[Step 4] Enqueueing real BullMQ analysis job...');
@@ -82,7 +85,9 @@ async function runEndToEndWorkerVerification() {
     rawKey: existingS3Key,
     userId: testUserId.toString(),
   });
-  console.log(`✓ Job enqueued to BullMQ (BullId: ${bullAnalysisJob.id}, JobDocId: ${analysisJobDoc._id})`);
+  console.log(
+    `✓ Job enqueued to BullMQ (BullId: ${bullAnalysisJob.id}, JobDocId: ${analysisJobDoc._id})`
+  );
   console.log('  Waiting for standalone AnalysisWorker to consume and complete pipeline...');
 
   // Poll for completion (timeout: 45s)
@@ -114,7 +119,9 @@ async function runEndToEndWorkerVerification() {
   const updatedProject = await ProjectModel.findById(testProject._id);
 
   console.log(`✓ Asset Media Duration: ${updatedAsset?.media?.durationMs}ms`);
-  console.log(`✓ Asset Resolution: ${updatedAsset?.media?.width}x${updatedAsset?.media?.height} @ ${updatedAsset?.media?.fps}fps`);
+  console.log(
+    `✓ Asset Resolution: ${updatedAsset?.media?.width}x${updatedAsset?.media?.height} @ ${updatedAsset?.media?.fps}fps`
+  );
   console.log(`✓ Proxy Key generated: ${updatedAsset?.s3?.proxyKey}`);
   console.log(`✓ Audio Key generated: ${updatedAsset?.s3?.audioKey}`);
   console.log(`✓ Silence Intervals detected: ${analysisResult?.silences?.length}`);
@@ -182,7 +189,9 @@ async function runEndToEndWorkerVerification() {
     if (currentJob?.state === 'processing') {
       console.log(`  [RenderWorker:preview] Processing: ${currentJob.percent}%`);
     } else if (currentJob?.state === 'completed') {
-      console.log(`  [RenderWorker:preview] Completed: 100%! Output key: ${currentJob.output?.key}`);
+      console.log(
+        `  [RenderWorker:preview] Completed: 100%! Output key: ${currentJob.output?.key}`
+      );
       renderCompleted = true;
       break;
     } else if (currentJob?.state === 'failed') {

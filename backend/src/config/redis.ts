@@ -18,4 +18,3 @@ export function createRedisConnection(): Redis {
 }
 
 export const redisConnection = createRedisConnection();
-

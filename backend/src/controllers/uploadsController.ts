@@ -9,11 +9,7 @@ import { analysisQueue } from '../services/queue/queueService.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { env } from '../config/env.js';
 
-export const ALLOWED_VIDEO_MIME_TYPES = [
-  'video/mp4',
-  'video/quicktime',
-  'video/webm',
-];
+export const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 
 export const MIN_UPLOAD_SIZE_BYTES = 1024; // 1 KB minimum for valid video container
 export const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
@@ -24,12 +20,20 @@ export class UploadsController {
       const { projectId, fileName, contentType, sizeBytes, checksumSha256 } = req.body;
 
       if (!projectId || !fileName || sizeBytes === undefined || sizeBytes === null) {
-        throw new AppError(400, 'BAD_REQUEST', 'Missing required fields: projectId, fileName, sizeBytes');
+        throw new AppError(
+          400,
+          'BAD_REQUEST',
+          'Missing required fields: projectId, fileName, sizeBytes'
+        );
       }
 
       // Validate sizeBytes is a positive integer
       if (typeof sizeBytes !== 'number' || !Number.isFinite(sizeBytes) || sizeBytes <= 0) {
-        throw new AppError(400, 'INVALID_FILE_SIZE', 'File size must be a positive number greater than 0 bytes');
+        throw new AppError(
+          400,
+          'INVALID_FILE_SIZE',
+          'File size must be a positive number greater than 0 bytes'
+        );
       }
 
       // Minimum upload size (1 KB)
@@ -130,7 +134,11 @@ export class UploadsController {
       const { parts } = req.body;
 
       if (!Array.isArray(parts) || parts.length === 0) {
-        throw new AppError(400, 'INVALID_PARTS', 'Upload completion requires a non-empty array of parts');
+        throw new AppError(
+          400,
+          'INVALID_PARTS',
+          'Upload completion requires a non-empty array of parts'
+        );
       }
 
       // Retrieve session from Redis
@@ -157,7 +165,11 @@ export class UploadsController {
       const sortedParts = [...parts].sort((a, b) => a.partNumber - b.partNumber);
       for (let i = 0; i < sortedParts.length; i++) {
         if (sortedParts[i].partNumber !== i + 1) {
-          throw new AppError(400, 'INVALID_PART_SEQUENCE', `Missing part number ${i + 1} in upload parts`);
+          throw new AppError(
+            400,
+            'INVALID_PART_SEQUENCE',
+            `Missing part number ${i + 1} in upload parts`
+          );
         }
         if (!sortedParts[i].etag) {
           throw new AppError(400, 'MISSING_ETAG', `Part ${i + 1} is missing an ETag`);
@@ -259,6 +271,3 @@ export class UploadsController {
     }
   }
 }
-
-
-

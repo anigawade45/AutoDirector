@@ -73,4 +73,3 @@ AssetSchema.index({ projectId: 1, kind: 1 });
 AssetSchema.index({ userId: 1, checksum: 1 });
 
 export const AssetModel = mongoose.model<IAsset>('Asset', AssetSchema);
-

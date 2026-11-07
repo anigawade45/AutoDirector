@@ -228,4 +228,3 @@ describe('Phase 5 Task 2: Color Presets & Numeric Controls (Brightness, Contrast
     });
   });
 });
-

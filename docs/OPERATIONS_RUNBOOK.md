@@ -169,3 +169,4 @@
 - **Clock Skew**: Synchronize host clock via Chrony/NTP: `chronyc makestep`.
 - **Expired Presigned URL**: Presigned download URLs expire after 1 hour (3600s). Re-query `GET /api/jobs/:id/download` to obtain a fresh presigned URL.
 - **Bucket Encryption / Permissions**: Verify bucket policy grants `s3:GetObject`, `s3:PutObject`, `s3:AbortMultipartUpload` to the IAM role.
+

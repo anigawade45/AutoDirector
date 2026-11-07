@@ -18,4 +18,3 @@ export async function connectDatabase(): Promise<typeof mongoose> {
 export async function disconnectDatabase(): Promise<void> {
   await mongoose.disconnect();
 }
-

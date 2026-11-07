@@ -120,8 +120,7 @@ export const api = {
   // Jobs & SSE
   getJobStatus: (jobId: string) => request<any>(`/jobs/${jobId}`),
 
-  getJobDownloadUrl: (jobId: string) =>
-    request<DownloadUrlResponseData>(`/jobs/${jobId}/download`),
+  getJobDownloadUrl: (jobId: string) => request<DownloadUrlResponseData>(`/jobs/${jobId}/download`),
 
   subscribeToJobEvents: (
     jobId: string,
@@ -164,4 +163,3 @@ export const api = {
     return () => eventSource.close();
   },
 };
-

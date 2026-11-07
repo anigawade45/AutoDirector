@@ -33,4 +33,3 @@ export const StorageKeys = {
   catalogItem: (kind: 'music' | 'luts' | 'templates' | 'fonts', filename: string) =>
     `library/${kind}/${filename}`,
 };
-

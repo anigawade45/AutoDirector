@@ -75,3 +75,4 @@ If deploying via AWS ECS / Kubernetes / Nginx:
 - [ ] Queue depths monitor returns zero unhandled stalls.
 - [ ] In-flight renders resume without `INPUT_CORRUPT` or `WORKER_AUTH_INVALID_SIGNATURE` errors.
 - [ ] Post-mortem review scheduled within 24 hours of incident resolution.
+

@@ -75,4 +75,3 @@ export const AnalysisResultModel = mongoose.model<IAnalysisResultDocument>(
   'AnalysisResult',
   AnalysisResultSchema
 );
-

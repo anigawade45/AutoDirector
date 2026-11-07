@@ -138,4 +138,3 @@ initDatabaseSchemaAndIndexes().catch((err) => {
   console.error('[Init] Error initializing schema & indexes:', err);
   process.exit(1);
 });
-

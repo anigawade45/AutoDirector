@@ -29,7 +29,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ onSelectProj
   const [filterTab, setFilterTab] = useState<'active' | 'archived'>('active');
   const queryClient = useQueryClient();
 
-  const { data: projects = [], isLoading, isError } = useQuery({
+  const {
+    data: projects = [],
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['projects', filterTab],
     queryFn: () => api.listProjects(filterTab),
     refetchInterval: 5000,
@@ -90,11 +94,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ onSelectProj
   ];
 
   const displayProjects =
-    projects.length > 0
-      ? projects
-      : filterTab === 'active'
-      ? demoProjects
-      : [];
+    projects.length > 0 ? projects : filterTab === 'active' ? demoProjects : [];
 
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col">
@@ -136,8 +136,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ onSelectProj
               Transform raw footage with natural language prompts
             </h1>
             <p className="text-slate-400 text-sm leading-relaxed mb-6">
-              Deterministic 5-pass FFmpeg rendering, Whisper word-level subtitle sync, intelligent silence cuts,
-              and reversible version trees. Describe your creative intent and let the AI edit your project.
+              Deterministic 5-pass FFmpeg rendering, Whisper word-level subtitle sync, intelligent
+              silence cuts, and reversible version trees. Describe your creative intent and let the
+              AI edit your project.
             </p>
             <button
               onClick={() => setIsUploadOpen(true)}
@@ -257,10 +258,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ onSelectProj
                         isArchived
                           ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                           : project.status === 'ready'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                          : project.status === 'analyzing'
-                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse'
-                          : 'bg-slate-700/20 text-slate-300 border-slate-700/40'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : project.status === 'analyzing'
+                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 animate-pulse'
+                              : 'bg-slate-700/20 text-slate-300 border-slate-700/40'
                       }`}
                     >
                       {project.status || 'draft'}
@@ -326,15 +327,20 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ onSelectProj
                       <p className="text-xs text-slate-400 flex items-center space-x-1.5">
                         <Clock className="w-3.5 h-3.5" />
                         <span>
-                          {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Just now'}
+                          {project.updatedAt
+                            ? new Date(project.updatedAt).toLocaleDateString()
+                            : 'Just now'}
                         </span>
                         {(project.baseAssetId?.media?.durationMs || project.stats?.durationMs) && (
                           <>
                             <span>•</span>
                             <span className="font-mono text-[11px] text-blue-400">
                               {Math.round(
-                                (project.baseAssetId?.media?.durationMs || project.stats?.durationMs || 0) / 1000
-                              )}s
+                                (project.baseAssetId?.media?.durationMs ||
+                                  project.stats?.durationMs ||
+                                  0) / 1000
+                              )}
+                              s
                             </span>
                           </>
                         )}
@@ -356,8 +362,8 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ onSelectProj
                           {isArchived
                             ? 'Archived (Read-Only)'
                             : project.isDemo
-                            ? 'Demo Mode'
-                            : 'Ready to Edit'}
+                              ? 'Demo Mode'
+                              : 'Ready to Edit'}
                         </span>
                       </span>
                       <span

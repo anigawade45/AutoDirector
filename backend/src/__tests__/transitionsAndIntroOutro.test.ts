@@ -248,13 +248,17 @@ describe('Phase 5 Task 4: Transitions (xfade/acrossfade), Intro/Outro Templates 
       expect(filterStr).toContain('[v_intro]');
 
       // Intro audio: anullsrc
-      expect(filterStr).toContain('anullsrc=r=44100:cl=stereo,atrim=0:4.000,asetpts=PTS-STARTPTS[a_intro]');
+      expect(filterStr).toContain(
+        'anullsrc=r=44100:cl=stereo,atrim=0:4.000,asetpts=PTS-STARTPTS[a_intro]'
+      );
 
       // Outro video & audio
       expect(filterStr).toContain('color=c=0x0F172A:s=1920x1080:r=30:d=3.000,format=yuv420p');
       expect(filterStr).toContain("drawtext=text='Thank You For Watching'");
       expect(filterStr).toContain('[v_outro]');
-      expect(filterStr).toContain('anullsrc=r=44100:cl=stereo,atrim=0:3.000,asetpts=PTS-STARTPTS[a_outro]');
+      expect(filterStr).toContain(
+        'anullsrc=r=44100:cl=stereo,atrim=0:3.000,asetpts=PTS-STARTPTS[a_outro]'
+      );
 
       // All elements concatenated: [v_intro][v0][v_outro]
       expect(filterStr).toContain('[v_intro][v0][v_outro]concat=n=3:v=1:a=0[vc]');
@@ -296,7 +300,9 @@ describe('Phase 5 Task 4: Transitions (xfade/acrossfade), Intro/Outro Templates 
 
       const filterStr = result.args.join(' ');
       // Normalization scale and pad to 480p (854x480)
-      expect(filterStr).toContain('scale=854:480:force_original_aspect_ratio=decrease,pad=854:480:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p');
+      expect(filterStr).toContain(
+        'scale=854:480:force_original_aspect_ratio=decrease,pad=854:480:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p'
+      );
       // Audio normalization to 44.1kHz stereo
       expect(filterStr).toContain('aformat=sample_rates=44100:channel_layouts=stereo');
     });
@@ -321,4 +327,3 @@ describe('Phase 5 Task 4: Transitions (xfade/acrossfade), Intro/Outro Templates 
     });
   });
 });
-

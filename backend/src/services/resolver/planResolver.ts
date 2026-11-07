@@ -1,5 +1,20 @@
-import { EditPlan, Timeline, Track, Clip, Effect, Marker, TransitionOut, CaptionCue } from '@ai-video/shared';
-import { secToFrameMs, buildKeepSegments, computeRippleCuts, mapCuesToOutput, verifyTimelineInvariants } from '@ai-video/shared';
+import {
+  EditPlan,
+  Timeline,
+  Track,
+  Clip,
+  Effect,
+  Marker,
+  TransitionOut,
+  CaptionCue,
+} from '@ai-video/shared';
+import {
+  secToFrameMs,
+  buildKeepSegments,
+  computeRippleCuts,
+  mapCuesToOutput,
+  verifyTimelineInvariants,
+} from '@ai-video/shared';
 import { nanoid } from 'nanoid';
 
 export interface ResolverInput {
@@ -23,7 +38,9 @@ export class PlanResolver {
     // 1. Build keep-segments from cut & speed layers
     const cutLayers = plan.layers.filter((l) => l.enabled && l.layer === 'cut') as any[];
     const speedLayers = plan.layers.filter((l) => l.enabled && l.layer === 'speed') as any[];
-    const transitionLayers = plan.layers.filter((l) => l.enabled && l.layer === 'transition') as any[];
+    const transitionLayers = plan.layers.filter(
+      (l) => l.enabled && l.layer === 'transition'
+    ) as any[];
 
     const keepSegments = buildKeepSegments(cutLayers, totalAssetSec, speedLayers, fps);
 

@@ -59,7 +59,10 @@ export class TranscriptionService {
           return this.formatWhisperWordsToCues(transcription.words);
         }
       } catch (err: any) {
-        console.warn('[TranscriptionService] OpenAI Whisper API error, using acoustic alignment:', err.message);
+        console.warn(
+          '[TranscriptionService] OpenAI Whisper API error, using acoustic alignment:',
+          err.message
+        );
       }
     }
 

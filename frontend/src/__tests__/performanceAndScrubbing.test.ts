@@ -268,7 +268,9 @@ describe('Phase 8 Performance Gate: Scrubbing Latency & Canvas Draw Benchmarking
       const elapsed = performance.now() - start;
       const perCall = elapsed / 1000;
 
-      console.log(`[Benchmark Track Derivation] 1,000 selector runs in ${elapsed.toFixed(2)}ms (avg: ${perCall.toFixed(4)}ms/call)`);
+      console.log(
+        `[Benchmark Track Derivation] 1,000 selector runs in ${elapsed.toFixed(2)}ms (avg: ${perCall.toFixed(4)}ms/call)`
+      );
       expect(elapsed).toBeLessThan(100.0);
     });
   });

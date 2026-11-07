@@ -37,4 +37,3 @@ async function listBucket() {
 }
 
 listBucket().catch(console.error);
-

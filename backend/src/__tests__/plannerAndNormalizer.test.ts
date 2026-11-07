@@ -2,7 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { PlanNormalizer } from '../services/planner/planNormalizer.js';
 import { PatchEngine } from '../services/planner/patchEngine.js';
 import { PlannerService } from '../services/planner/plannerService.js';
-import { PlannerProvider, PlannerProviderInput, PlannerProviderOutput } from '../services/planner/plannerProvider.interface.js';
+import {
+  PlannerProvider,
+  PlannerProviderInput,
+  PlannerProviderOutput,
+} from '../services/planner/plannerProvider.interface.js';
 import { EditPlan, EditPlanSchema } from '@ai-video/shared';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -348,7 +352,11 @@ describe('Phase 4: Plan Normalizer, Patch Engine & Planner Service', () => {
                     params: { preset: 'cinematic', contrast: 1.1, saturation: 1.0 },
                   },
                 ],
-                meta: { prompt: 'Cinematic', model: 'test-model', createdAt: new Date().toISOString() },
+                meta: {
+                  prompt: 'Cinematic',
+                  model: 'test-model',
+                  createdAt: new Date().toISOString(),
+                },
               },
             };
           }
@@ -444,4 +452,3 @@ describe('Phase 4: Plan Normalizer, Patch Engine & Planner Service', () => {
     });
   });
 });
-

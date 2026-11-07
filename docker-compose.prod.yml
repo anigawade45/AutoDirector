@@ -189,3 +189,4 @@ volumes:
     name: ai_video_prod_redis_data
   render_scratch:
     name: ai_video_prod_render_scratch
+

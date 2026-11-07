@@ -6,4 +6,3 @@ export const catalogRouter = Router();
 
 catalogRouter.use(authMiddleware);
 catalogRouter.get('/', CatalogController.getCatalog);
-

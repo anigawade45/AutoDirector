@@ -1,6 +1,8 @@
 export type TrackKind = 'video' | 'audio' | 'music' | 'subtitle' | 'text' | 'overlay';
-export type ClipType = 'video' | 'audio' | 'music' | 'subtitle' | 'text' | 'overlay' | 'intro' | 'outro';
-export type EffectType = 'color' | 'blur' | 'vignette' | 'grain' | 'speed_ramp' | 'denoise' | 'normalize' | 'stabilize';
+export type ClipType =
+  'video' | 'audio' | 'music' | 'subtitle' | 'text' | 'overlay' | 'intro' | 'outro';
+export type EffectType =
+  'color' | 'blur' | 'vignette' | 'grain' | 'speed_ramp' | 'denoise' | 'normalize' | 'stabilize';
 export type MarkerKind = 'user' | 'scene' | 'beat';
 
 export interface Effect {
@@ -41,23 +43,23 @@ export interface Clip {
   startMs: number;
   durMs: number;
   enabled: boolean;
-  
+
   // Type-specific references and parameters
   assetId?: string;
   catalogId?: string;
   captionSetId?: string;
   templateId?: string;
-  
+
   srcInMs?: number;
   srcOutMs?: number;
   speed?: number;
   audioGainDb?: number;
   reverse?: boolean;
-  
+
   transform?: ClipTransform;
   style?: Record<string, unknown>;
   params?: Record<string, unknown>;
-  
+
   effects?: Effect[];
   keyframes?: Record<string, KeyframePoint[]>;
   transitionOut?: TransitionOut | null;
@@ -97,4 +99,3 @@ export interface Timeline {
   globalEffects: Effect[];
   sourcePlanId?: string | null;
 }
-

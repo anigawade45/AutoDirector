@@ -53,7 +53,8 @@ export class FFmpegCompiler {
     paths?: CompilerPaths
   ): CompilerResult {
     const inputVideo = paths?.inputSourcePath || 'source.mp4';
-    const outputVideo = paths?.outputPath || (profile === 'preview_480p' ? 'preview_480p.mp4' : 'out.mp4');
+    const outputVideo =
+      paths?.outputPath || (profile === 'preview_480p' ? 'preview_480p.mp4' : 'out.mp4');
 
     const args: string[] = ['-y'];
     const inputs: Array<{ key: string; type: 'video' | 'audio' | 'image' }> = [
@@ -79,7 +80,9 @@ export class FFmpegCompiler {
     // =========================================================================
     const cutLayers = plan.layers.filter((l) => l.enabled && l.layer === 'cut') as any[];
     const speedLayers = plan.layers.filter((l) => l.enabled && l.layer === 'speed') as any[];
-    const transitionLayers = plan.layers.filter((l) => l.enabled && l.layer === 'transition') as any[];
+    const transitionLayers = plan.layers.filter(
+      (l) => l.enabled && l.layer === 'transition'
+    ) as any[];
     const introLayer = plan.layers.find((l) => l.enabled && l.layer === 'intro') as any;
     const outroLayer = plan.layers.find((l) => l.enabled && l.layer === 'outro') as any;
 
@@ -102,7 +105,9 @@ export class FFmpegCompiler {
           `[${introIdx}:a]atrim=0:${introDur},asetpts=PTS-STARTPTS,aformat=sample_rates=44100:channel_layouts=stereo[a_intro]`
         );
       } else {
-        const bg = introLayer.params?.theme ? introLayer.params.theme.replace('#', '0x') : '0x0F172A';
+        const bg = introLayer.params?.theme
+          ? introLayer.params.theme.replace('#', '0x')
+          : '0x0F172A';
         let vIntroFilter = `color=c=${bg}:s=${targetWidth}x${targetHeight}:r=${targetFps}:d=${introDur.toFixed(3)},format=yuv420p`;
         if (introLayer.params?.text) {
           const escapedText = introLayer.params.text.replace(/'/g, "\\'").replace(/:/g, '\\:');
@@ -173,7 +178,9 @@ export class FFmpegCompiler {
           `[${outroIdx}:a]atrim=0:${outroDur},asetpts=PTS-STARTPTS,aformat=sample_rates=44100:channel_layouts=stereo[a_outro]`
         );
       } else {
-        const bg = outroLayer.params?.theme ? outroLayer.params.theme.replace('#', '0x') : '0x0F172A';
+        const bg = outroLayer.params?.theme
+          ? outroLayer.params.theme.replace('#', '0x')
+          : '0x0F172A';
         let vOutroFilter = `color=c=${bg}:s=${targetWidth}x${targetHeight}:r=${targetFps}:d=${outroDur.toFixed(3)},format=yuv420p`;
         if (outroLayer.params?.text) {
           const escapedText = outroLayer.params.text.replace(/'/g, "\\'").replace(/:/g, '\\:');
@@ -458,9 +465,7 @@ export class FFmpegCompiler {
       }
       currentAOut = '[aout]';
     } else {
-      filterComplexParts.push(
-        `${currentAOut}loudnorm=I=${normalizeLufs}:TP=-1.5:LRA=11[aout]`
-      );
+      filterComplexParts.push(`${currentAOut}loudnorm=I=${normalizeLufs}:TP=-1.5:LRA=11[aout]`);
       currentAOut = '[aout]';
     }
 
@@ -474,39 +479,63 @@ export class FFmpegCompiler {
     // Output Encoding Profile
     if (profile === 'preview_480p') {
       args.push(
-        '-s', '854x480',
-        '-c:v', 'libx264',
-        '-preset', 'veryfast',
-        '-crf', '28',
-        '-c:a', 'aac',
-        '-b:a', '128k',
-        '-movflags', '+faststart',
-        '-progress', 'pipe:1',
+        '-s',
+        '854x480',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '28',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '128k',
+        '-movflags',
+        '+faststart',
+        '-progress',
+        'pipe:1',
         outputVideo
       );
     } else if (profile === 'final_4k') {
       args.push(
-        '-s', '3840x2160',
-        '-c:v', 'libx264',
-        '-preset', 'medium',
-        '-crf', '18',
-        '-c:a', 'aac',
-        '-b:a', '384k',
-        '-movflags', '+faststart',
-        '-progress', 'pipe:1',
+        '-s',
+        '3840x2160',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'medium',
+        '-crf',
+        '18',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '384k',
+        '-movflags',
+        '+faststart',
+        '-progress',
+        'pipe:1',
         outputVideo
       );
     } else {
       // Default: final_1080p
       args.push(
-        '-s', '1920x1080',
-        '-c:v', 'libx264',
-        '-preset', 'medium',
-        '-crf', '18',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-movflags', '+faststart',
-        '-progress', 'pipe:1',
+        '-s',
+        '1920x1080',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'medium',
+        '-crf',
+        '18',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        '-movflags',
+        '+faststart',
+        '-progress',
+        'pipe:1',
         outputVideo
       );
     }

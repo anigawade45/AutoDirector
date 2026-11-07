@@ -24,8 +24,8 @@ describe('Phase 5 Exit Criteria: Core Editing Features Acceptance Suite', () => 
       // - Silences >= 0.6s: 0.8s, 1.5s, 3.2s, 0.65s (MUST be cut)
       // - Natural pauses < 0.6s: 0.25s, 0.4s, 0.15s (MUST be preserved for natural speech cadence)
       const silences: SilenceRange[] = [
-        { startMs: 3000, endMs: 3800, avgDb: -35 },   // 0.8s silence (cut)
-        { startMs: 8000, endMs: 8250, avgDb: -32 },   // 0.25s pause (kept)
+        { startMs: 3000, endMs: 3800, avgDb: -35 }, // 0.8s silence (cut)
+        { startMs: 8000, endMs: 8250, avgDb: -32 }, // 0.25s pause (kept)
         { startMs: 12000, endMs: 13500, avgDb: -40 }, // 1.5s silence (cut)
         { startMs: 18000, endMs: 18400, avgDb: -30 }, // 0.4s pause (kept)
         { startMs: 25000, endMs: 28200, avgDb: -38 }, // 3.2s silence (cut)
@@ -124,9 +124,9 @@ describe('Phase 5 Exit Criteria: Core Editing Features Acceptance Suite', () => 
         expect(cssFilter.cssFilter).not.toBe('');
         expect(
           cssFilter.cssFilter.includes('contrast') ||
-          cssFilter.cssFilter.includes('saturate') ||
-          cssFilter.cssFilter.includes('brightness') ||
-          cssFilter.cssFilter.includes('grayscale')
+            cssFilter.cssFilter.includes('saturate') ||
+            cssFilter.cssFilter.includes('brightness') ||
+            cssFilter.cssFilter.includes('grayscale')
         ).toBe(true);
       }
     });
@@ -137,7 +137,15 @@ describe('Phase 5 Exit Criteria: Core Editing Features Acceptance Suite', () => 
       // Custom vignette override
       expect(hasVisibleColorChange({ vignette: 0.4 })).toBe(true);
       // Neutral settings produce NO visible change
-      expect(hasVisibleColorChange({ contrast: 1.0, brightness: 0.0, saturation: 1.0, vignette: 0.0, grain: 0.0 })).toBe(false);
+      expect(
+        hasVisibleColorChange({
+          contrast: 1.0,
+          brightness: 0.0,
+          saturation: 1.0,
+          vignette: 0.0,
+          grain: 0.0,
+        })
+      ).toBe(false);
     });
   });
 

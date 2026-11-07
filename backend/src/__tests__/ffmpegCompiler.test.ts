@@ -260,4 +260,3 @@ describe('Phase 3 Task 2: Pure FFmpeg Compiler compile(plan, analysis, profile)'
     });
   });
 });
-

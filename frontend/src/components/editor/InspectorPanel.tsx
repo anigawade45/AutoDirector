@@ -24,15 +24,8 @@ import { api } from '../../api/client';
 import { ColorPreset, JsonPatchOperation, EditLayer } from '@ai-video/shared';
 
 export const InspectorPanel: React.FC = () => {
-  const {
-    project,
-    plan,
-    updateDraft,
-    commitDraft,
-    setPlan,
-    timeline,
-    selectLayer,
-  } = useEditorStore();
+  const { project, plan, updateDraft, commitDraft, setPlan, timeline, selectLayer } =
+    useEditorStore();
 
   const effectivePlan = useEditorStore(selectEffectivePlan);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'conflict' | 'error'>('saved');
@@ -771,7 +764,9 @@ export const InspectorPanel: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-slate-400 text-[11px] block">Beat Synchronization</span>
-                  <span className="text-[10px] text-slate-600">Snap cuts to beat grid within 60ms</span>
+                  <span className="text-[10px] text-slate-600">
+                    Snap cuts to beat grid within 60ms
+                  </span>
                 </div>
                 <button
                   onClick={() => {

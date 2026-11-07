@@ -139,7 +139,10 @@ export class ProjectsController {
         if (analysis) {
           const cues = captionSet?.cues || [];
           const totalWords = cues.reduce((sum: number, c: any) => sum + (c.words?.length || 0), 0);
-          const snippet = cues.slice(0, 3).map((c: any) => c.text).join(' ');
+          const snippet = cues
+            .slice(0, 3)
+            .map((c: any) => c.text)
+            .join(' ');
 
           analysisSummary = {
             durationMs: baseAsset.media?.durationMs || 0,
@@ -193,9 +196,21 @@ export class ProjectsController {
       }
 
       if (status !== undefined) {
-        const validStatuses = ['draft', 'uploading', 'analyzing', 'ready', 'rendering', 'error', 'archived'];
+        const validStatuses = [
+          'draft',
+          'uploading',
+          'analyzing',
+          'ready',
+          'rendering',
+          'error',
+          'archived',
+        ];
         if (!validStatuses.includes(status)) {
-          throw new AppError(400, 'INVALID_STATUS', `Status must be one of: ${validStatuses.join(', ')}`);
+          throw new AppError(
+            400,
+            'INVALID_STATUS',
+            `Status must be one of: ${validStatuses.join(', ')}`
+          );
         }
         project.status = status;
       }
@@ -314,4 +329,3 @@ export class ProjectsController {
     }
   }
 }
-

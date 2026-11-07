@@ -4,7 +4,12 @@ import {
   VALID_STATE_TRANSITIONS,
   TERMINAL_STATES,
 } from '../services/jobs/renderJobLifecycle.js';
-import { QUEUE_CONFIGS, analysisQueue, previewQueue, renderQueue } from '../services/queue/queueService.js';
+import {
+  QUEUE_CONFIGS,
+  analysisQueue,
+  previewQueue,
+  renderQueue,
+} from '../services/queue/queueService.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { JobEventsPublisher } from '../services/queue/queueService.js';
 
@@ -213,4 +218,3 @@ describe('Phase 3 Task 1: RenderJob Lifecycle & BullMQ Queue Configurations', ()
     });
   });
 });
-

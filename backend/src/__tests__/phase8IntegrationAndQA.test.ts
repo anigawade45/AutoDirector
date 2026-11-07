@@ -95,7 +95,13 @@ vi.mock('../models/Catalog.js', () => ({
     find: vi.fn().mockResolvedValue([
       { kind: 'template', key: 'cinematic_minimal', name: 'Cinematic Minimal', active: true },
       { kind: 'lut', key: 'cinematic', name: 'Cinematic Warm', active: true },
-      { kind: 'music', key: 'track_upbeat_01', name: 'Upbeat Indie', active: true, meta: { mood: 'upbeat' } },
+      {
+        kind: 'music',
+        key: 'track_upbeat_01',
+        name: 'Upbeat Indie',
+        active: true,
+        meta: { mood: 'upbeat' },
+      },
     ]),
   },
 }));
@@ -130,7 +136,9 @@ vi.mock('../services/storage/s3Service.js', () => ({
     completeMultipartUpload: vi.fn().mockResolvedValue({ ETag: 'complete_etag' }),
     cleanupAbandonedUploads: vi.fn().mockResolvedValue(2),
     cleanupStalePreviews: vi.fn().mockResolvedValue(5),
-    getPresignedDownloadUrl: vi.fn().mockResolvedValue('https://s3.mock/renders/job_export_1.mp4?X-Amz-Signature=mockSign123'),
+    getPresignedDownloadUrl: vi
+      .fn()
+      .mockResolvedValue('https://s3.mock/renders/job_export_1.mp4?X-Amz-Signature=mockSign123'),
   },
 }));
 
@@ -322,7 +330,11 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
         body: { parts: [{ partNumber: 1, etag: 'etag_1' }] },
       } as unknown as Request;
 
-      await UploadsController.completeUpload(completeUploadReq, mockRes as unknown as Response, nextFn);
+      await UploadsController.completeUpload(
+        completeUploadReq,
+        mockRes as unknown as Response,
+        nextFn
+      );
       expect(statusMock).toHaveBeenCalledWith(202);
       expect(mockProjectDoc.status).toBe('analyzing');
 
@@ -349,7 +361,11 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
         },
       } as unknown as Request;
 
-      await WorkerEventsController.handleWorkerEvent(workerAnalysisReq, mockRes as unknown as Response, nextFn);
+      await WorkerEventsController.handleWorkerEvent(
+        workerAnalysisReq,
+        mockRes as unknown as Response,
+        nextFn
+      );
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(analysisJobDoc.state).toBe('completed');
       expect(ProjectModel.updateOne).toHaveBeenCalledWith(
@@ -381,8 +397,20 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
           baseAssetId: 'ast_e2e_01',
           version: 1,
           layers: [
-            { id: 'lyr_sub_1', layer: 'subtitle', enabled: true, timebase: 'output', params: { size: 48, font: 'Montserrat', position: 'bottom' } },
-            { id: 'lyr_col_1', layer: 'color', enabled: true, timebase: 'global', params: { preset: 'cinematic' } },
+            {
+              id: 'lyr_sub_1',
+              layer: 'subtitle',
+              enabled: true,
+              timebase: 'output',
+              params: { size: 48, font: 'Montserrat', position: 'bottom' },
+            },
+            {
+              id: 'lyr_col_1',
+              layer: 'color',
+              enabled: true,
+              timebase: 'global',
+              params: { preset: 'cinematic' },
+            },
           ],
           meta: { prompt: 'Make a travel montage', model: 'heuristic' },
         },
@@ -429,11 +457,19 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
         body: {
           eventType: 'render.completed',
           jobId: 'job_672b55555555555555555555',
-          result: { outputKey: 'previews/prj_e2e_01_v1.mp4', sizeBytes: 15000000, durationMs: 60000 },
+          result: {
+            outputKey: 'previews/prj_e2e_01_v1.mp4',
+            sizeBytes: 15000000,
+            durationMs: 60000,
+          },
         },
       } as unknown as Request;
 
-      await WorkerEventsController.handleWorkerEvent(workerPreviewReq, mockRes as unknown as Response, nextFn);
+      await WorkerEventsController.handleWorkerEvent(
+        workerPreviewReq,
+        mockRes as unknown as Response,
+        nextFn
+      );
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(previewJobDoc.state).toBe('completed');
 
@@ -452,8 +488,20 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
           version: 2,
           parentVersion: 1,
           layers: [
-            { id: 'lyr_sub_1', layer: 'subtitle', enabled: true, timebase: 'output', params: { size: 72, font: 'Montserrat', position: 'bottom' } },
-            { id: 'lyr_col_1', layer: 'color', enabled: true, timebase: 'global', params: { preset: 'cinematic' } },
+            {
+              id: 'lyr_sub_1',
+              layer: 'subtitle',
+              enabled: true,
+              timebase: 'output',
+              params: { size: 72, font: 'Montserrat', position: 'bottom' },
+            },
+            {
+              id: 'lyr_col_1',
+              layer: 'color',
+              enabled: true,
+              timebase: 'global',
+              params: { preset: 'cinematic' },
+            },
           ],
         },
       };
@@ -532,11 +580,19 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
         body: {
           eventType: 'render.completed',
           jobId: 'job_672b77777777777777777777',
-          result: { outputKey: 'renders/prj_e2e_01_final_1080p.mp4', sizeBytes: 85000000, durationMs: 60000 },
+          result: {
+            outputKey: 'renders/prj_e2e_01_final_1080p.mp4',
+            sizeBytes: 85000000,
+            durationMs: 60000,
+          },
         },
       } as unknown as Request;
 
-      await WorkerEventsController.handleWorkerEvent(workerExportReq, mockRes as unknown as Response, nextFn);
+      await WorkerEventsController.handleWorkerEvent(
+        workerExportReq,
+        mockRes as unknown as Response,
+        nextFn
+      );
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(liveExportJobDoc.state).toBe('completed');
       expect(ProjectModel.updateOne).toHaveBeenCalledWith(
@@ -770,7 +826,10 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
       const nowSec = Math.floor(Date.now() / 1000);
       const body = { eventType: 'render.progress', jobId: 'job_123' };
       const rawBody = JSON.stringify(body);
-      const validSig = crypto.createHmac('sha256', env.INTERNAL_WORKER_SECRET).update(rawBody).digest('hex');
+      const validSig = crypto
+        .createHmac('sha256', env.INTERNAL_WORKER_SECRET)
+        .update(rawBody)
+        .digest('hex');
 
       const eventReq = {
         headers: {
@@ -817,7 +876,11 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
         },
       } as unknown as Request;
 
-      await WorkerEventsController.handleWorkerEvent(lateProgressReq, mockRes as unknown as Response, nextFn);
+      await WorkerEventsController.handleWorkerEvent(
+        lateProgressReq,
+        mockRes as unknown as Response,
+        nextFn
+      );
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -984,7 +1047,11 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
         body: { parts: [{ partNumber: 1, etag: 'etag1' }] },
       } as unknown as Request;
 
-      await UploadsController.completeUpload(userBCompleteReq, mockRes as unknown as Response, nextFn);
+      await UploadsController.completeUpload(
+        userBCompleteReq,
+        mockRes as unknown as Response,
+        nextFn
+      );
       expect(nextFn).toHaveBeenCalledWith(
         expect.objectContaining({
           statusCode: 403,
@@ -1082,7 +1149,9 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
       MetricsService.recordRequest(160, 503);
 
       const availability = MetricsService.getAvailabilityPct();
-      console.log(`[Benchmark API Availability] ${availability}% availability across 1,000 requests`);
+      console.log(
+        `[Benchmark API Availability] ${availability}% availability across 1,000 requests`
+      );
 
       // Target: >= 99.5% availability
       expect(availability).toBeGreaterThanOrEqual(99.5);
@@ -1093,8 +1162,8 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
 
       // Collect latency distribution: typical planner response between 1.2s and 3.8s, p95 well under 15s
       const simulatedLatenciesMs = [
-        1200, 1450, 1600, 1850, 2100, 2300, 2450, 2600, 2750, 2900,
-        3100, 3250, 3400, 3550, 3700, 3850, 4100, 4400, 5200, 6800,
+        1200, 1450, 1600, 1850, 2100, 2300, 2450, 2600, 2750, 2900, 3100, 3250, 3400, 3550, 3700,
+        3850, 4100, 4400, 5200, 6800,
       ];
 
       for (const lat of simulatedLatenciesMs) {

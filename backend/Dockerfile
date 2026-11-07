@@ -63,3 +63,4 @@ EXPOSE 4000
 
 # Default entrypoint runs API server (workers override command in docker-compose.prod.yml)
 CMD ["node", "backend/dist/server.js"]
+

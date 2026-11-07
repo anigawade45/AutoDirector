@@ -206,4 +206,3 @@ describe('Phase 4 Exit Gate: AI Planner & Versioned Plans Acceptance Suite', () 
     expect(firstTryPercentage).toBeGreaterThanOrEqual(95);
   });
 });
-

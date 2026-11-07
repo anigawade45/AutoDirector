@@ -43,7 +43,7 @@ export const TimelineView: React.FC = () => {
   const [activeSnapLine, setActiveSnapLine] = useState<number | null>(null);
 
   const zoom = timeline.zoom; // pixels per second
-  const totalDuration = playback.duration || (project?.durationSec || 60);
+  const totalDuration = playback.duration || project?.durationSec || 60;
   const fps = project?.fps || effectivePlan?.global?.fps || 30;
   const frameDuration = 1 / fps;
   const timelineWidth = Math.max(900, totalDuration * zoom);
@@ -200,7 +200,8 @@ export const TimelineView: React.FC = () => {
   };
 
   const getClipStyle = (clip: TrackClipVM, isSelected: boolean) => {
-    const base = 'h-full rounded-md cursor-pointer flex items-center px-2.5 text-xs truncate transition-all select-none ';
+    const base =
+      'h-full rounded-md cursor-pointer flex items-center px-2.5 text-xs truncate transition-all select-none ';
     if (isSelected) {
       return base + 'ring-2 ring-white shadow-lg z-20 brightness-115 font-semibold';
     }
@@ -208,25 +209,48 @@ export const TimelineView: React.FC = () => {
     switch (clip.type) {
       case 'intro':
       case 'outro':
-        return base + 'bg-purple-900/40 border border-purple-500/50 text-purple-200 hover:border-purple-400';
+        return (
+          base +
+          'bg-purple-900/40 border border-purple-500/50 text-purple-200 hover:border-purple-400'
+        );
       case 'cut':
-        return base + 'bg-red-500/30 border border-red-500/60 text-red-200 hover:bg-red-500/45 text-[10px] font-mono justify-center';
+        return (
+          base +
+          'bg-red-500/30 border border-red-500/60 text-red-200 hover:bg-red-500/45 text-[10px] font-mono justify-center'
+        );
       case 'speed':
-        return base + 'bg-cyan-900/40 border border-cyan-500/50 text-cyan-200 hover:border-cyan-400';
+        return (
+          base + 'bg-cyan-900/40 border border-cyan-500/50 text-cyan-200 hover:border-cyan-400'
+        );
       case 'subtitle':
-        return base + 'bg-amber-900/30 border border-amber-600/40 text-amber-200 hover:border-amber-400';
+        return (
+          base + 'bg-amber-900/30 border border-amber-600/40 text-amber-200 hover:border-amber-400'
+        );
       case 'text':
         return base + 'bg-sky-900/35 border border-sky-500/50 text-sky-200 hover:border-sky-400';
       case 'music':
-        return base + 'bg-emerald-900/30 border border-emerald-600/40 text-emerald-200 hover:border-emerald-400';
+        return (
+          base +
+          'bg-emerald-900/30 border border-emerald-600/40 text-emerald-200 hover:border-emerald-400'
+        );
       case 'color':
-        return base + 'bg-indigo-900/30 border border-indigo-600/40 text-indigo-200 hover:border-indigo-400';
+        return (
+          base +
+          'bg-indigo-900/30 border border-indigo-600/40 text-indigo-200 hover:border-indigo-400'
+        );
       case 'overlay':
-        return base + 'bg-pink-900/30 border border-pink-500/40 text-pink-200 hover:border-pink-400';
+        return (
+          base + 'bg-pink-900/30 border border-pink-500/40 text-pink-200 hover:border-pink-400'
+        );
       case 'transition':
-        return base + 'bg-orange-900/40 border border-orange-500/50 text-orange-200 hover:border-orange-400';
+        return (
+          base +
+          'bg-orange-900/40 border border-orange-500/50 text-orange-200 hover:border-orange-400'
+        );
       default:
-        return base + 'bg-blue-900/30 border border-blue-600/40 text-blue-200 hover:border-blue-400';
+        return (
+          base + 'bg-blue-900/30 border border-blue-600/40 text-blue-200 hover:border-blue-400'
+        );
     }
   };
 
@@ -369,10 +393,7 @@ export const TimelineView: React.FC = () => {
 
             {/* Render Each Derived Track Lane */}
             {derivedTracks.map((track) => (
-              <div
-                key={track.id}
-                className="h-11 border-b border-surfaceBorder/60 relative py-1"
-              >
+              <div key={track.id} className="h-11 border-b border-surfaceBorder/60 relative py-1">
                 {track.clips.map((clip) => {
                   const isSelected = !!clip.layerId && selectedLayerIds.includes(clip.layerId);
                   const leftPx = clip.startSec * zoom;

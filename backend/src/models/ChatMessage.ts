@@ -23,5 +23,7 @@ const ChatMessageSchema = new Schema<IChatMessageDocument>(
 
 ChatMessageSchema.index({ projectId: 1, createdAt: 1 });
 
-export const ChatMessageModel = mongoose.model<IChatMessageDocument>('ChatMessage', ChatMessageSchema);
-
+export const ChatMessageModel = mongoose.model<IChatMessageDocument>(
+  'ChatMessage',
+  ChatMessageSchema
+);

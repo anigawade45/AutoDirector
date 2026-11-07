@@ -20,7 +20,7 @@ export interface BaseLayer {
   timebase: Timebase;
   range?: {
     start: number; // in seconds
-    end: number;   // in seconds
+    end: number; // in seconds
   };
 }
 
@@ -59,11 +59,11 @@ export type ColorPreset = 'cinematic' | 'warm' | 'cool' | 'bw' | 'vivid' | 'fade
 export interface ColorParams {
   preset?: ColorPreset;
   brightness?: number; // -0.3 to 0.3
-  contrast?: number;   // 0.7 to 1.5
+  contrast?: number; // 0.7 to 1.5
   saturation?: number; // 0 to 2
-  lut?: string;        // catalog ID
-  vignette?: number;   // 0 to 1
-  grain?: number;      // 0 to 0.5
+  lut?: string; // catalog ID
+  vignette?: number; // 0 to 1
+  grain?: number; // 0 to 0.5
 }
 
 export interface ColorLayer extends BaseLayer {
@@ -80,7 +80,7 @@ export interface SubtitleParams {
   font?: string;
   size?: number; // 24 to 96
   position: SubtitlePosition;
-  primaryColor?: string;   // hex string
+  primaryColor?: string; // hex string
   highlightColor?: string; // hex string
   maxWordsPerLine?: number; // 2 to 8
 }
@@ -113,7 +113,7 @@ export type TransitionType = 'fade' | 'dissolve' | 'wipeleft' | 'slideup' | 'zoo
 export interface TransitionParams {
   type: TransitionType;
   duration: number; // 0.2 to 1.5s
-  at: number;       // source time in seconds
+  at: number; // source time in seconds
 }
 
 export interface TransitionLayer extends BaseLayer {
@@ -131,7 +131,7 @@ export interface TemplateParams {
   duration: number; // 2 to 10s
   text?: string;
   subtext?: string;
-  theme?: string;   // hex palette or name
+  theme?: string; // hex palette or name
 }
 
 export interface IntroLayer extends BaseLayer {
@@ -172,7 +172,7 @@ export interface MusicParams {
   mood?: string;
   volume: number; // 0 to 1
   duckUnderSpeech: boolean;
-  fadeIn?: number;  // seconds
+  fadeIn?: number; // seconds
   fadeOut?: number; // seconds
   beatSync?: boolean;
 }
@@ -216,8 +216,8 @@ export interface EditPlanMeta {
 
 export interface EditPlan {
   schemaVersion: '1.0';
-  projectId: string;    // publicId: "prj_..."
-  baseAssetId: string;  // publicId: "ast_..."
+  projectId: string; // publicId: "prj_..."
+  baseAssetId: string; // publicId: "ast_..."
   version: number;
   parentVersion?: number | null;
   global: GlobalVideoSettings;
@@ -230,4 +230,3 @@ export interface JsonPatchOperation {
   path: string;
   value?: unknown;
 }
-

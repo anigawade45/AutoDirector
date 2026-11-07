@@ -72,7 +72,9 @@ export class PlanNormalizer {
       'music',
       'audio',
     ];
-    layers = layers.filter((l) => l && typeof l === 'object' && allowedLayerTypes.includes(l.layer));
+    layers = layers.filter(
+      (l) => l && typeof l === 'object' && allowedLayerTypes.includes(l.layer)
+    );
     if (layers.length > 200) {
       layers = layers.slice(0, 200);
     }
@@ -85,12 +87,17 @@ export class PlanNormalizer {
       const layerType = rawLayer.layer;
       const id = String(rawLayer.id || `lyr_${layerType}_${layerIdx++}`);
       const enabled = rawLayer.enabled !== false;
-      const params = rawLayer.params && typeof rawLayer.params === 'object' ? { ...rawLayer.params } : {};
+      const params =
+        rawLayer.params && typeof rawLayer.params === 'object' ? { ...rawLayer.params } : {};
 
       switch (layerType) {
         case 'cut': {
           let start = PlanNormalizer.clamp(Number(rawLayer.range?.start) || 0, 0, maxDuration);
-          let end = PlanNormalizer.clamp(Number(rawLayer.range?.end) || maxDuration, 0, maxDuration);
+          let end = PlanNormalizer.clamp(
+            Number(rawLayer.range?.end) || maxDuration,
+            0,
+            maxDuration
+          );
 
           if (end <= start) {
             end = Math.min(maxDuration, start + 0.1);
@@ -122,7 +129,11 @@ export class PlanNormalizer {
 
         case 'speed': {
           const start = PlanNormalizer.clamp(Number(rawLayer.range?.start) || 0, 0, maxDuration);
-          const end = PlanNormalizer.clamp(Number(rawLayer.range?.end) || maxDuration, 0, maxDuration);
+          const end = PlanNormalizer.clamp(
+            Number(rawLayer.range?.end) || maxDuration,
+            0,
+            maxDuration
+          );
           const factor = PlanNormalizer.clamp(
             typeof params.factor === 'number' ? params.factor : 1.0,
             0.25,
@@ -221,8 +232,13 @@ export class PlanNormalizer {
 
           // Reference resolution: font
           let font = 'Montserrat';
-          if (params.font && options.catalog.fonts.some((f) => f.toLowerCase() === params.font.toLowerCase())) {
-            font = options.catalog.fonts.find((f) => f.toLowerCase() === params.font.toLowerCase())!;
+          if (
+            params.font &&
+            options.catalog.fonts.some((f) => f.toLowerCase() === params.font.toLowerCase())
+          ) {
+            font = options.catalog.fonts.find(
+              (f) => f.toLowerCase() === params.font.toLowerCase()
+            )!;
           } else if (options.catalog.fonts.length > 0) {
             font = options.catalog.fonts[0];
           }
@@ -272,7 +288,11 @@ export class PlanNormalizer {
             range: rawLayer.range
               ? {
                   start: PlanNormalizer.clamp(Number(rawLayer.range.start) || 0, 0, maxDuration),
-                  end: PlanNormalizer.clamp(Number(rawLayer.range.end) || maxDuration, 0, maxDuration),
+                  end: PlanNormalizer.clamp(
+                    Number(rawLayer.range.end) || maxDuration,
+                    0,
+                    maxDuration
+                  ),
                 }
               : undefined,
             params: {
@@ -299,8 +319,8 @@ export class PlanNormalizer {
             typeof params.at === 'number'
               ? params.at
               : typeof rawLayer.range?.start === 'number'
-              ? rawLayer.range.start
-              : 0,
+                ? rawLayer.range.start
+                : 0,
             0,
             maxDuration
           );
@@ -335,7 +355,9 @@ export class PlanNormalizer {
           let template = 'cinematic';
           if (
             params.template &&
-            options.catalog.templates.some((t) => t.id.toLowerCase() === params.template.toLowerCase())
+            options.catalog.templates.some(
+              (t) => t.id.toLowerCase() === params.template.toLowerCase()
+            )
           ) {
             template = options.catalog.templates.find(
               (t) => t.id.toLowerCase() === params.template.toLowerCase()
@@ -387,7 +409,11 @@ export class PlanNormalizer {
             range: rawLayer.range
               ? {
                   start: PlanNormalizer.clamp(Number(rawLayer.range.start) || 0, 0, maxDuration),
-                  end: PlanNormalizer.clamp(Number(rawLayer.range.end) || maxDuration, 0, maxDuration),
+                  end: PlanNormalizer.clamp(
+                    Number(rawLayer.range.end) || maxDuration,
+                    0,
+                    maxDuration
+                  ),
                 }
               : undefined,
             params: {
@@ -487,9 +513,7 @@ export class PlanNormalizer {
     // When music layer has beatSync: true and beat grid is provided, snap cut points within 60ms to beats
     const musicLayer = normalizedLayers.find((l) => l.layer === 'music');
     if (musicLayer?.params?.beatSync && options.beats) {
-      const beatGrid = Array.isArray(options.beats)
-        ? options.beats
-        : options.beats.grid || [];
+      const beatGrid = Array.isArray(options.beats) ? options.beats : options.beats.grid || [];
       if (beatGrid.length > 0) {
         cutLayers = snapCutsToBeatGrid(cutLayers, beatGrid, 0.06);
       }
@@ -617,7 +641,10 @@ export class PlanNormalizer {
   }
 
   private static normalizeHex(colorStr: unknown, fallback: string): string {
-    if (typeof colorStr === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(colorStr.trim())) {
+    if (
+      typeof colorStr === 'string' &&
+      /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(colorStr.trim())
+    ) {
       return colorStr.trim().toUpperCase();
     }
     return fallback;

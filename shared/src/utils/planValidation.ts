@@ -1,4 +1,16 @@
-import { EditPlan, EditLayer, CutLayer, SpeedLayer, ColorLayer, SubtitleLayer, TransitionLayer, IntroLayer, OutroLayer, AudioLayer, MusicLayer } from '../types/editPlan.js';
+import {
+  EditPlan,
+  EditLayer,
+  CutLayer,
+  SpeedLayer,
+  ColorLayer,
+  SubtitleLayer,
+  TransitionLayer,
+  IntroLayer,
+  OutroLayer,
+  AudioLayer,
+  MusicLayer,
+} from '../types/editPlan.js';
 import { buildKeepSegments, snapToFrame, secToFrameMs } from './timeMapping.js';
 
 export interface PlanValidationContext {
@@ -184,7 +196,10 @@ export function validateEditPlan(
             severity: 'error',
           });
         }
-        if (typeof cut.params?.padding === 'number' && (cut.params.padding < 0 || cut.params.padding > 0.3)) {
+        if (
+          typeof cut.params?.padding === 'number' &&
+          (cut.params.padding < 0 || cut.params.padding > 0.3)
+        ) {
           issues.push({
             layerId: lid,
             field: 'params.padding',
@@ -293,7 +308,10 @@ export function validateEditPlan(
             severity: 'error',
           });
         }
-        if (typeof p.maxWordsPerLine === 'number' && (p.maxWordsPerLine < 2 || p.maxWordsPerLine > 8)) {
+        if (
+          typeof p.maxWordsPerLine === 'number' &&
+          (p.maxWordsPerLine < 2 || p.maxWordsPerLine > 8)
+        ) {
           issues.push({
             layerId: lid,
             field: 'params.maxWordsPerLine',
@@ -386,7 +404,10 @@ export function validateEditPlan(
       case 'audio': {
         const aud = layer as AudioLayer;
         const p = aud.params || {};
-        if (typeof p.normalizeLufs === 'number' && (p.normalizeLufs < -23 || p.normalizeLufs > -14)) {
+        if (
+          typeof p.normalizeLufs === 'number' &&
+          (p.normalizeLufs < -23 || p.normalizeLufs > -14)
+        ) {
           issues.push({
             layerId: lid,
             field: 'params.normalizeLufs',
@@ -421,14 +442,17 @@ export function validateEditPlan(
   if (keepSegs.length === 0) {
     issues.push({
       field: 'layers',
-      message: 'Cut layers eliminate 100% of the video duration. At least one keep-segment must remain.',
+      message:
+        'Cut layers eliminate 100% of the video duration. At least one keep-segment must remain.',
       severity: 'error',
     });
   }
 
   const introLayer = plan.layers.find((l) => l.enabled && l.layer === 'intro') as any;
   const outroLayer = plan.layers.find((l) => l.enabled && l.layer === 'outro') as any;
-  const transitionLayers = plan.layers.filter((l) => l.enabled && l.layer === 'transition') as any[];
+  const transitionLayers = plan.layers.filter(
+    (l) => l.enabled && l.layer === 'transition'
+  ) as any[];
 
   const introDur = introLayer ? introLayer.params?.duration || 5 : 0;
   const outroDur = outroLayer ? outroLayer.params?.duration || 5 : 0;

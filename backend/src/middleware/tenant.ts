@@ -37,7 +37,11 @@ export async function requireProjectOwner(
 
     if (!project) {
       return next(
-        new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found in user workspace or unauthorized')
+        new AppError(
+          404,
+          'PROJECT_NOT_FOUND',
+          'Project not found in user workspace or unauthorized'
+        )
       );
     }
 
@@ -47,4 +51,3 @@ export async function requireProjectOwner(
     next(error);
   }
 }
-

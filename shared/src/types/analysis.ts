@@ -39,9 +39,9 @@ export interface AnalysisResult {
 }
 
 export interface WordTiming {
-  w: string;    // word
-  s: number;    // start in ms
-  e: number;    // end in ms
+  w: string; // word
+  s: number; // start in ms
+  e: number; // end in ms
   conf: number; // confidence 0 to 1
 }
 
@@ -80,4 +80,3 @@ export interface CompactAnalysisSummary {
     text: string;
   }>;
 }
-

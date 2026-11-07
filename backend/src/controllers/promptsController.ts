@@ -33,14 +33,22 @@ export class PromptsController {
       }
 
       if (!project.baseAssetId) {
-        throw new AppError(400, 'NO_BASE_ASSET', 'Project does not have an uploaded video asset yet');
+        throw new AppError(
+          400,
+          'NO_BASE_ASSET',
+          'Project does not have an uploaded video asset yet'
+        );
       }
 
       const asset = await AssetModel.findById(project.baseAssetId);
       const analysis = await AnalysisResultModel.findOne({ assetId: project.baseAssetId });
 
       if (!asset || !analysis) {
-        throw new AppError(400, 'ANALYSIS_NOT_READY', 'Video analysis is still in progress or failed');
+        throw new AppError(
+          400,
+          'ANALYSIS_NOT_READY',
+          'Video analysis is still in progress or failed'
+        );
       }
 
       // Check optimistic concurrency if baseVersion provided
@@ -67,9 +75,15 @@ export class PromptsController {
       // Fetch active catalog
       const catalogItems = await CatalogModel.find({ active: true });
       const allowedCatalog = {
-        templates: catalogItems.filter((c) => c.kind === 'template').map((c) => ({ id: c.key, name: c.name })),
-        luts: catalogItems.filter((c) => c.kind === 'lut').map((c) => ({ id: c.key, name: c.name })),
-        music: catalogItems.filter((c) => c.kind === 'music').map((c) => ({ id: c.key, name: c.name, mood: (c.meta as any)?.mood || 'general' })),
+        templates: catalogItems
+          .filter((c) => c.kind === 'template')
+          .map((c) => ({ id: c.key, name: c.name })),
+        luts: catalogItems
+          .filter((c) => c.kind === 'lut')
+          .map((c) => ({ id: c.key, name: c.name })),
+        music: catalogItems
+          .filter((c) => c.kind === 'music')
+          .map((c) => ({ id: c.key, name: c.name, mood: (c.meta as any)?.mood || 'general' })),
         fonts: ['Montserrat', 'Inter', 'Roboto', 'Playfair'],
       };
 

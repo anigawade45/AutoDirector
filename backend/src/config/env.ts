@@ -8,7 +8,11 @@ import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 
 dotenv.config();
 
-function resolveBinary(envValue: string | undefined, installerValue: string | undefined, binaryName: string): string {
+function resolveBinary(
+  envValue: string | undefined,
+  installerValue: string | undefined,
+  binaryName: string
+): string {
   // If user provided a specific valid file path on disk, use it
   if (envValue && envValue !== binaryName && fs.existsSync(envValue)) {
     return envValue;
@@ -45,7 +49,10 @@ const envSchema = z.object({
   AWS_SECRET_ACCESS_KEY: z.string().default('test'),
   S3_BUCKET_NAME: z.string().default('ai-video-editing-platform'),
   S3_ENDPOINT: z.string().default('http://127.0.0.1:4566'),
-  S3_FORCE_PATH_STYLE: z.string().default('true').transform((val) => val === 'true'),
+  S3_FORCE_PATH_STYLE: z
+    .string()
+    .default('true')
+    .transform((val) => val === 'true'),
 
   AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
   AI_MODEL: z.string().default('gemini-1.5-pro'),
@@ -58,18 +65,18 @@ const envSchema = z.object({
     .transform((val) => {
       if (val && val.trim() && val !== 'ffmpeg' && fs.existsSync(val)) return val;
       if (ffmpegInstaller?.path && fs.existsSync(ffmpegInstaller.path)) return ffmpegInstaller.path;
-      return val && val.trim() ? val : (ffmpegInstaller?.path || 'ffmpeg');
+      return val && val.trim() ? val : ffmpegInstaller?.path || 'ffmpeg';
     }),
   FFPROBE_PATH: z
     .string()
     .optional()
     .transform((val) => {
       if (val && val.trim() && val !== 'ffprobe' && fs.existsSync(val)) return val;
-      if (ffprobeInstaller?.path && fs.existsSync(ffprobeInstaller.path)) return ffprobeInstaller.path;
-      return val && val.trim() ? val : (ffprobeInstaller?.path || 'ffprobe');
+      if (ffprobeInstaller?.path && fs.existsSync(ffprobeInstaller.path))
+        return ffprobeInstaller.path;
+      return val && val.trim() ? val : ffprobeInstaller?.path || 'ffprobe';
     }),
   TEMP_MEDIA_DIR: z.string().default('./tmp/media'),
 });
 
 export const env = envSchema.parse(process.env);
-

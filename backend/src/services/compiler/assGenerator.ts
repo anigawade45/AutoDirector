@@ -7,7 +7,7 @@ export interface AssOptions {
   fontSize?: number;
   style?: SubtitleStyle;
   position?: SubtitlePosition;
-  primaryColor?: string;   // hex '#FFFFFF'
+  primaryColor?: string; // hex '#FFFFFF'
   highlightColor?: string; // hex '#FFD84D'
   maxWordsPerLine?: number; // 2 to 8
 }
@@ -56,10 +56,7 @@ export class AssGenerator {
    */
   static escapeAssText(text: string): string {
     if (!text) return '';
-    return text
-      .replace(/\\/g, '\\\\')
-      .replace(/\{/g, '\\{')
-      .replace(/\}/g, '\\}');
+    return text.replace(/\\/g, '\\\\').replace(/\{/g, '\\{').replace(/\}/g, '\\}');
   }
 
   /**

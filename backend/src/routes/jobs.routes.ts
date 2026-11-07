@@ -9,4 +9,3 @@ jobsRouter.use(authMiddleware);
 jobsRouter.get('/:id', JobsController.getJob);
 jobsRouter.get('/:id/events', JobsController.getJobEvents);
 jobsRouter.get('/:id/download', JobsController.getJobDownload);
-

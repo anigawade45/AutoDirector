@@ -32,4 +32,3 @@ export interface PlannerProviderOutput {
 export interface PlannerProvider {
   generateEditPlan(input: PlannerProviderInput): Promise<PlannerProviderOutput>;
 }
-

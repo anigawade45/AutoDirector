@@ -3,12 +3,12 @@ import { COLOR_PRESETS } from '../constants/presets.js';
 
 export interface ResolvedColorGrading {
   preset?: ColorPreset;
-  brightness: number;  // -0.3 to 0.3
-  contrast: number;    // 0.7 to 1.5
-  saturation: number;  // 0.0 to 2.0
-  lut?: string;        // catalog id
-  vignette: number;    // 0.0 to 1.0
-  grain: number;       // 0.0 to 0.5
+  brightness: number; // -0.3 to 0.3
+  contrast: number; // 0.7 to 1.5
+  saturation: number; // 0.0 to 2.0
+  lut?: string; // catalog id
+  vignette: number; // 0.0 to 1.0
+  grain: number; // 0.0 to 0.5
 }
 
 export interface ColorCssPreview {

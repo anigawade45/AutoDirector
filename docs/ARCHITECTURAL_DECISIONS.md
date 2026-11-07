@@ -90,3 +90,4 @@ Determining the boundary between a focused AI-native video creation tool (optimi
 - **Adopt Option A (Single Primary Footage Base Asset + Overlays & Cuts) for MVP v1.0.0**.
 - **Rationale**: Aligns 100% with the core value proposition of AI video editing: taking raw video recordings (interviews, podcasts, vlogs, screen recordings) and automating the tedious work of cutting silences, pop-up subtitles, color enhancement, and music ducking in seconds.
 - **Phase 10+ Evolution**: Expand `PlanResolver` to support an optional `bRollSequence` layer for inserting secondary B-roll cutaway clips over speech intervals.
+

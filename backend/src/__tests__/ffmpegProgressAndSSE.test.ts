@@ -6,7 +6,9 @@ import { RenderJobModel } from '../models/RenderJob.js';
 
 vi.mock('../services/storage/s3Service.js', () => ({
   S3Service: {
-    getPresignedDownloadUrl: vi.fn().mockResolvedValue('https://s3.example.com/download/rendered.mp4?expires=3600'),
+    getPresignedDownloadUrl: vi
+      .fn()
+      .mockResolvedValue('https://s3.example.com/download/rendered.mp4?expires=3600'),
   },
 }));
 
@@ -104,7 +106,9 @@ progress=continue
       expect(mockRes.flushHeaders).toHaveBeenCalled();
 
       // Check that event: done was emitted immediately
-      expect(mockRes.write).toHaveBeenCalledWith(expect.stringContaining(': connected to job:672b1234567890abcdef1234'));
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining(': connected to job:672b1234567890abcdef1234')
+      );
       expect(mockRes.write).toHaveBeenCalledWith('event: done\n');
       expect(mockRes.write).toHaveBeenCalledWith(
         expect.stringContaining('"outputKey":"users/u1/projects/p1/previews/1.mp4"')
@@ -146,4 +150,3 @@ progress=continue
     });
   });
 });
-

@@ -73,7 +73,11 @@ export class JobsController {
       }
 
       if (job.state !== 'completed') {
-        throw new AppError(400, 'JOB_NOT_READY', `Cannot download output when job state is ${job.state}`);
+        throw new AppError(
+          400,
+          'JOB_NOT_READY',
+          `Cannot download output when job state is ${job.state}`
+        );
       }
 
       if (!job.output?.key) {
@@ -95,4 +99,3 @@ export class JobsController {
     }
   }
 }
-

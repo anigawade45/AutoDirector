@@ -29,7 +29,9 @@ export class MaintenanceService {
       (this.cleanupTimer as any).unref();
     }
 
-    console.log(`[Maintenance] Scheduled recurring abandoned upload cleanup every ${Math.round(intervalMs / 3600000)}h.`);
+    console.log(
+      `[Maintenance] Scheduled recurring abandoned upload cleanup every ${Math.round(intervalMs / 3600000)}h.`
+    );
   }
 
   static stopMaintenanceScheduler(): void {
@@ -48,7 +50,9 @@ export class MaintenanceService {
     purgedScratchCount: number;
     stalePreviewsCount: number;
   }> {
-    console.log('[Maintenance] Sweeping for stale/abandoned multipart uploads, scratch dirs, and previews...');
+    console.log(
+      '[Maintenance] Sweeping for stale/abandoned multipart uploads, scratch dirs, and previews...'
+    );
     const count = await S3Service.cleanupAbandonedUploads(olderThanMs);
     const purgedScratchCount = JobScratchDirectory.cleanupStaleDirectories(2 * 60 * 60 * 1000);
     const stalePreviewsCount = await S3Service.cleanupStalePreviews(7 * 24 * 60 * 60 * 1000);
@@ -58,4 +62,3 @@ export class MaintenanceService {
     return { abortedCount: count, purgedScratchCount, stalePreviewsCount };
   }
 }
-

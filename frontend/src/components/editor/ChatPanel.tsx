@@ -1,28 +1,11 @@
 import React, { useState } from 'react';
-import {
-  Send,
-  Sparkles,
-  Loader2,
-  Bot,
-  User,
-  CheckCircle2,
-  Layers,
-  ArrowRight,
-} from 'lucide-react';
+import { Send, Sparkles, Loader2, Bot, User, CheckCircle2, Layers, ArrowRight } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import { api } from '../../api/client';
 
 export const ChatPanel: React.FC = () => {
-  const {
-    project,
-    plan,
-    setPlan,
-    chat,
-    addChatMessage,
-    setChatPending,
-    updateJob,
-    setPreviewUrl,
-  } = useEditorStore();
+  const { project, plan, setPlan, chat, addChatMessage, setChatPending, updateJob, setPreviewUrl } =
+    useEditorStore();
 
   const [promptText, setPromptText] = useState('');
   const [activeJobProgress, setActiveJobProgress] = useState<{
@@ -58,7 +41,8 @@ export const ChatPanel: React.FC = () => {
       // 2. Update store with new plan version (single source of truth)
       setPlan(result.plan);
 
-      const assistantMsg = (result as any).rationale ||
+      const assistantMsg =
+        (result as any).rationale ||
         `Created EditPlan v${result.version}. Configured ${result.plan.layers.length} active layers.`;
 
       addChatMessage({
@@ -153,9 +137,7 @@ export const ChatPanel: React.FC = () => {
         {chat.messages.map((m) => (
           <div
             key={m.id}
-            className={`flex flex-col ${
-              m.role === 'user' ? 'items-end' : 'items-start'
-            }`}
+            className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}
           >
             <div
               className={`max-w-[92%] rounded-xl px-3.5 py-2.5 text-xs leading-relaxed shadow-sm ${
@@ -199,7 +181,9 @@ export const ChatPanel: React.FC = () => {
             <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
             <div className="space-y-0.5">
               <p className="font-semibold text-blue-300 text-[11px]">Generating EditPlan</p>
-              <p className="text-[10px] text-blue-400/80">Parsing natural language & optimizing layers...</p>
+              <p className="text-[10px] text-blue-400/80">
+                Parsing natural language & optimizing layers...
+              </p>
             </div>
           </div>
         )}

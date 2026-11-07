@@ -55,15 +55,55 @@ describe('Phase 5 Task 5: Regression Clips for Audio/Video Sync and Effect Corre
       const plan = createBasePlan();
       // 5 cut intervals across a 60-second asset
       plan.layers.push(
-        { id: 'c1', layer: 'cut', enabled: true, timebase: 'source', range: { start: 5, end: 8 }, params: { reason: 'silence', padding: 0 } },
-        { id: 'c2', layer: 'cut', enabled: true, timebase: 'source', range: { start: 14, end: 17 }, params: { reason: 'silence', padding: 0 } },
-        { id: 'c3', layer: 'cut', enabled: true, timebase: 'source', range: { start: 25, end: 28 }, params: { reason: 'silence', padding: 0 } },
-        { id: 'c4', layer: 'cut', enabled: true, timebase: 'source', range: { start: 38, end: 42 }, params: { reason: 'silence', padding: 0 } },
-        { id: 'c5', layer: 'cut', enabled: true, timebase: 'source', range: { start: 50, end: 54 }, params: { reason: 'silence', padding: 0 } }
+        {
+          id: 'c1',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 5, end: 8 },
+          params: { reason: 'silence', padding: 0 },
+        },
+        {
+          id: 'c2',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 14, end: 17 },
+          params: { reason: 'silence', padding: 0 },
+        },
+        {
+          id: 'c3',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 25, end: 28 },
+          params: { reason: 'silence', padding: 0 },
+        },
+        {
+          id: 'c4',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 38, end: 42 },
+          params: { reason: 'silence', padding: 0 },
+        },
+        {
+          id: 'c5',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 50, end: 54 },
+          params: { reason: 'silence', padding: 0 },
+        }
       );
 
       const analysis = createBaseAnalysis(60000);
-      const report = RegressionClipService.runScenario('sc_1_cuts', 'Multiple Ripple Cuts', plan, analysis);
+      const report = RegressionClipService.runScenario(
+        'sc_1_cuts',
+        'Multiple Ripple Cuts',
+        plan,
+        analysis
+      );
 
       // Verify A/V sync metrics
       expect(report.syncMetrics.driftMs).toBe(0);
@@ -85,10 +125,31 @@ describe('Phase 5 Task 5: Regression Clips for Audio/Video Sync and Effect Corre
       const plan = createBasePlan();
       plan.layers.push(
         // Segment 1: [0..10] at 3.0x speed -> 3.333s
-        { id: 'c1', layer: 'cut', enabled: true, timebase: 'source', range: { start: 10, end: 12 }, params: { reason: 'user', padding: 0 } },
-        { id: 'spd_fast', layer: 'speed', enabled: true, timebase: 'source', range: { start: 0, end: 10 }, params: { factor: 3.0, keepPitch: true } },
+        {
+          id: 'c1',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 10, end: 12 },
+          params: { reason: 'user', padding: 0 },
+        },
+        {
+          id: 'spd_fast',
+          layer: 'speed',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 0, end: 10 },
+          params: { factor: 3.0, keepPitch: true },
+        },
         // Segment 2: [12..20] at 0.4x speed -> 20.000s
-        { id: 'spd_slow', layer: 'speed', enabled: true, timebase: 'source', range: { start: 12, end: 20 }, params: { factor: 0.4, keepPitch: true } }
+        {
+          id: 'spd_slow',
+          layer: 'speed',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 12, end: 20 },
+          params: { factor: 0.4, keepPitch: true },
+        }
       );
 
       const analysis = createBaseAnalysis(20000);
@@ -113,19 +174,66 @@ describe('Phase 5 Task 5: Regression Clips for Audio/Video Sync and Effect Corre
       const plan = createBasePlan();
       plan.layers.push(
         // Cuts produce 4 segments: [0..10] (10s), [12..20] (8s), [22..30] (8s), [32..40] (8s)
-        { id: 'c1', layer: 'cut', enabled: true, timebase: 'source', range: { start: 10, end: 12 }, params: { reason: 'user', padding: 0 } },
-        { id: 'c2', layer: 'cut', enabled: true, timebase: 'source', range: { start: 20, end: 22 }, params: { reason: 'user', padding: 0 } },
-        { id: 'c3', layer: 'cut', enabled: true, timebase: 'source', range: { start: 30, end: 32 }, params: { reason: 'user', padding: 0 } },
+        {
+          id: 'c1',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 10, end: 12 },
+          params: { reason: 'user', padding: 0 },
+        },
+        {
+          id: 'c2',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 20, end: 22 },
+          params: { reason: 'user', padding: 0 },
+        },
+        {
+          id: 'c3',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 30, end: 32 },
+          params: { reason: 'user', padding: 0 },
+        },
         // Transition 1 at 10s: dissolve 1.0s
-        { id: 'tr1', layer: 'transition', enabled: true, timebase: 'source', range: { start: 10, end: 11 }, params: { type: 'dissolve', duration: 1.0, at: 10 } },
+        {
+          id: 'tr1',
+          layer: 'transition',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 10, end: 11 },
+          params: { type: 'dissolve', duration: 1.0, at: 10 },
+        },
         // Transition 2 at 20s: slideup 0.5s
-        { id: 'tr2', layer: 'transition', enabled: true, timebase: 'source', range: { start: 20, end: 20.5 }, params: { type: 'slideup', duration: 0.5, at: 20 } },
+        {
+          id: 'tr2',
+          layer: 'transition',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 20, end: 20.5 },
+          params: { type: 'slideup', duration: 0.5, at: 20 },
+        },
         // Transition 3 at 30s: fade 0.6s
-        { id: 'tr3', layer: 'transition', enabled: true, timebase: 'source', range: { start: 30, end: 30.6 }, params: { type: 'fade', duration: 0.6, at: 30 } }
+        {
+          id: 'tr3',
+          layer: 'transition',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 30, end: 30.6 },
+          params: { type: 'fade', duration: 0.6, at: 30 },
+        }
       );
 
       const analysis = createBaseAnalysis(40000);
-      const report = RegressionClipService.runScenario('sc_3_transitions', 'Multi-Segment Chained Transitions', plan, analysis);
+      const report = RegressionClipService.runScenario(
+        'sc_3_transitions',
+        'Multi-Segment Chained Transitions',
+        plan,
+        analysis
+      );
 
       expect(report.syncMetrics.driftMs).toBe(0);
       expect(report.syncMetrics.isWithinTolerance).toBe(true);
@@ -152,27 +260,91 @@ describe('Phase 5 Task 5: Regression Clips for Audio/Video Sync and Effect Corre
       const plan = createBasePlan();
       plan.layers.push(
         // 1. Intro Template
-        { id: 'l_intro', layer: 'intro', enabled: true, timebase: 'output', range: { start: 0, end: 5 }, params: { template: 'cinematic', duration: 5, text: 'Regression Intro' } },
+        {
+          id: 'l_intro',
+          layer: 'intro',
+          enabled: true,
+          timebase: 'output',
+          range: { start: 0, end: 5 },
+          params: { template: 'cinematic', duration: 5, text: 'Regression Intro' },
+        },
         // 2. Cut & Transition
-        { id: 'l_cut', layer: 'cut', enabled: true, timebase: 'source', range: { start: 10, end: 12 }, params: { reason: 'user', padding: 0 } },
-        { id: 'l_trans', layer: 'transition', enabled: true, timebase: 'source', range: { start: 10, end: 10.5 }, params: { type: 'dissolve', duration: 0.5, at: 10 } },
+        {
+          id: 'l_cut',
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 10, end: 12 },
+          params: { reason: 'user', padding: 0 },
+        },
+        {
+          id: 'l_trans',
+          layer: 'transition',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 10, end: 10.5 },
+          params: { type: 'dissolve', duration: 0.5, at: 10 },
+        },
         // 3. Color preset: warm
-        { id: 'l_col', layer: 'color', enabled: true, timebase: 'global', params: { preset: 'warm', contrast: 1.05, saturation: 1.15 } },
+        {
+          id: 'l_col',
+          layer: 'color',
+          enabled: true,
+          timebase: 'global',
+          params: { preset: 'warm', contrast: 1.05, saturation: 1.15 },
+        },
         // 4. Subtitle: word_pop
-        { id: 'l_sub', layer: 'subtitle', enabled: true, timebase: 'source', params: { style: 'word_pop', position: 'bottom', primaryColor: '#FFFFFF', highlightColor: '#FFD84D' } },
+        {
+          id: 'l_sub',
+          layer: 'subtitle',
+          enabled: true,
+          timebase: 'source',
+          params: {
+            style: 'word_pop',
+            position: 'bottom',
+            primaryColor: '#FFFFFF',
+            highlightColor: '#FFD84D',
+          },
+        },
         // 5. Audio normalization
-        { id: 'l_aud', layer: 'audio', enabled: true, timebase: 'global', params: { normalizeLufs: -16, denoise: false } },
+        {
+          id: 'l_aud',
+          layer: 'audio',
+          enabled: true,
+          timebase: 'global',
+          params: { normalizeLufs: -16, denoise: false },
+        },
         // 6. Background music with ducking
-        { id: 'l_mus', layer: 'music', enabled: true, timebase: 'output', params: { trackId: 'track_1', volume: 0.3, duckUnderSpeech: true } },
+        {
+          id: 'l_mus',
+          layer: 'music',
+          enabled: true,
+          timebase: 'output',
+          params: { trackId: 'track_1', volume: 0.3, duckUnderSpeech: true },
+        },
         // 7. Outro Template
-        { id: 'l_outro', layer: 'outro', enabled: true, timebase: 'output', range: { start: 0, end: 4 }, params: { template: 'credits', duration: 4, text: 'Regression Outro' } }
+        {
+          id: 'l_outro',
+          layer: 'outro',
+          enabled: true,
+          timebase: 'output',
+          range: { start: 0, end: 4 },
+          params: { template: 'credits', duration: 4, text: 'Regression Outro' },
+        }
       );
 
       const analysis = createBaseAnalysis(30000);
-      const report = RegressionClipService.runScenario('sc_4_full', 'Full Production Pipeline', plan, analysis, 'final_1080p', {
-        musicSourcePath: 'bg_music.mp3',
-        assSubtitlePath: 'subtitles.ass',
-      });
+      const report = RegressionClipService.runScenario(
+        'sc_4_full',
+        'Full Production Pipeline',
+        plan,
+        analysis,
+        'final_1080p',
+        {
+          musicSourcePath: 'bg_music.mp3',
+          assSubtitlePath: 'subtitles.ass',
+        }
+      );
 
       // 1. Sync Invariant
       expect(report.syncMetrics.driftMs).toBe(0);
@@ -202,14 +374,33 @@ describe('Phase 5 Task 5: Regression Clips for Audio/Video Sync and Effect Corre
         const plan = createBasePlan();
         plan.global.fps = fps;
         plan.layers.push(
-          { id: 'cut_fps', layer: 'cut', enabled: true, timebase: 'source', range: { start: 8.333, end: 12.666 }, params: { reason: 'user', padding: 0 } },
-          { id: 'tr_fps', layer: 'transition', enabled: true, timebase: 'source', range: { start: 8.333, end: 8.833 }, params: { type: 'fade', duration: 0.5, at: 8.333 } }
+          {
+            id: 'cut_fps',
+            layer: 'cut',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 8.333, end: 12.666 },
+            params: { reason: 'user', padding: 0 },
+          },
+          {
+            id: 'tr_fps',
+            layer: 'transition',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 8.333, end: 8.833 },
+            params: { type: 'fade', duration: 0.5, at: 8.333 },
+          }
         );
 
         const analysis = createBaseAnalysis(25000);
         analysis.fps = fps;
 
-        const report = RegressionClipService.runScenario(`sc_5_fps_${fps}`, `${fps} FPS Grid Sync`, plan, analysis);
+        const report = RegressionClipService.runScenario(
+          `sc_5_fps_${fps}`,
+          `${fps} FPS Grid Sync`,
+          plan,
+          analysis
+        );
 
         // Even across diverse framerates, drift must be strictly <= 40 ms
         expect(report.syncMetrics.driftMs).toBeLessThanOrEqual(40);
@@ -231,12 +422,32 @@ describe('Phase 5 Task 5: Regression Clips for Audio/Video Sync and Effect Corre
         const plan = createBasePlan();
         plan.global.aspect = aspect;
         plan.layers.push(
-          { id: 'intro_asp', layer: 'intro', enabled: true, timebase: 'output', range: { start: 0, end: 3 }, params: { template: 'title', duration: 3 } },
-          { id: 'outro_asp', layer: 'outro', enabled: true, timebase: 'output', range: { start: 0, end: 3 }, params: { template: 'credits', duration: 3 } }
+          {
+            id: 'intro_asp',
+            layer: 'intro',
+            enabled: true,
+            timebase: 'output',
+            range: { start: 0, end: 3 },
+            params: { template: 'title', duration: 3 },
+          },
+          {
+            id: 'outro_asp',
+            layer: 'outro',
+            enabled: true,
+            timebase: 'output',
+            range: { start: 0, end: 3 },
+            params: { template: 'credits', duration: 3 },
+          }
         );
 
         const analysis = createBaseAnalysis(20000);
-        const report = RegressionClipService.runScenario(`sc_6_${aspect}`, `${aspect} Aspect Ratio`, plan, analysis, 'final_1080p');
+        const report = RegressionClipService.runScenario(
+          `sc_6_${aspect}`,
+          `${aspect} Aspect Ratio`,
+          plan,
+          analysis,
+          'final_1080p'
+        );
 
         expect(report.syncMetrics.driftMs).toBe(0);
         expect(report.syncMetrics.isWithinTolerance).toBe(true);

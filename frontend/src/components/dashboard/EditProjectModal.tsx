@@ -19,7 +19,11 @@ interface EditProjectModalProps {
   onUpdated: () => void;
 }
 
-export const EditProjectModal: React.FC<EditProjectModalProps> = ({ project, onClose, onUpdated }) => {
+export const EditProjectModal: React.FC<EditProjectModalProps> = ({
+  project,
+  onClose,
+  onUpdated,
+}) => {
   const [title, setTitle] = useState(project.title);
   const [aspect, setAspect] = useState<'16:9' | '9:16' | '1:1' | '4:5'>(
     project.settings?.aspect || '16:9'
@@ -29,7 +33,10 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ project, onC
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const aspectResolutions: Record<'16:9' | '9:16' | '1:1' | '4:5', { width: number; height: number; label: string }> = {
+  const aspectResolutions: Record<
+    '16:9' | '9:16' | '1:1' | '4:5',
+    { width: number; height: number; label: string }
+  > = {
     '16:9': { width: 1920, height: 1080, label: '16:9 Landscape (YouTube)' },
     '9:16': { width: 1080, height: 1920, label: '9:16 Vertical (TikTok/Reels)' },
     '1:1': { width: 1080, height: 1080, label: '1:1 Square (Instagram Feed)' },
@@ -118,24 +125,28 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ project, onC
               Aspect Ratio & Resolution
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(aspectResolutions) as Array<keyof typeof aspectResolutions>).map((asp) => (
-                <button
-                  type="button"
-                  key={asp}
-                  onClick={() => setAspect(asp)}
-                  className={`text-left p-2.5 rounded-xl border text-xs transition-all flex items-center justify-between ${
-                    aspect === asp
-                      ? 'bg-blue-600/15 border-blue-500 text-blue-300 shadow-sm shadow-blue-500/10'
-                      : 'bg-slate-900/60 border-surfaceBorder text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                  }`}
-                >
-                  <div>
-                    <div className="font-semibold">{asp}</div>
-                    <div className="text-[10px] text-slate-500">{aspectResolutions[asp].label.split('(')[1]?.replace(')', '') || ''}</div>
-                  </div>
-                  {aspect === asp && <Check className="w-4 h-4 text-blue-400 shrink-0" />}
-                </button>
-              ))}
+              {(Object.keys(aspectResolutions) as Array<keyof typeof aspectResolutions>).map(
+                (asp) => (
+                  <button
+                    type="button"
+                    key={asp}
+                    onClick={() => setAspect(asp)}
+                    className={`text-left p-2.5 rounded-xl border text-xs transition-all flex items-center justify-between ${
+                      aspect === asp
+                        ? 'bg-blue-600/15 border-blue-500 text-blue-300 shadow-sm shadow-blue-500/10'
+                        : 'bg-slate-900/60 border-surfaceBorder text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-semibold">{asp}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {aspectResolutions[asp].label.split('(')[1]?.replace(')', '') || ''}
+                      </div>
+                    </div>
+                    {aspect === asp && <Check className="w-4 h-4 text-blue-400 shrink-0" />}
+                  </button>
+                )
+              )}
             </div>
           </div>
 
@@ -208,4 +219,3 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ project, onC
     </div>
   );
 };
-

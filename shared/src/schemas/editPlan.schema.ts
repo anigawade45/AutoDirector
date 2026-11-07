@@ -19,10 +19,12 @@ export const CutLayerSchema = z.object({
   layer: z.literal('cut'),
   enabled: z.boolean().default(true),
   timebase: z.literal('source'),
-  range: z.object({
-    start: z.number().min(0),
-    end: z.number().min(0),
-  }).refine((r) => r.end > r.start, { message: 'Cut end must be greater than start' }),
+  range: z
+    .object({
+      start: z.number().min(0),
+      end: z.number().min(0),
+    })
+    .refine((r) => r.end > r.start, { message: 'Cut end must be greater than start' }),
   params: z.object({
     reason: z.enum(['silence', 'filler', 'user', 'lowlight']),
     padding: z.number().min(0).max(0.3).default(0.05),
@@ -73,8 +75,14 @@ export const SubtitleLayerSchema = z.object({
     font: z.string().default('Montserrat'),
     size: z.number().min(24).max(96).default(56),
     position: z.enum(['bottom', 'center', 'top']).default('bottom'),
-    primaryColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).default('#FFFFFF'),
-    highlightColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).default('#FFD84D'),
+    primaryColor: z
+      .string()
+      .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/)
+      .default('#FFFFFF'),
+    highlightColor: z
+      .string()
+      .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/)
+      .default('#FFD84D'),
     maxWordsPerLine: z.number().min(2).max(8).default(4),
   }),
 });
@@ -85,10 +93,12 @@ export const TextLayerSchema = z.object({
   layer: z.literal('text'),
   enabled: z.boolean().default(true),
   timebase: z.enum(['source', 'output']),
-  range: z.object({
-    start: z.number().min(0),
-    end: z.number().min(0),
-  }).optional(),
+  range: z
+    .object({
+      start: z.number().min(0),
+      end: z.number().min(0),
+    })
+    .optional(),
   params: z.object({
     content: z.string().max(120),
     animation: z.enum(['fade', 'slide_up', 'typewriter', 'scale']).default('fade'),
@@ -98,7 +108,10 @@ export const TextLayerSchema = z.object({
     }),
     font: z.string().optional(),
     size: z.number().positive().optional(),
-    color: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).default('#FFFFFF'),
+    color: z
+      .string()
+      .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/)
+      .default('#FFFFFF'),
   }),
 });
 
@@ -163,16 +176,20 @@ export const OverlayLayerSchema = z.object({
   layer: z.literal('overlay'),
   enabled: z.boolean().default(true),
   timebase: z.enum(['source', 'output']),
-  range: z.object({
-    start: z.number().min(0),
-    end: z.number().min(0),
-  }).optional(),
+  range: z
+    .object({
+      start: z.number().min(0),
+      end: z.number().min(0),
+    })
+    .optional(),
   params: z.object({
     asset: z.string(),
-    position: z.object({
-      x: z.number().min(0).max(1).default(0.5),
-      y: z.number().min(0).max(1).default(0.5),
-    }).optional(),
+    position: z
+      .object({
+        x: z.number().min(0).max(1).default(0.5),
+        y: z.number().min(0).max(1).default(0.5),
+      })
+      .optional(),
     scale: z.number().min(0.1).max(5).default(1),
     opacity: z.number().min(0).max(1).default(1),
   }),
@@ -249,4 +266,3 @@ export const JsonPatchOperationSchema = z.object({
 });
 
 export const JsonPatchArraySchema = z.array(JsonPatchOperationSchema);
-

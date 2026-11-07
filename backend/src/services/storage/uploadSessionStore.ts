@@ -32,7 +32,10 @@ export class UploadSessionStore {
         const key = this.getKey(uploadId);
         await redisConnection.setex(key, UPLOAD_SESSION_TTL_SECONDS, JSON.stringify(data));
       } catch (err: any) {
-        console.warn('[UploadSessionStore] Redis setex notice (using memory fallback):', err.message);
+        console.warn(
+          '[UploadSessionStore] Redis setex notice (using memory fallback):',
+          err.message
+        );
       }
     }
   }
@@ -49,7 +52,10 @@ export class UploadSessionStore {
           return JSON.parse(raw) as UploadSessionRecord;
         }
       } catch (err: any) {
-        console.warn('[UploadSessionStore] Redis get notice (checking memory fallback):', err.message);
+        console.warn(
+          '[UploadSessionStore] Redis get notice (checking memory fallback):',
+          err.message
+        );
       }
     }
 

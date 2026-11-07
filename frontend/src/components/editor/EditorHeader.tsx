@@ -1,13 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Undo2,
-  Redo2,
-  Download,
-  Film,
-  Sparkles,
-  ArrowLeft,
-  Loader2,
-} from 'lucide-react';
+import { Undo2, Redo2, Download, Film, Sparkles, ArrowLeft, Loader2 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import { api } from '../../api/client';
 import { ExportModal } from './ExportModal';
@@ -94,7 +86,9 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ onBack }) => {
 
           <div className="flex items-center space-x-2">
             <Film className="w-4 h-4 text-blue-500" />
-            <h1 className="text-sm font-semibold text-slate-100">{project?.title || 'Video Editor'}</h1>
+            <h1 className="text-sm font-semibold text-slate-100">
+              {project?.title || 'Video Editor'}
+            </h1>
             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
               v{plan.version}
             </span>
@@ -160,4 +154,3 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ onBack }) => {
     </>
   );
 };
-

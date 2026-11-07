@@ -94,7 +94,8 @@ export const App: React.FC = () => {
         status: 'complete',
         cuesCount: 16,
         wordCount: 78,
-        transcriptSnippet: 'Welcome to our vacation in Goa. Exploring the beaches and golden sunsets.',
+        transcriptSnippet:
+          'Welcome to our vacation in Goa. Exploring the beaches and golden sunsets.',
         cues: [
           {
             startMs: 1200,

@@ -42,7 +42,10 @@ export class OpenAIPlannerAdapter implements PlannerProvider {
 
       text = text.trim();
       if (text.startsWith('```')) {
-        text = text.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '').trim();
+        text = text
+          .replace(/^```(json)?\n?/, '')
+          .replace(/\n?```$/, '')
+          .trim();
       }
 
       const structuredOutput = JSON.parse(text);

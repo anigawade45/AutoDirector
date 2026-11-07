@@ -22,7 +22,7 @@ export class WorkerCapacityService {
       profile: 'preview_480p',
       avgVideoLengthSec: 60,
       renderTimeSecPerWorker: 12.0,
-      realtimeRatio: 0.20,
+      realtimeRatio: 0.2,
       jobsPerHourPerWorker: 300,
     },
     {
@@ -50,14 +50,17 @@ export class WorkerCapacityService {
    */
   static calculateClusterSizing(dailyRendersTarget: number): ClusterSizing {
     // Standard rule: 20% of traffic occurs in peak 60-minute window
-    const peakHourRenders = Math.ceil(dailyRendersTarget * 0.20);
+    const peakHourRenders = Math.ceil(dailyRendersTarget * 0.2);
 
     // Blended render throughput: 70% previews (300/hr), 25% 1080p (128/hr), 5% 4K (37/hr)
     // Weighted average capacity per worker = 0.70*300 + 0.25*128 + 0.05*37 = 210 + 32 + 1.85 ~= 243 jobs/hr/worker
     const blendedJobsPerHourPerWorker = 240;
 
     // Number of render workers needed to keep peak utilization below 75%
-    const minRenderWorkers = Math.max(2, Math.ceil(peakHourRenders / (blendedJobsPerHourPerWorker * 0.75)));
+    const minRenderWorkers = Math.max(
+      2,
+      Math.ceil(peakHourRenders / (blendedJobsPerHourPerWorker * 0.75))
+    );
 
     // Analysis jobs take ~18s for 10-minute video (~200 jobs/hr/worker)
     const minAnalysisWorkers = Math.max(2, Math.ceil(peakHourRenders / 180));
@@ -71,7 +74,12 @@ export class WorkerCapacityService {
     // Expected queue wait time at peak using M/M/c queueing approximation
     const utilization = peakHourRenders / (minRenderWorkers * blendedJobsPerHourPerWorker);
     const avgServiceTimeSec = 18.0; // weighted avg render time
-    const expectedMaxQueueWaitSec = Number(((utilization / (1 - Math.min(utilization, 0.95))) * (avgServiceTimeSec / minRenderWorkers)).toFixed(2));
+    const expectedMaxQueueWaitSec = Number(
+      (
+        (utilization / (1 - Math.min(utilization, 0.95))) *
+        (avgServiceTimeSec / minRenderWorkers)
+      ).toFixed(2)
+    );
 
     return {
       dailyRendersTarget,
@@ -86,7 +94,10 @@ export class WorkerCapacityService {
 }
 
 // Auto-run if executed directly via CLI
-if (process.argv[1]?.endsWith('workerCapacityCheck.ts') || process.argv[1]?.endsWith('workerCapacityCheck.js')) {
+if (
+  process.argv[1]?.endsWith('workerCapacityCheck.ts') ||
+  process.argv[1]?.endsWith('workerCapacityCheck.js')
+) {
   console.log('[WorkerCapacityCheck] Cluster Sizing Sizing Calculator:');
   const tiers = [100, 1000, 10000];
   for (const t of tiers) {

@@ -146,4 +146,3 @@ describe('ProjectsController - Project Rename & Archive Lifecycle', () => {
     });
   });
 });
-

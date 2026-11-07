@@ -34,7 +34,9 @@ export class PurgeService {
    * raw media, proxy files, subtitle tracks, rendered previews, and database artifacts.
    */
   static async purgeProjectData(userId: string, projectId: string): Promise<PurgeProjectResult> {
-    const userObjectId = mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    const userObjectId = mongoose.isValidObjectId(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
 
     const project = await ProjectModel.findOne({
       publicId: projectId,
@@ -42,7 +44,11 @@ export class PurgeService {
     });
 
     if (!project) {
-      throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found or access denied for deletion');
+      throw new AppError(
+        404,
+        'PROJECT_NOT_FOUND',
+        'Project not found or access denied for deletion'
+      );
     }
 
     // 1. Purge S3 storage under per-project key prefix: users/{userId}/projects/{projectId}/
@@ -66,12 +72,15 @@ export class PurgeService {
     await ChatMessageModel.deleteMany({ projectId: project._id });
     await ProjectModel.deleteOne({ _id: project._id });
 
-    StructuredLogger.info(`[PURGE:PROJECT] Permanently purged project ${projectId} and ${deletedS3Objects} S3 object(s)`, {
-      userId,
-      projectId,
-      deletedS3Objects,
-      deletedAssetsCount: assetIds.length,
-    });
+    StructuredLogger.info(
+      `[PURGE:PROJECT] Permanently purged project ${projectId} and ${deletedS3Objects} S3 object(s)`,
+      {
+        userId,
+        projectId,
+        deletedS3Objects,
+        deletedAssetsCount: assetIds.length,
+      }
+    );
 
     return {
       success: true,
@@ -86,7 +95,9 @@ export class PurgeService {
    * projects, timelines, credentials, and data records permanently from storage and databases.
    */
   static async purgeUserData(userId: string): Promise<PurgeUserResult> {
-    const userObjectId = mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+    const userObjectId = mongoose.isValidObjectId(userId)
+      ? new mongoose.Types.ObjectId(userId)
+      : userId;
 
     // 1. Purge all S3 storage under user prefix: users/{userId}/
     const deletedS3Objects = await S3Service.purgeUserStorage(userId);
@@ -115,12 +126,15 @@ export class PurgeService {
     await RenderJobModel.deleteMany({ userId: userObjectId });
     await UserModel.deleteOne({ _id: userObjectId });
 
-    StructuredLogger.info(`[PURGE:USER] GDPR purge completed for user ${userId}: purged ${deletedS3Objects} S3 files across ${projectIds.length} projects`, {
-      userId,
-      deletedS3Objects,
-      deletedProjectsCount: projectIds.length,
-      deletedAssetsCount: assetIds.length,
-    });
+    StructuredLogger.info(
+      `[PURGE:USER] GDPR purge completed for user ${userId}: purged ${deletedS3Objects} S3 files across ${projectIds.length} projects`,
+      {
+        userId,
+        deletedS3Objects,
+        deletedProjectsCount: projectIds.length,
+        deletedAssetsCount: assetIds.length,
+      }
+    );
 
     return {
       success: true,

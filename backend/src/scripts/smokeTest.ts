@@ -35,7 +35,9 @@ export class ProductionSmokeTestSuite {
     console.log(`Status: ${success ? 'ALL PASSED' : 'FAILURES DETECTED'}`);
     console.log(`Results: ${passed}/${this.results.length} checks passed`);
     for (const res of this.results) {
-      console.log(`  [${res.status}] ${res.name} (${res.durationMs.toFixed(1)}ms)${res.message ? ` - ${res.message}` : ''}`);
+      console.log(
+        `  [${res.status}] ${res.name} (${res.durationMs.toFixed(1)}ms)${res.message ? ` - ${res.message}` : ''}`
+      );
     }
     console.log(`====================================================\n`);
 

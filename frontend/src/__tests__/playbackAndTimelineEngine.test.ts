@@ -43,8 +43,8 @@ describe('Phase 6 Task 4: Playback State, Timeline Zoom/Scroll, Selection, Snapp
         timebase: 'global',
         params: {
           preset: 'cinematic',
-          contrast: 1.20,
-          saturation: 0.90,
+          contrast: 1.2,
+          saturation: 0.9,
           vignette: 0.35,
           brightness: 0.05,
         },
@@ -267,7 +267,10 @@ describe('Phase 6 Task 4: Playback State, Timeline Zoom/Scroll, Selection, Snapp
 
       // Shift-click adds second layer
       store.selectLayer('lyr_sub_1', true);
-      expect(useEditorStore.getState().timeline.selectedLayerIds).toEqual(['lyr_col_1', 'lyr_sub_1']);
+      expect(useEditorStore.getState().timeline.selectedLayerIds).toEqual([
+        'lyr_col_1',
+        'lyr_sub_1',
+      ]);
 
       // Shift-click removes already selected layer
       store.selectLayer('lyr_col_1', true);
@@ -315,7 +318,7 @@ describe('Phase 6 Task 4: Playback State, Timeline Zoom/Scroll, Selection, Snapp
       const snapRadiusSec = 10 / zoom; // 10px / 60px/s = 0.1667s
 
       const boundaryPoint = 12.0; // Cut start boundary
-      const cursorTime = 12.08;   // 0.08s away (within 0.1667s threshold)
+      const cursorTime = 12.08; // 0.08s away (within 0.1667s threshold)
 
       const isMagnetic = Math.abs(cursorTime - boundaryPoint) <= snapRadiusSec;
       expect(isMagnetic).toBe(true);
@@ -359,7 +362,7 @@ describe('Phase 6 Task 4: Playback State, Timeline Zoom/Scroll, Selection, Snapp
 
       const color = selectColorLayer(state) as ColorLayer | undefined;
       expect(color?.params.preset).toBe('cinematic');
-      expect(color?.params.contrast).toBe(1.20);
+      expect(color?.params.contrast).toBe(1.2);
       expect(color?.params.vignette).toBe(0.35);
 
       const subtitle = selectSubtitleLayer(state) as SubtitleLayer | undefined;

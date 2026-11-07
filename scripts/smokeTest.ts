@@ -138,3 +138,4 @@ if (process.argv[1]?.endsWith('smokeTest.ts') || process.argv[1]?.endsWith('smok
     process.exit(summary.success ? 0 : 1);
   });
 }
+

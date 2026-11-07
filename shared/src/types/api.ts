@@ -120,4 +120,3 @@ export interface UpdateProjectRequest {
     language?: string;
   };
 }
-

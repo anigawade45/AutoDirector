@@ -34,7 +34,9 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
     queueName,
     async (job: Job<RenderJobPayload>) => {
       const { jobId, projectId, planVersion, profile, type } = job.data;
-      console.log(`[RenderWorker:${queueName}] Processing ${type} job ${jobId} for project ${projectId} v${planVersion}`);
+      console.log(
+        `[RenderWorker:${queueName}] Processing ${type} job ${jobId} for project ${projectId} v${planVersion}`
+      );
 
       const scratch = new JobScratchDirectory(jobId);
       const localSourcePath = scratch.sourceVideo;
@@ -70,7 +72,9 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
             expectedDurationMs = asset.media.durationMs;
           }
           if (asset?.s3?.rawKey) {
-            console.log(`[RenderWorker:${queueName}] Downloading source video ${asset.s3.rawKey}...`);
+            console.log(
+              `[RenderWorker:${queueName}] Downloading source video ${asset.s3.rawKey}...`
+            );
             await S3Service.downloadFile(asset.s3.rawKey, localSourcePath);
           }
         }
@@ -78,11 +82,15 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
         await RenderJobLifecycle.transition(jobId, 'processing', { percent: 15 });
 
         // 2. Prepare Subtitles ASS file if subtitle layer enabled
-        const subtitleLayer = planDoc.plan.layers.find((l: any) => l.enabled && l.layer === 'subtitle');
+        const subtitleLayer = planDoc.plan.layers.find(
+          (l: any) => l.enabled && l.layer === 'subtitle'
+        );
         let assSubtitlePath: string | undefined = undefined;
 
         if (subtitleLayer && project.baseAssetId) {
-          const captionSet = await CaptionSetModel.findOne({ projectId: project._id }).sort({ createdAt: -1 });
+          const captionSet = await CaptionSetModel.findOne({ projectId: project._id }).sort({
+            createdAt: -1,
+          });
           if (captionSet && captionSet.cues.length > 0) {
             const assContent = AssGenerator.generateAss(captionSet.cues as any, {
               width: profile === 'preview_480p' ? 854 : 1920,
@@ -119,7 +127,9 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
           }
         );
 
-        console.log(`[RenderWorker:${queueName}] Launching FFmpeg with ${compiled.args.length} arguments`);
+        console.log(
+          `[RenderWorker:${queueName}] Launching FFmpeg with ${compiled.args.length} arguments`
+        );
 
         // 4. Execute FFmpeg rendering process
         if (fs.existsSync(localSourcePath)) {
@@ -152,7 +162,9 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
               if (code === 0) {
                 resolve();
               } else {
-                reject(new Error(`FFmpeg rendering exited with code ${code}: ${stderrText.slice(-300)}`));
+                reject(
+                  new Error(`FFmpeg rendering exited with code ${code}: ${stderrText.slice(-300)}`)
+                );
               }
             });
           });
@@ -160,7 +172,9 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
           // If running in mocked test mode without raw file, simulate rapid rendering
           for (let p = 30; p <= 90; p += 30) {
             await new Promise((r) => setTimeout(r, 400));
-            await RenderJobLifecycle.transition(jobId, 'processing', { percent: p }).catch(() => {});
+            await RenderJobLifecycle.transition(jobId, 'processing', { percent: p }).catch(
+              () => {}
+            );
           }
         }
 

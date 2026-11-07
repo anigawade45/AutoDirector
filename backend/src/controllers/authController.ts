@@ -27,7 +27,12 @@ export class AuthController {
         tier,
         authProvider: 'local',
         quota: {
-          storageBytes: tier === 'enterprise' ? 100 * 1024 * 1024 * 1024 : tier === 'pro' ? 20 * 1024 * 1024 * 1024 : 5 * 1024 * 1024 * 1024,
+          storageBytes:
+            tier === 'enterprise'
+              ? 100 * 1024 * 1024 * 1024
+              : tier === 'pro'
+                ? 20 * 1024 * 1024 * 1024
+                : 5 * 1024 * 1024 * 1024,
           renderMinutes: tier === 'enterprise' ? 1200 : tier === 'pro' ? 300 : 60,
           promptsPerDay: tier === 'enterprise' ? 1000 : tier === 'pro' ? 500 : 100,
         },
@@ -87,4 +92,3 @@ export class AuthController {
     }
   }
 }
-

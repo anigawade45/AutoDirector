@@ -58,4 +58,3 @@ CaptionSetSchema.index({ projectId: 1, assetId: 1 });
 CaptionSetSchema.index({ contentHash: 1 });
 
 export const CaptionSetModel = mongoose.model<ICaptionSetDocument>('CaptionSet', CaptionSetSchema);
-

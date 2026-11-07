@@ -58,7 +58,8 @@ export interface RenderJob {
 }
 
 // Internal Worker Webhook Event Contract
-export type WorkerEventType = 'render.progress' | 'render.completed' | 'render.failed' | 'analysis.completed';
+export type WorkerEventType =
+  'render.progress' | 'render.completed' | 'render.failed' | 'analysis.completed';
 
 export interface BaseWorkerEvent {
   eventId: string;
@@ -106,10 +107,7 @@ export interface AnalysisCompletedEvent extends BaseWorkerEvent {
 }
 
 export type WorkerEventPayload =
-  | RenderProgressEvent
-  | RenderCompletedEvent
-  | RenderFailedEvent
-  | AnalysisCompletedEvent;
+  RenderProgressEvent | RenderCompletedEvent | RenderFailedEvent | AnalysisCompletedEvent;
 
 // SSE Progress Event
 export interface SSEProgressEvent {
@@ -119,4 +117,3 @@ export interface SSEProgressEvent {
   code?: string;
   downloadUrl?: string | null;
 }
-

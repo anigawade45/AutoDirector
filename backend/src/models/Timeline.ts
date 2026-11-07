@@ -5,7 +5,16 @@ const EffectSchema = new Schema(
     id: { type: String, required: true },
     type: {
       type: String,
-      enum: ['color', 'blur', 'vignette', 'grain', 'speed_ramp', 'denoise', 'normalize', 'stabilize'],
+      enum: [
+        'color',
+        'blur',
+        'vignette',
+        'grain',
+        'speed_ramp',
+        'denoise',
+        'normalize',
+        'stabilize',
+      ],
       required: true,
     },
     enabled: { type: Boolean, default: true },

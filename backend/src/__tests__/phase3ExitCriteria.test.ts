@@ -44,7 +44,9 @@ vi.mock('../services/storage/s3Service.js', () => ({
   S3Service: {
     downloadFile: vi.fn().mockResolvedValue(undefined),
     uploadFile: vi.fn().mockResolvedValue(undefined),
-    getPresignedDownloadUrl: vi.fn().mockResolvedValue('https://s3.example.com/previews/1.mp4?exp=3600'),
+    getPresignedDownloadUrl: vi
+      .fn()
+      .mockResolvedValue('https://s3.example.com/previews/1.mp4?exp=3600'),
   },
 }));
 
@@ -96,7 +98,14 @@ describe('Phase 3 Exit Criteria Gate: Static Edit Plan 480p Preview & Failure Re
         layer: 'color',
         enabled: true,
         timebase: 'global',
-        params: { preset: 'cinematic', contrast: 1.15, saturation: 0.9, vignette: 0.3, brightness: 0, grain: 0 },
+        params: {
+          preset: 'cinematic',
+          contrast: 1.15,
+          saturation: 0.9,
+          vignette: 0.3,
+          brightness: 0,
+          grain: 0,
+        },
       },
       {
         id: 'sub_pop',
@@ -253,4 +262,3 @@ progress=continue
     expect(staticPlan.layers.length).toBe(3);
   });
 });
-

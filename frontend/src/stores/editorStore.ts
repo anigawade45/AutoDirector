@@ -92,7 +92,7 @@ export interface EditorStoreState {
   playback: {
     status: 'idle' | 'loading' | 'playing' | 'paused' | 'seeking' | 'ended';
     currentTime: number; // output seconds
-    duration: number;    // output duration
+    duration: number; // output duration
     rate: number;
     volume: number;
     muted: boolean;
@@ -198,12 +198,13 @@ export const useEditorStore = create<EditorStoreState>()(
 
     setProject: (proj, analysisSummary) =>
       set((state) => {
-        const media = proj.baseAssetId?.media || proj.media || {
-          durationMs: proj.stats?.durationMs || 60000,
-          width: 1920,
-          height: 1080,
-          fps: 30,
-        };
+        const media = proj.baseAssetId?.media ||
+          proj.media || {
+            durationMs: proj.stats?.durationMs || 60000,
+            width: 1920,
+            height: 1080,
+            fps: 30,
+          };
 
         state.project = {
           id: proj.publicId || proj.id,
@@ -263,7 +264,9 @@ export const useEditorStore = create<EditorStoreState>()(
           if (!state.plan.versionMap) {
             state.plan.versionMap = {};
           }
-          state.plan.versionMap[newVersionPlan.version] = JSON.parse(JSON.stringify(newVersionPlan));
+          state.plan.versionMap[newVersionPlan.version] = JSON.parse(
+            JSON.stringify(newVersionPlan)
+          );
 
           if (!state.plan.history.includes(newVersionPlan.version)) {
             if (state.plan.cursor < state.plan.history.length - 1) {
@@ -380,7 +383,9 @@ export const useEditorStore = create<EditorStoreState>()(
 
         if (multi) {
           if (state.timeline.selectedLayerIds.includes(layerId)) {
-            state.timeline.selectedLayerIds = state.timeline.selectedLayerIds.filter((id) => id !== layerId);
+            state.timeline.selectedLayerIds = state.timeline.selectedLayerIds.filter(
+              (id) => id !== layerId
+            );
           } else {
             state.timeline.selectedLayerIds.push(layerId);
           }
@@ -467,7 +472,18 @@ export interface TrackClipVM {
   label: string;
   startSec: number;
   durSec: number;
-  type: 'video' | 'cut' | 'speed' | 'intro' | 'outro' | 'subtitle' | 'text' | 'music' | 'color' | 'overlay' | 'transition';
+  type:
+    | 'video'
+    | 'cut'
+    | 'speed'
+    | 'intro'
+    | 'outro'
+    | 'subtitle'
+    | 'text'
+    | 'music'
+    | 'color'
+    | 'overlay'
+    | 'transition';
   layerId?: string;
   layerRef?: EditLayer;
   color?: string;
@@ -482,7 +498,7 @@ export interface DerivedTrackVM {
 
 export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] => {
   const plan = selectEffectivePlan(state);
-  const totalDuration = state.playback.duration || (state.project?.durationSec || 60);
+  const totalDuration = state.playback.duration || state.project?.durationSec || 60;
 
   if (!plan) return [];
 
@@ -509,8 +525,8 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
   }
 
   // Base video source
-  const introOffset = introLayer ? (introLayer.params.duration || 3) : 0;
-  const outroDur = outroLayer ? (outroLayer.params.duration || 3) : 0;
+  const introOffset = introLayer ? introLayer.params.duration || 3 : 0;
+  const outroDur = outroLayer ? outroLayer.params.duration || 3 : 0;
   videoClips.push({
     id: 'base_video',
     label: 'Main Video Source',
@@ -636,7 +652,9 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
   // Track 5: FX Track (Color LUT, Overlays, Transitions)
   const colorLayer = plan.layers.find((l) => l.enabled && l.layer === 'color') as any;
   const overlayLayers = plan.layers.filter((l) => l.enabled && l.layer === 'overlay') as any[];
-  const transitionLayers = plan.layers.filter((l) => l.enabled && l.layer === 'transition') as any[];
+  const transitionLayers = plan.layers.filter(
+    (l) => l.enabled && l.layer === 'transition'
+  ) as any[];
   if (colorLayer || overlayLayers.length > 0 || transitionLayers.length > 0) {
     const fxClips: TrackClipVM[] = [];
     if (colorLayer) {
@@ -684,4 +702,3 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
 
   return tracks;
 };
-

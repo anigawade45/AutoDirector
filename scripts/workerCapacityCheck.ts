@@ -94,3 +94,4 @@ if (process.argv[1]?.endsWith('workerCapacityCheck.ts') || process.argv[1]?.ends
     console.table(WorkerCapacityService.calculateClusterSizing(t));
   }
 }
+

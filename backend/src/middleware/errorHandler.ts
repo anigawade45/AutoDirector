@@ -20,12 +20,7 @@ export class AppError extends Error {
   }
 }
 
-export function errorHandler(
-  err: any,
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
+export function errorHandler(err: any, req: Request, res: Response, next: NextFunction): void {
   const requestId = req.id || 'unknown_req';
 
   // Handle Zod validation errors
@@ -70,4 +65,3 @@ export function errorHandler(
     requestId,
   });
 }
-

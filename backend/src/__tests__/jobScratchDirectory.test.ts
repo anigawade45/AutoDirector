@@ -25,7 +25,9 @@ describe('Phase 3 Task 3: Isolated Per-Job Temporary Directories & Guaranteed Cl
     expect(scratch.proxyVideo).toBe(path.join(scratch.dirPath, 'proxy_480p.mp4'));
     expect(scratch.audioWav).toBe(path.join(scratch.dirPath, 'audio_16k.wav'));
     expect(scratch.assSubtitles).toBe(path.join(scratch.dirPath, 'subtitles.ass'));
-    expect(scratch.outputVideo('final_1080p')).toBe(path.join(scratch.dirPath, 'out_final_1080p.mp4'));
+    expect(scratch.outputVideo('final_1080p')).toBe(
+      path.join(scratch.dirPath, 'out_final_1080p.mp4')
+    );
   });
 
   it('prevents directory traversal attacks when resolving paths', () => {
@@ -83,4 +85,3 @@ describe('Phase 3 Task 3: Isolated Per-Job Temporary Directories & Guaranteed Cl
     expect(fs.existsSync(staleDir.dirPath)).toBe(false);
   });
 });
-

@@ -51,4 +51,3 @@ export const LeftSidebar: React.FC = () => {
     </aside>
   );
 };
-

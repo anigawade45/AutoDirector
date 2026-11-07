@@ -1,4 +1,10 @@
-import { RenderJobModel, IRenderJobDocument, JobState, JobType, JobProfile } from '../../models/RenderJob.js';
+import {
+  RenderJobModel,
+  IRenderJobDocument,
+  JobState,
+  JobType,
+  JobProfile,
+} from '../../models/RenderJob.js';
 import { JobEventsPublisher } from '../queue/queueService.js';
 import { AppError } from '../../middleware/errorHandler.js';
 
@@ -8,8 +14,8 @@ export const VALID_STATE_TRANSITIONS: Record<JobState, JobState[]> = {
   processing: ['uploading_output', 'completed', 'failed', 'canceled'],
   uploading_output: ['completed', 'failed', 'canceled'],
   completed: [], // Terminal
-  failed: [],    // Terminal
-  canceled: [],  // Terminal
+  failed: [], // Terminal
+  canceled: [], // Terminal
 };
 
 export const TERMINAL_STATES: JobState[] = ['completed', 'failed', 'canceled'];
@@ -166,4 +172,3 @@ export class RenderJobLifecycle {
     return job;
   }
 }
-

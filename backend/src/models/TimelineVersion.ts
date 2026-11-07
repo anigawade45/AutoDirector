@@ -45,4 +45,3 @@ export const TimelineVersionModel = mongoose.model<ITimelineVersion>(
   'TimelineVersion',
   TimelineVersionSchema
 );
-
