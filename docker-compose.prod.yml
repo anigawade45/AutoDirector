@@ -1,0 +1,191 @@
+version: '3.8'
+
+services:
+  # -------------------------------------------------------------
+  # 1. Production API Server
+  # -------------------------------------------------------------
+  api:
+    image: ai-video-api:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ai_video_prod_api
+    restart: always
+    ports:
+      - '4000:4000'
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '5'
+
+  # -------------------------------------------------------------
+  # 2. Asynchronous Analysis Worker Pool
+  # -------------------------------------------------------------
+  worker-analysis:
+    image: ai-video-api:latest
+    container_name: ai_video_prod_worker_analysis
+    restart: always
+    command: ['npm', '--workspace=backend', 'run', 'worker:analysis']
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - WORKER_CONCURRENCY=4
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2048M
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '5'
+
+  # -------------------------------------------------------------
+  # 3. Asynchronous Video Render & Export Worker Pool
+  # -------------------------------------------------------------
+  worker-render:
+    image: ai-video-api:latest
+    container_name: ai_video_prod_worker_render
+    restart: always
+    command: ['npm', '--workspace=backend', 'run', 'worker:render']
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - WORKER_CONCURRENCY=2
+      - SCRATCH_DIR=/tmp/renders
+    volumes:
+      - render_scratch:/tmp/renders
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4096M
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '5'
+
+  # -------------------------------------------------------------
+  # 4. Production MongoDB 7 with Single-Node Replica Set (rs0)
+  # -------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: ai_video_prod_mongodb
+    restart: always
+    ports:
+      - '27017:27017'
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    volumes:
+      - mongodb_prod_data:/data/db
+    healthcheck:
+      test: >
+        mongosh --eval "
+          try {
+            rs.status().ok
+          } catch (e) {
+            rs.initiate({
+              _id: 'rs0',
+              members: [{ _id: 0, host: 'localhost:27017' }]
+            }).ok
+          }
+        " --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '5'
+
+  # -------------------------------------------------------------
+  # 5. Production Redis 7 (BullMQ Queues & Pub/Sub SSE)
+  # -------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ai_video_prod_redis
+    restart: always
+    ports:
+      - '6379:6379'
+    command: ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:-prod_redis_pass_change_me}']
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-prod_redis_pass_change_me}', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '20m'
+        max-file: '3'
+
+  # -------------------------------------------------------------
+  # 6. Production Frontend Web App (Nginx Reverse Proxy)
+  # -------------------------------------------------------------
+  frontend:
+    image: ai-video-frontend:latest
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: ai_video_prod_frontend
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    depends_on:
+      - api
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '20m'
+        max-file: '3'
+
+volumes:
+  mongodb_prod_data:
+    name: ai_video_prod_mongodb_data
+  redis_prod_data:
+    name: ai_video_prod_redis_data
+  render_scratch:
+    name: ai_video_prod_render_scratch

@@ -1,0 +1,77 @@
+services:
+  # -------------------------------------------------------------
+  # 1. MongoDB 7 with Single-Node Replica Set (rs0)
+  #    Required for multi-document version transactions and snapshots
+  # -------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: ai_video_mongodb
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    command: ['--replSet', 'rs0', '--bind_ip_all']
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: >
+        mongosh --eval "
+          try {
+            rs.status().ok
+          } catch (e) {
+            rs.initiate({
+              _id: 'rs0',
+              members: [{ _id: 0, host: 'localhost:27017' }]
+            }).ok
+          }
+        " --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # -------------------------------------------------------------
+  # 2. Redis 7 (BullMQ worker queues & SSE progress pub/sub)
+  # -------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ai_video_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -------------------------------------------------------------
+  # 3. LocalStack S3 (Official, fully public AWS S3 emulator)
+  #    Endpoint: http://localhost:4566
+  #    Community edition runs S3 for free without requiring a license token
+  # -------------------------------------------------------------
+  s3:
+    image: localstack/localstack:latest
+    container_name: ai_video_s3
+    restart: unless-stopped
+    ports:
+      - '4566:4566'
+    environment:
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN}
+      - SERVICES=s3
+      - DEBUG=0
+      - EXTRA_CORS_ALLOWED_ORIGINS=*
+      - EXTRA_CORS_ALLOWED_HEADERS=*
+      - EXTRA_CORS_EXPOSE_HEADERS=ETag,x-amz-request-id,x-amz-id-2
+    volumes:
+      - s3_data:/var/lib/localstack
+
+volumes:
+  mongodb_data:
+    name: ai_video_mongodb_data
+  redis_data:
+    name: ai_video_redis_data
+  s3_data:
+    name: ai_video_s3_data

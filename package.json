@@ -1,0 +1,43 @@
+{
+  "name": "ai-video-editing-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-Native Video Creation & Editing Platform",
+  "workspaces": [
+    "shared",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "infra:up": "docker-compose up -d",
+    "infra:down": "docker-compose down",
+    "init:db": "npm --workspace=backend run init:db",
+    "dev:backend": "npm --workspace=backend run dev",
+    "dev:worker:analysis": "npm --workspace=backend run worker:analysis",
+    "dev:worker:render": "npm --workspace=backend run worker:render",
+    "dev:frontend": "npm --workspace=frontend run dev",
+    "build:shared": "npm --workspace=shared run build",
+    "build:backend": "npm --workspace=backend run build",
+    "build:frontend": "npm --workspace=frontend run build",
+    "build": "npm run build:shared && npm run build:backend && npm run build:frontend",
+    "format:check": "npx prettier --check \"backend/src/**/*.{ts,js}\" \"frontend/src/**/*.{ts,tsx}\" \"shared/src/**/*.ts\"",
+    "format:write": "npx prettier --write \"backend/src/**/*.{ts,js}\" \"frontend/src/**/*.{ts,tsx}\" \"shared/src/**/*.ts\"",
+    "lint": "npm run build",
+    "test": "npm --workspace=backend run test && npm --workspace=frontend run test"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  },
+  "keywords": [
+    "video-editor",
+    "ai",
+    "ffmpeg",
+    "gemini",
+    "bullmq",
+    "react",
+    "express"
+  ],
+  "author": "",
+  "license": "UNLICENSED"
+}
+
