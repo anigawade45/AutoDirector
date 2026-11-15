@@ -13,8 +13,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 4000
       - key: ENABLE_IN_PROCESS_WORKERS
         value: "true"
       - key: CORS_ORIGIN

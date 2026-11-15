@@ -45,7 +45,7 @@ async function bootstrap() {
     console.log('[Workers] In-process workers disabled (standalone worker architecture active).');
   }
 
-  const server = app.listen(env.PORT, () => {
+  const server = app.listen(env.PORT, '0.0.0.0', () => {
     console.log(`[API Server] Running on port ${env.PORT} (${env.NODE_ENV})`);
     console.log(`[API Server] Base endpoint: ${env.API_BASE_URL}`);
   });

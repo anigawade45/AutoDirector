@@ -59,7 +59,7 @@ COPY --from=builder /app/backend/dist ./backend/dist
 # Create scratch directory for render isolation
 RUN mkdir -p /tmp/renders && chmod 777 /tmp/renders
 
-EXPOSE 4000
+EXPOSE 10000 4000
 
 # Default entrypoint runs API server (workers override command in docker-compose.prod.yml)
 CMD ["node", "backend/dist/server.js"]
