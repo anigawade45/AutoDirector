@@ -18,11 +18,23 @@ import {
 } from '@ai-video/shared';
 
 function getBaseUrl(): string {
-  const raw = (import.meta.env.VITE_API_BASE_URL || '/api').trim();
-  if (raw === '/api' || raw.startsWith('/')) {
-    return raw.replace(/\/+$/, '');
+  let raw = (import.meta.env.VITE_API_BASE_URL || '').trim();
+
+  // Automatic production resolution when hosted on Render
+  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+    if (!raw || raw === '/api' || !raw.includes('.')) {
+      return 'https://ai-video-api-eaui.onrender.com/api';
+    }
   }
+
+  if (!raw || raw === '/api' || raw.startsWith('/')) {
+    return raw ? raw.replace(/\/+$/, '') : '/api';
+  }
+
   let url = raw;
+  if (!url.includes('.')) {
+    url = `${url}.onrender.com`;
+  }
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = `https://${url}`;
   }
