@@ -231,7 +231,9 @@ export const api = {
 
     // 1. Live SSE Connection
     try {
-      eventSource = new EventSource(`${BASE_URL}/jobs/${cleanId}/events`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const sseUrl = `${BASE_URL}/jobs/${cleanId}/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      eventSource = new EventSource(sseUrl);
 
       eventSource.addEventListener('progress', (e) => {
         try {

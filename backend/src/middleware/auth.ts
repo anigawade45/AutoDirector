@@ -23,12 +23,18 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   const authHeader = req.headers.authorization;
+  let token: string | undefined = undefined;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next(new AppError(401, 'UNAUTHENTICATED', 'Authentication token missing or invalid'));
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query.token && typeof req.query.token === 'string') {
+    // Support EventSource (SSE) which cannot send custom Authorization headers
+    token = req.query.token;
   }
 
-  const token = authHeader.split(' ')[1];
+  if (!token) {
+    return next(new AppError(401, 'UNAUTHENTICATED', 'Authentication token missing or invalid'));
+  }
 
   try {
     let user = null;
