@@ -123,7 +123,11 @@ export class RendersController {
 
       // Enforce render minutes quota
       const rawUserId = req.user?.id || req.user?._id;
-      if (rawUserId && mongoose.isValidObjectId(rawUserId) && typeof UserModel.findById === 'function') {
+      if (
+        rawUserId &&
+        mongoose.isValidObjectId(rawUserId) &&
+        typeof UserModel.findById === 'function'
+      ) {
         const user = await UserModel.findById(rawUserId);
         if (user && user.quota && user.usage) {
           if (user.usage.renderMinutesUsed >= user.quota.renderMinutes) {

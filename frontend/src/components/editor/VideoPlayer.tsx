@@ -60,9 +60,7 @@ export const VideoPlayer: React.FC = () => {
     preview.planVersion === effectivePlan?.version;
 
   // Active Speed Layer calculation (Live video speed scaling when not baked by FFmpeg)
-  const speedLayer = effectivePlan?.layers.find(
-    (l) => l.enabled && l.layer === 'speed'
-  ) as any;
+  const speedLayer = effectivePlan?.layers.find((l) => l.enabled && l.layer === 'speed') as any;
 
   const currentSpeedFactor = (() => {
     if (!speedLayer || isVideoBaked) return 1.0;
@@ -390,7 +388,7 @@ export const VideoPlayer: React.FC = () => {
       const p = subtitleLayer.params;
       const cues = project?.analysisSummary?.cues;
       // Hold cue visible for +500ms after endMs so final words remain readable on screen
-      const activeCue = cues?.find((c) => curMs >= c.startMs && curMs <= (c.endMs + 500));
+      const activeCue = cues?.find((c) => curMs >= c.startMs && curMs <= c.endMs + 500);
 
       const fontSize = p.size || 48;
       const fontFamily = p.font || 'Montserrat';
@@ -399,7 +397,7 @@ export const VideoPlayer: React.FC = () => {
       const highlightColor = p.highlightColor || '#F7D7D1';
       const maxWordsPerLine = Math.max(3, p.maxWordsPerLine || 6);
 
-      let yPos = canvas.height * 0.80;
+      let yPos = canvas.height * 0.8;
       if (pos === 'top') yPos = canvas.height * 0.16;
       if (pos === 'center') yPos = canvas.height * 0.5;
 
@@ -413,16 +411,21 @@ export const VideoPlayer: React.FC = () => {
 
       if (activeCue) {
         // Extract words with fallback to splitting activeCue.text so no final words are ever lost
-        let allWords = (activeCue.words && activeCue.words.length > 0) ? activeCue.words : [];
+        let allWords = activeCue.words && activeCue.words.length > 0 ? activeCue.words : [];
         const cueTokens = (activeCue.text || '').trim().split(/\s+/).filter(Boolean);
 
         if (cueTokens.length > allWords.length) {
           // Reconcile words array with complete cue text so words like "Diwali" always render
           const lastItem = allWords.length > 0 ? (allWords[allWords.length - 1] as any) : null;
-          const baseStart = lastItem ? (lastItem.endMs || lastItem.s || activeCue.startMs) : activeCue.startMs;
+          const baseStart = lastItem
+            ? lastItem.endMs || lastItem.s || activeCue.startMs
+            : activeCue.startMs;
           const cueEnd = Math.max(baseStart + 400, activeCue.endMs);
           const missingTokens = cueTokens.slice(allWords.length);
-          const perWordDur = Math.max(250, Math.floor((cueEnd - baseStart) / Math.max(1, missingTokens.length)));
+          const perWordDur = Math.max(
+            250,
+            Math.floor((cueEnd - baseStart) / Math.max(1, missingTokens.length))
+          );
 
           missingTokens.forEach((tok: string, mIdx: number) => {
             const s = baseStart + mIdx * perWordDur;
@@ -463,8 +466,9 @@ export const VideoPlayer: React.FC = () => {
 
             lineWords.forEach((wordObj: any, i) => {
               const textVal = wordObj.word || wordObj.w || '';
-              const startVal = wordObj.startMs !== undefined ? wordObj.startMs : (wordObj.s || 0);
-              const endVal = wordObj.endMs !== undefined ? wordObj.endMs : (wordObj.e || startVal + 350);
+              const startVal = wordObj.startMs !== undefined ? wordObj.startMs : wordObj.s || 0;
+              const endVal =
+                wordObj.endMs !== undefined ? wordObj.endMs : wordObj.e || startVal + 350;
               const isWordActive = curMs >= startVal && curMs <= endVal;
               const wordText = textVal + ' ';
               const wWidth = wordWidths[i];
@@ -561,18 +565,20 @@ export const VideoPlayer: React.FC = () => {
           />
 
           {/* Real-time CSS Vignette Overlay */}
-          {colorLayer && !isVideoBaked && (() => {
-            const resolved = resolveColorParams(colorLayer.params);
-            if (resolved.vignette <= 0) return null;
-            return (
-              <div
-                className="absolute inset-0 pointer-events-none transition-all duration-200 z-[5]"
-                style={{
-                  background: `radial-gradient(circle at center, transparent 36%, rgba(0,0,0,${Math.min(0.92, (resolved.vignette * 0.88)).toFixed(2)}) 100%)`,
-                }}
-              />
-            );
-          })()}
+          {colorLayer &&
+            !isVideoBaked &&
+            (() => {
+              const resolved = resolveColorParams(colorLayer.params);
+              if (resolved.vignette <= 0) return null;
+              return (
+                <div
+                  className="absolute inset-0 pointer-events-none transition-all duration-200 z-[5]"
+                  style={{
+                    background: `radial-gradient(circle at center, transparent 36%, rgba(0,0,0,${Math.min(0.92, resolved.vignette * 0.88).toFixed(2)}) 100%)`,
+                  }}
+                />
+              );
+            })()}
 
           {/* Central Click-To-Play / Pause Overlay */}
           <div
@@ -686,7 +692,9 @@ export const VideoPlayer: React.FC = () => {
             <span>{formatTime(playback.currentTime)}</span>
             <span className="text-[#393B3F]"> / </span>
             <span className="text-[#FFF5F5]/50">{formatTime(playback.duration)}</span>
-            <span className="hidden md:inline text-[#FFF5F5]/40 ml-1.5 text-[10px]">({fps}fps)</span>
+            <span className="hidden md:inline text-[#FFF5F5]/40 ml-1.5 text-[10px]">
+              ({fps}fps)
+            </span>
           </div>
         </div>
 

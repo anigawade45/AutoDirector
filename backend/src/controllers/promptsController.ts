@@ -31,7 +31,11 @@ export class PromptsController {
 
       // Tier prompt quota enforcement
       const rawUserId = req.user?.id || req.user?._id;
-      if (rawUserId && mongoose.isValidObjectId(rawUserId) && typeof UserModel.findById === 'function') {
+      if (
+        rawUserId &&
+        mongoose.isValidObjectId(rawUserId) &&
+        typeof UserModel.findById === 'function'
+      ) {
         const user = await UserModel.findById(rawUserId);
         if (user && user.quota && user.usage) {
           if (user.usage.promptsToday >= user.quota.promptsPerDay) {
@@ -320,11 +324,12 @@ export class PromptsController {
       }
 
       // Record prompt usage for tier quota tracking
-      if (rawUserId && mongoose.isValidObjectId(rawUserId) && typeof UserModel.updateOne === 'function') {
-        await UserModel.updateOne(
-          { _id: rawUserId },
-          { $inc: { 'usage.promptsToday': 1 } }
-        );
+      if (
+        rawUserId &&
+        mongoose.isValidObjectId(rawUserId) &&
+        typeof UserModel.updateOne === 'function'
+      ) {
+        await UserModel.updateOne({ _id: rawUserId }, { $inc: { 'usage.promptsToday': 1 } });
       }
 
       res.status(200).json({

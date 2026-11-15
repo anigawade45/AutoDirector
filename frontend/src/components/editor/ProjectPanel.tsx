@@ -78,9 +78,7 @@ export const ProjectPanel: React.FC = () => {
               <HardDrive className="w-3 h-3 text-[#E3B5BE]" />
               <span>Base Asset</span>
             </span>
-            <span className="text-[#FFF5F5]/80 truncate max-w-[120px]">
-              {project.assetId}
-            </span>
+            <span className="text-[#FFF5F5]/80 truncate max-w-[120px]">{project.assetId}</span>
           </div>
         )}
       </div>
@@ -123,9 +121,7 @@ export const ProjectPanel: React.FC = () => {
               <span>Musical Tempo</span>
             </span>
             <span className="font-mono text-[#F7D7D1] text-xs font-semibold mt-1 block">
-              {analysis && analysis.bpm !== undefined
-                ? `${analysis.bpm} BPM`
-                : '—'}
+              {analysis && analysis.bpm !== undefined ? `${analysis.bpm} BPM` : '—'}
             </span>
           </div>
 

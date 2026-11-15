@@ -87,7 +87,9 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         };
       } catch (err: any) {
         lastError = err;
-        console.warn(`[GeminiPlannerAdapter] Model ${modelName} notice: ${err.message}. Trying fallback...`);
+        console.warn(
+          `[GeminiPlannerAdapter] Model ${modelName} notice: ${err.message}. Trying fallback...`
+        );
       }
     }
 
@@ -339,8 +341,8 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         let factor = speedMatch
           ? parseFloat(speedMatch[1])
           : instruction.includes('slow')
-          ? 0.75
-          : 1.5;
+            ? 0.75
+            : 1.5;
         factor = Math.max(0.25, Math.min(4.0, Number(factor.toFixed(2))));
 
         const spdLayer = currentPlan.layers?.find((l: any) => l.layer === 'speed');
@@ -548,8 +550,8 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       let factor = speedMatch
         ? parseFloat(speedMatch[1])
         : instruction.includes('slow')
-        ? 0.75
-        : 1.5;
+          ? 0.75
+          : 1.5;
       factor = Math.max(0.25, Math.min(4.0, Number(factor.toFixed(2))));
       layers.push({
         id: `lyr_spd_${layerCounter++}`,

@@ -74,7 +74,11 @@ export class PatchEngine {
         const rawType = String(patchValue.layer || '').toLowerCase();
         if (['subtitles', 'captions', 'caption', 'subs'].includes(rawType)) {
           patchValue.layer = 'subtitle';
-        } else if (['color', 'color_grade', 'colorgrading', 'colour', 'lut', 'filter', 'global'].includes(rawType)) {
+        } else if (
+          ['color', 'color_grade', 'colorgrading', 'colour', 'lut', 'filter', 'global'].includes(
+            rawType
+          )
+        ) {
           patchValue.layer = 'color';
         } else if (['cut', 'cuts', 'trim', 'trims', 'source', 'clip'].includes(rawType)) {
           patchValue.layer = 'cut';
@@ -89,7 +93,8 @@ export class PatchEngine {
 
         // Normalize cut range if sourceIn / sourceOut or start / end in params
         if (patchValue.layer === 'cut' && !patchValue.range) {
-          const s = patchValue.params?.sourceIn ?? patchValue.params?.start ?? patchValue.start ?? 0;
+          const s =
+            patchValue.params?.sourceIn ?? patchValue.params?.start ?? patchValue.start ?? 0;
           const e = patchValue.params?.sourceOut ?? patchValue.params?.end ?? patchValue.end ?? 10;
           patchValue.range = { start: Number(s), end: Number(e) };
           patchValue.timebase = 'source';
@@ -98,8 +103,10 @@ export class PatchEngine {
         // Normalize subtitle params
         if (patchValue.layer === 'subtitle' && patchValue.params) {
           if (patchValue.params.style === 'word-pop') patchValue.params.style = 'word_pop';
-          if (patchValue.params.fontSize && !patchValue.params.size) patchValue.params.size = patchValue.params.fontSize;
-          if (patchValue.params.color && !patchValue.params.primaryColor) patchValue.params.primaryColor = patchValue.params.color;
+          if (patchValue.params.fontSize && !patchValue.params.size)
+            patchValue.params.size = patchValue.params.fontSize;
+          if (patchValue.params.color && !patchValue.params.primaryColor)
+            patchValue.params.primaryColor = patchValue.params.color;
         }
       }
 
@@ -159,7 +166,10 @@ export class PatchEngine {
       try {
         fastJsonPatch.applyOperation(clonedPlan, op, true, true);
       } catch (patchErr: any) {
-        console.warn(`[PatchEngine] Ignored non-critical patch error (${op.op} ${op.path}):`, patchErr.message);
+        console.warn(
+          `[PatchEngine] Ignored non-critical patch error (${op.op} ${op.path}):`,
+          patchErr.message
+        );
       }
     }
 

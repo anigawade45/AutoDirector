@@ -23,9 +23,10 @@ const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: typeof window !== 'undefined' && localStorage.getItem(USER_KEY)
-    ? JSON.parse(localStorage.getItem(USER_KEY)!)
-    : null,
+  user:
+    typeof window !== 'undefined' && localStorage.getItem(USER_KEY)
+      ? JSON.parse(localStorage.getItem(USER_KEY)!)
+      : null,
   token: typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null,
   isAuthenticated: typeof window !== 'undefined' ? !!localStorage.getItem(TOKEN_KEY) : false,
   isLoading: false,
@@ -146,4 +147,3 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 }));
-

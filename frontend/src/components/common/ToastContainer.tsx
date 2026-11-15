@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  CheckCircle2,
-  AlertCircle,
-  AlertTriangle,
-  Info,
-  X,
-} from 'lucide-react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { useToastStore, ToastItem } from '../../stores/toastStore';
 
 export const ToastContainer: React.FC = () => {
@@ -76,7 +70,9 @@ const ToastCard: React.FC<ToastCardProps> = ({ item, onDismiss }) => {
 
       <div className="flex-1 min-w-0 pr-2">
         <div className="flex items-center justify-between mb-0.5">
-          <span className={`text-[10px] font-mono uppercase tracking-wider font-bold ${config.badgeColor}`}>
+          <span
+            className={`text-[10px] font-mono uppercase tracking-wider font-bold ${config.badgeColor}`}
+          >
             {config.badgeText}
           </span>
         </div>
@@ -95,4 +91,3 @@ const ToastCard: React.FC<ToastCardProps> = ({ item, onDismiss }) => {
     </div>
   );
 };
-

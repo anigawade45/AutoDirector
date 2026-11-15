@@ -34,7 +34,10 @@ export class TokenService {
   /**
    * Generates a signed RFC 7519 JWT token (HS256)
    */
-  static generateToken(payload: { id: string; email: string; tier: string; name?: string }, expiresInSec = 7 * 86400): string {
+  static generateToken(
+    payload: { id: string; email: string; tier: string; name?: string },
+    expiresInSec = 7 * 86400
+  ): string {
     const header = {
       alg: 'HS256',
       typ: 'JWT',
@@ -108,4 +111,3 @@ export class TokenService {
     }
   }
 }
-

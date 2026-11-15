@@ -174,4 +174,3 @@ export interface ChatHistoryResponseData {
   projectId: string;
   messages: ChatMessageDto[];
 }
-

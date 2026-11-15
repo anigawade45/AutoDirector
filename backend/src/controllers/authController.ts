@@ -97,7 +97,9 @@ export class AuthController {
       }
 
       // Explicitly select passwordHash and salt which are select: false by default
-      const user = await UserModel.findOne({ email: email.toLowerCase() }).select('+passwordHash +salt');
+      const user = await UserModel.findOne({ email: email.toLowerCase() }).select(
+        '+passwordHash +salt'
+      );
       if (!user) {
         throw new AppError(404, 'USER_NOT_FOUND', `No account found for email ${email}`);
       }

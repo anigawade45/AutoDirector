@@ -433,9 +433,7 @@ export class FFmpegCompiler {
     const musicLayer = plan.layers.find((l) => l.enabled && l.layer === 'music') as any;
     const musicPath =
       paths?.musicSourcePath ||
-      (musicLayer && (env.NODE_ENV === 'test' || !paths?.outputPath)
-        ? 'music.mp3'
-        : undefined);
+      (musicLayer && (env.NODE_ENV === 'test' || !paths?.outputPath) ? 'music.mp3' : undefined);
 
     if (musicPath) {
       const musicInputIndex = inputs.length;

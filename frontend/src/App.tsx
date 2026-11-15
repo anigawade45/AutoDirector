@@ -153,99 +153,99 @@ export const App: React.FC = () => {
     <>
       <ToastContainer />
       <div className="flex flex-col h-screen w-screen bg-[#18191B] overflow-hidden text-[#FFF5F5] font-sans">
-      {/* Editor Header */}
-      <EditorHeader
-        onBack={() => {
-          setSelectedProjectId(null);
-          setCurrentView('dashboard');
-        }}
-      />
+        {/* Editor Header */}
+        <EditorHeader
+          onBack={() => {
+            setSelectedProjectId(null);
+            setCurrentView('dashboard');
+          }}
+        />
 
-      {/* Main Responsive Workspace */}
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
-        {/* Desktop Left Sidebar (Project & Inspector tabs) */}
-        <div className="hidden lg:flex w-80 shrink-0 h-full overflow-hidden">
-          <LeftSidebar />
-        </div>
-
-        {/* Center Workspace Area */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {/* Video Player & Realtime Canvas */}
-          <div className="h-[36vh] sm:h-[42vh] lg:h-auto lg:flex-1 min-h-0 flex flex-col overflow-hidden border-b lg:border-b-0 border-[#393B3F]">
-            <VideoPlayer />
+        {/* Main Responsive Workspace */}
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+          {/* Desktop Left Sidebar (Project & Inspector tabs) */}
+          <div className="hidden lg:flex w-80 shrink-0 h-full overflow-hidden">
+            <LeftSidebar />
           </div>
 
-          {/* Mobile Studio Switcher Navigation Tabs (visible on mobile / tablet < lg) */}
-          <div className="lg:hidden flex items-center justify-around bg-[#18191B] border-b border-[#393B3F] px-1 py-1 shrink-0 z-30">
-            <button
-              onClick={() => setMobileTab('chat')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-all ${
-                mobileTab === 'chat'
-                  ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
-                  : 'text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Director</span>
-            </button>
+          {/* Center Workspace Area */}
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            {/* Video Player & Realtime Canvas */}
+            <div className="h-[36vh] sm:h-[42vh] lg:h-auto lg:flex-1 min-h-0 flex flex-col overflow-hidden border-b lg:border-b-0 border-[#393B3F]">
+              <VideoPlayer />
+            </div>
 
-            <button
-              onClick={() => setMobileTab('timeline')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-all ${
-                mobileTab === 'timeline'
-                  ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
-                  : 'text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5" />
-              <span>Timeline</span>
-            </button>
+            {/* Mobile Studio Switcher Navigation Tabs (visible on mobile / tablet < lg) */}
+            <div className="lg:hidden flex items-center justify-around bg-[#18191B] border-b border-[#393B3F] px-1 py-1 shrink-0 z-30">
+              <button
+                onClick={() => setMobileTab('chat')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-all ${
+                  mobileTab === 'chat'
+                    ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
+                    : 'text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Director</span>
+              </button>
 
-            <button
-              onClick={() => setMobileTab('inspector')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-all ${
-                mobileTab === 'inspector'
-                  ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
-                  : 'text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
-              }`}
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>Inspector</span>
-            </button>
+              <button
+                onClick={() => setMobileTab('timeline')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-all ${
+                  mobileTab === 'timeline'
+                    ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
+                    : 'text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
+                }`}
+              >
+                <Film className="w-3.5 h-3.5" />
+                <span>Timeline</span>
+              </button>
 
-            <button
-              onClick={() => setMobileTab('project')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-all ${
-                mobileTab === 'project'
-                  ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
-                  : 'text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Media</span>
-            </button>
+              <button
+                onClick={() => setMobileTab('inspector')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-all ${
+                  mobileTab === 'inspector'
+                    ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
+                    : 'text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Inspector</span>
+              </button>
+
+              <button
+                onClick={() => setMobileTab('project')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-all ${
+                  mobileTab === 'project'
+                    ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
+                    : 'text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Media</span>
+              </button>
+            </div>
+
+            {/* Mobile Active Content Panel (visible on mobile / tablet < lg) */}
+            <div className="lg:hidden flex-1 min-h-0 overflow-hidden flex flex-col bg-[#1C1D1F]">
+              {mobileTab === 'chat' && <ChatPanel />}
+              {mobileTab === 'timeline' && <TimelineView />}
+              {mobileTab === 'inspector' && <InspectorPanel />}
+              {mobileTab === 'project' && <ProjectPanel />}
+            </div>
+
+            {/* Desktop Multi-Track Timeline (visible on desktop >= lg) */}
+            <div className="hidden lg:block h-56 shrink-0">
+              <TimelineView />
+            </div>
           </div>
 
-          {/* Mobile Active Content Panel (visible on mobile / tablet < lg) */}
-          <div className="lg:hidden flex-1 min-h-0 overflow-hidden flex flex-col bg-[#1C1D1F]">
-            {mobileTab === 'chat' && <ChatPanel />}
-            {mobileTab === 'timeline' && <TimelineView />}
-            {mobileTab === 'inspector' && <InspectorPanel />}
-            {mobileTab === 'project' && <ProjectPanel />}
+          {/* Desktop Right AI Director Chat & Suggestions */}
+          <div className="hidden lg:flex w-80 shrink-0 h-full overflow-hidden">
+            <ChatPanel />
           </div>
-
-          {/* Desktop Multi-Track Timeline (visible on desktop >= lg) */}
-          <div className="hidden lg:block h-56 shrink-0">
-            <TimelineView />
-          </div>
-        </div>
-
-        {/* Desktop Right AI Director Chat & Suggestions */}
-        <div className="hidden lg:flex w-80 shrink-0 h-full overflow-hidden">
-          <ChatPanel />
         </div>
       </div>
-    </div>
     </>
   );
 };

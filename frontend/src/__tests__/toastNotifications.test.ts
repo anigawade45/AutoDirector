@@ -93,4 +93,3 @@ describe('Global Toast Notification System', () => {
     expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 });
-

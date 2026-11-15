@@ -242,8 +242,7 @@ export const TimelineView: React.FC = () => {
       case 'intro':
       case 'outro':
         return (
-          base +
-          'bg-[#2A262C] border border-[#E3B5BE]/50 text-[#FFF5F5] hover:border-[#E3B5BE]'
+          base + 'bg-[#2A262C] border border-[#E3B5BE]/50 text-[#FFF5F5] hover:border-[#E3B5BE]'
         );
       case 'cut':
         return (
@@ -251,9 +250,7 @@ export const TimelineView: React.FC = () => {
           'bg-[#362225] border border-[#E3B5BE]/50 text-[#F7D7D1] hover:bg-[#3D2529] text-[10px] font-mono justify-center'
         );
       case 'speed':
-        return (
-          base + 'bg-[#25282B] border border-[#393B3F] text-[#FFF5F5] hover:border-[#E3B5BE]'
-        );
+        return base + 'bg-[#25282B] border border-[#393B3F] text-[#FFF5F5] hover:border-[#E3B5BE]';
       case 'subtitle':
         return (
           base + 'bg-[#2E2729] border border-[#E3B5BE]/40 text-[#F7D7D1] hover:border-[#E3B5BE]'
@@ -262,13 +259,11 @@ export const TimelineView: React.FC = () => {
         return base + 'bg-[#2A2C2F] border border-[#393B3F] text-[#FFF5F5] hover:border-[#E3B5BE]';
       case 'music':
         return (
-          base +
-          'bg-[#232724] border border-[#393B3F] text-[#FFF5F5]/90 hover:border-[#F7D7D1]'
+          base + 'bg-[#232724] border border-[#393B3F] text-[#FFF5F5]/90 hover:border-[#F7D7D1]'
         );
       case 'color':
         return (
-          base +
-          'bg-[#2B2527] border border-[#E3B5BE]/40 text-[#E3B5BE] hover:border-[#E3B5BE]'
+          base + 'bg-[#2B2527] border border-[#E3B5BE]/40 text-[#E3B5BE] hover:border-[#E3B5BE]'
         );
       case 'overlay':
         return (
@@ -280,9 +275,7 @@ export const TimelineView: React.FC = () => {
           'bg-orange-900/40 border border-orange-500/50 text-orange-200 hover:border-orange-400'
         );
       default:
-        return (
-          base + 'bg-[#2A2C2F] border border-[#393B3F] text-[#FFF5F5] hover:border-[#E3B5BE]'
-        );
+        return base + 'bg-[#2A2C2F] border border-[#393B3F] text-[#FFF5F5] hover:border-[#E3B5BE]';
     }
   };
 
@@ -332,7 +325,9 @@ export const TimelineView: React.FC = () => {
           >
             <Magnet className="w-3.5 h-3.5" />
             <span>Snap {timeline.snap ? 'ON' : 'OFF'}</span>
-            <span className="hidden sm:inline text-[10px] text-[#FFF5F5]/40 font-mono">({fps}fps)</span>
+            <span className="hidden sm:inline text-[10px] text-[#FFF5F5]/40 font-mono">
+              ({fps}fps)
+            </span>
           </button>
 
           {/* Delete selected layer button */}

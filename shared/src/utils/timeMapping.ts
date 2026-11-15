@@ -255,7 +255,9 @@ export function buildKeepSegments(
       activeSpeeds.find(
         (sp) => sp.range && midPoint >= sp.range.start - 0.02 && midPoint <= sp.range.end + 0.02
       ) ||
-      activeSpeeds.find((sp) => sp.range && sp.range.start <= start + 0.02 && sp.range.end >= end - 0.02) ||
+      activeSpeeds.find(
+        (sp) => sp.range && sp.range.start <= start + 0.02 && sp.range.end >= end - 0.02
+      ) ||
       activeSpeeds.find((sp) => !sp.range);
 
     const speed = matchingSpeed?.params?.factor

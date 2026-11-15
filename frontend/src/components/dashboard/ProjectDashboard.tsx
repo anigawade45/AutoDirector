@@ -32,7 +32,10 @@ interface ProjectDashboardProps {
   onBackToHome?: () => void;
 }
 
-export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ onSelectProject, onBackToHome }) => {
+export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
+  onSelectProject,
+  onBackToHome,
+}) => {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
@@ -441,9 +444,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ onSelectProj
                               : 'Studio Master'}
                         </span>
                       </span>
-                      <span
-                        className="font-bold text-xs flex items-center space-x-1 text-[#E3B5BE] group-hover:text-[#F7D7D1] transition-colors"
-                      >
+                      <span className="font-bold text-xs flex items-center space-x-1 text-[#E3B5BE] group-hover:text-[#F7D7D1] transition-colors">
                         <span>{isArchived ? 'View Snapshot' : 'Open Studio'}</span>
                         <span>&rarr;</span>
                       </span>

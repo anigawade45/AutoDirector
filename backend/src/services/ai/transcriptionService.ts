@@ -146,25 +146,31 @@ If the audio has no speech or only silence/background music, return: [].`;
             if (Array.isArray(parsed) && parsed.length > 0) {
               return parsed.map((c: any, idx: number) => {
                 const textStr = (c.text || '').trim();
-                let words: CaptionWord[] = (c.words || []).map((w: any) => {
-                  const s = Math.round(w.s || w.startMs || 0);
-                  const rawE = Math.round(w.e || w.endMs || 0);
-                  const e = Math.max(s + 200, rawE);
-                  return {
-                    w: (w.w || w.word || '').trim(),
-                    s,
-                    e,
-                    conf: typeof w.conf === 'number' ? w.conf : 0.95,
-                  };
-                }).filter((w: CaptionWord) => w.w.length > 0);
+                let words: CaptionWord[] = (c.words || [])
+                  .map((w: any) => {
+                    const s = Math.round(w.s || w.startMs || 0);
+                    const rawE = Math.round(w.e || w.endMs || 0);
+                    const e = Math.max(s + 200, rawE);
+                    return {
+                      w: (w.w || w.word || '').trim(),
+                      s,
+                      e,
+                      conf: typeof w.conf === 'number' ? w.conf : 0.95,
+                    };
+                  })
+                  .filter((w: CaptionWord) => w.w.length > 0);
 
                 // If text contains more words than words array (e.g. final word like Diwali dropped from array), reconcile
                 const textTokens = textStr.split(/\s+/).filter(Boolean);
                 if (textTokens.length > words.length) {
-                  const baseStart = words.length > 0 ? words[words.length - 1].e : Math.round(c.startMs || 0);
+                  const baseStart =
+                    words.length > 0 ? words[words.length - 1].e : Math.round(c.startMs || 0);
                   const cueEnd = Math.max(baseStart + 400, Math.round(c.endMs || totalDurationMs));
                   const missingTokens = textTokens.slice(words.length);
-                  const perWordDur = Math.max(250, Math.floor((cueEnd - baseStart) / Math.max(1, missingTokens.length)));
+                  const perWordDur = Math.max(
+                    250,
+                    Math.floor((cueEnd - baseStart) / Math.max(1, missingTokens.length))
+                  );
 
                   missingTokens.forEach((tok: string, mIdx: number) => {
                     const s = baseStart + mIdx * perWordDur;
@@ -179,7 +185,10 @@ If the audio has no speech or only silence/background music, return: [].`;
                 }
 
                 const startMs = words.length > 0 ? words[0].s : Math.round(c.startMs || 0);
-                const lastWordEnd = words.length > 0 ? words[words.length - 1].e : Math.round(c.endMs || totalDurationMs);
+                const lastWordEnd =
+                  words.length > 0
+                    ? words[words.length - 1].e
+                    : Math.round(c.endMs || totalDurationMs);
                 const endMs = Math.max(lastWordEnd + 400, Math.round(c.endMs || lastWordEnd));
 
                 return {
@@ -285,17 +294,19 @@ If the audio has no speech or only silence/background music, return: [].`;
 
     for (let i = 0; i < words.length; i += WORDS_PER_CUE) {
       const chunk = words.slice(i, i + WORDS_PER_CUE);
-      const cueWords: CaptionWord[] = chunk.map((w) => {
-        const s = Math.round(w.start * 1000);
-        const rawE = Math.round(w.end * 1000);
-        const e = Math.max(s + 50, rawE);
-        return {
-          w: (w.word || '').trim(),
-          s,
-          e,
-          conf: 0.98,
-        };
-      }).filter((w) => w.w.length > 0);
+      const cueWords: CaptionWord[] = chunk
+        .map((w) => {
+          const s = Math.round(w.start * 1000);
+          const rawE = Math.round(w.end * 1000);
+          const e = Math.max(s + 50, rawE);
+          return {
+            w: (w.word || '').trim(),
+            s,
+            e,
+            conf: 0.98,
+          };
+        })
+        .filter((w) => w.w.length > 0);
 
       if (cueWords.length === 0) continue;
 

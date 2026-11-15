@@ -68,11 +68,18 @@ export class UploadsController {
 
       // Tier storage quota enforcement
       const rawUserId = req.user?.id || req.user?._id;
-      if (rawUserId && mongoose.isValidObjectId(rawUserId) && typeof UserModel.findById === 'function') {
+      if (
+        rawUserId &&
+        mongoose.isValidObjectId(rawUserId) &&
+        typeof UserModel.findById === 'function'
+      ) {
         const user = await UserModel.findById(rawUserId);
         if (user && user.quota && user.usage) {
           if (user.usage.storageBytesUsed + sizeBytes > user.quota.storageBytes) {
-            const availableMb = Math.max(0, (user.quota.storageBytes - user.usage.storageBytesUsed) / (1024 * 1024)).toFixed(1);
+            const availableMb = Math.max(
+              0,
+              (user.quota.storageBytes - user.usage.storageBytesUsed) / (1024 * 1024)
+            ).toFixed(1);
             throw new AppError(
               403,
               'QUOTA_EXCEEDED',

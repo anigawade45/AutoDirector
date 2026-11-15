@@ -218,10 +218,7 @@ export const ChatPanel: React.FC = () => {
         'Director Cut Applied'
       );
       if (modelSwitched) {
-        toast.info(
-          `Switched to ${modelDisplayName} for optimal response speed`,
-          'Model Adjusted'
-        );
+        toast.info(`Switched to ${modelDisplayName} for optimal response speed`, 'Model Adjusted');
       }
 
       // 3. If preview job enqueued, listen to SSE progress
@@ -292,9 +289,7 @@ export const ChatPanel: React.FC = () => {
       <div className="h-12 border-b border-[#393B3F] px-4 flex items-center justify-between relative bg-[#18191B]">
         <div className="flex items-center space-x-2">
           <Clapperboard className="w-4 h-4 text-[#E3B5BE]" />
-          <h2 className="text-xs font-bold text-[#FFF5F5] uppercase tracking-wider">
-            AI Director
-          </h2>
+          <h2 className="text-xs font-bold text-[#FFF5F5] uppercase tracking-wider">AI Director</h2>
         </div>
 
         {/* Gemini Model Selector Dropdown */}
@@ -306,14 +301,18 @@ export const ChatPanel: React.FC = () => {
           >
             <Cpu className="w-3 h-3 text-[#E3B5BE]" />
             <span className="font-semibold">{activeModel.name.replace('Gemini ', '')}</span>
-            <ChevronDown className={`w-3 h-3 transition-transform ${isModelMenuOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown
+              className={`w-3 h-3 transition-transform ${isModelMenuOpen ? 'rotate-180' : ''}`}
+            />
           </button>
 
           {isModelMenuOpen && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-[#222326] border border-[#393B3F] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 text-xs backdrop-blur-md">
               <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-[#FFF5F5]/60 font-semibold border-b border-[#393B3F] flex items-center justify-between font-mono">
                 <span>Director Models</span>
-                <span className="text-[9px] text-[#F7D7D1]">{AVAILABLE_GEMINI_MODELS.length} Available</span>
+                <span className="text-[9px] text-[#F7D7D1]">
+                  {AVAILABLE_GEMINI_MODELS.length} Available
+                </span>
               </div>
               <div className="max-h-72 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                 {AVAILABLE_GEMINI_MODELS.map((model) => {

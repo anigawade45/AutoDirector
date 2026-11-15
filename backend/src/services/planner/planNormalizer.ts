@@ -87,11 +87,17 @@ export class PlanNormalizer {
     layers = layers.map((rawL: any) => {
       if (!rawL || typeof rawL !== 'object') return rawL;
       const l = { ...rawL };
-      let typeStr = String(l.layer || '').toLowerCase().trim();
+      let typeStr = String(l.layer || '')
+        .toLowerCase()
+        .trim();
 
       if (['subtitles', 'subtitle', 'captions', 'caption', 'subs'].includes(typeStr)) {
         l.layer = 'subtitle';
-      } else if (['color', 'color_grade', 'colorgrade', 'colorgrading', 'colour', 'lut', 'filter'].includes(typeStr)) {
+      } else if (
+        ['color', 'color_grade', 'colorgrade', 'colorgrading', 'colour', 'lut', 'filter'].includes(
+          typeStr
+        )
+      ) {
         l.layer = 'color';
       } else if (['cut', 'cuts', 'trim', 'trims', 'source', 'clip', 'snip'].includes(typeStr)) {
         l.layer = 'cut';
@@ -108,7 +114,13 @@ export class PlanNormalizer {
       } else if (['outro', 'outros'].includes(typeStr)) {
         l.layer = 'outro';
       } else if (typeStr === 'global') {
-        if (l.params?.color || l.params?.lut || l.params?.contrast || l.params?.preset || l.id?.includes('col')) {
+        if (
+          l.params?.color ||
+          l.params?.lut ||
+          l.params?.contrast ||
+          l.params?.preset ||
+          l.id?.includes('col')
+        ) {
           l.layer = 'color';
         }
       }
@@ -117,7 +129,8 @@ export class PlanNormalizer {
       if (!allowedLayerTypes.includes(l.layer) && typeof l.id === 'string') {
         const idLower = l.id.toLowerCase();
         if (idLower.includes('sub') || idLower.includes('cap')) l.layer = 'subtitle';
-        else if (idLower.includes('col') || idLower.includes('lut') || idLower.includes('grade')) l.layer = 'color';
+        else if (idLower.includes('col') || idLower.includes('lut') || idLower.includes('grade'))
+          l.layer = 'color';
         else if (idLower.includes('cut') || idLower.includes('trim')) l.layer = 'cut';
         else if (idLower.includes('mus') || idLower.includes('bgm')) l.layer = 'music';
       }
@@ -145,8 +158,10 @@ export class PlanNormalizer {
 
       switch (layerType) {
         case 'cut': {
-          let rawStart = rawLayer.range?.start ?? params.sourceIn ?? params.start ?? rawLayer.start ?? 0;
-          let rawEnd = rawLayer.range?.end ?? params.sourceOut ?? params.end ?? rawLayer.end ?? maxDuration;
+          let rawStart =
+            rawLayer.range?.start ?? params.sourceIn ?? params.start ?? rawLayer.start ?? 0;
+          let rawEnd =
+            rawLayer.range?.end ?? params.sourceOut ?? params.end ?? rawLayer.end ?? maxDuration;
           let start = PlanNormalizer.clamp(Number(rawStart) || 0, 0, maxDuration);
           let end = PlanNormalizer.clamp(Number(rawEnd) || maxDuration, 0, maxDuration);
 
@@ -219,13 +234,19 @@ export class PlanNormalizer {
           let preset = validPresets.includes(cParams.preset) ? cParams.preset : undefined;
           const pLower = (options.prompt || '').toLowerCase();
           if (!preset) {
-            if (cParams.lut === 'teal_orange' || pLower.includes('cinematic') || pLower.includes('teal')) preset = 'cinematic';
+            if (
+              cParams.lut === 'teal_orange' ||
+              pLower.includes('cinematic') ||
+              pLower.includes('teal')
+            )
+              preset = 'cinematic';
             else if (pLower.includes('warm')) preset = 'warm';
             else if (pLower.includes('cool')) preset = 'cool';
             else if (pLower.includes('bw') || pLower.includes('black and white')) preset = 'bw';
             else if (pLower.includes('vivid')) preset = 'vivid';
             else if (pLower.includes('faded')) preset = 'faded';
-            else if (cParams.contrast !== undefined || cParams.saturation !== undefined) preset = 'cinematic';
+            else if (cParams.contrast !== undefined || cParams.saturation !== undefined)
+              preset = 'cinematic';
           }
 
           const brightness = PlanNormalizer.clamp(
@@ -262,7 +283,10 @@ export class PlanNormalizer {
             );
             lut = lutMatch ? lutMatch.id : options.catalog.luts[0]?.id;
           } else if (preset === 'cinematic' || pLower.includes('teal')) {
-            lut = options.catalog.luts.find((l) => l.id.includes('teal'))?.id || options.catalog.luts[0]?.id || 'teal_orange';
+            lut =
+              options.catalog.luts.find((l) => l.id.includes('teal'))?.id ||
+              options.catalog.luts[0]?.id ||
+              'teal_orange';
           }
 
           normalizedLayers.push({
@@ -291,9 +315,7 @@ export class PlanNormalizer {
           const validPositions = ['bottom', 'center', 'top'];
           const position = validPositions.includes(params.position) ? params.position : 'bottom';
           const rawSize = params.size ?? params.fontSize ?? 56;
-          const size = Math.round(
-            PlanNormalizer.clamp(Number(rawSize) || 56, 24, 96)
-          );
+          const size = Math.round(PlanNormalizer.clamp(Number(rawSize) || 56, 24, 96));
           const maxWordsPerLine = Math.round(
             PlanNormalizer.clamp(
               typeof params.maxWordsPerLine === 'number' ? params.maxWordsPerLine : 4,
@@ -315,9 +337,14 @@ export class PlanNormalizer {
             font = options.catalog.fonts[0];
           }
 
-          const primaryColor = PlanNormalizer.normalizeHex(params.primaryColor || params.color, '#FFFFFF');
+          const primaryColor = PlanNormalizer.normalizeHex(
+            params.primaryColor || params.color,
+            '#FFFFFF'
+          );
           const highlightColor = PlanNormalizer.normalizeHex(
-            params.highlightColor || params.highlight || ((options.prompt || '').toLowerCase().includes('yellow') ? '#FFD700' : '#FFD84D'),
+            params.highlightColor ||
+              params.highlight ||
+              ((options.prompt || '').toLowerCase().includes('yellow') ? '#FFD700' : '#FFD84D'),
             '#FFD84D'
           );
 
@@ -613,7 +640,9 @@ export class PlanNormalizer {
     // 1. Silence cutting fallback:
     if (
       boundedCuts.length === 0 &&
-      (promptLower.includes('silence') || promptLower.includes('silent') || promptLower.includes('pause')) &&
+      (promptLower.includes('silence') ||
+        promptLower.includes('silent') ||
+        promptLower.includes('pause')) &&
       options.silences &&
       options.silences.length > 0
     ) {

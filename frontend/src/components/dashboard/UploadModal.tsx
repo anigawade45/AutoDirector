@@ -138,7 +138,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
 
       setProgressPercent(100);
       setStepLabel('Analysis enqueued! Redirecting to editor...');
-      toast.success(`"${title}" uploaded! Video analysis & transcription queued.`, 'Media Uploaded');
+      toast.success(
+        `"${title}" uploaded! Video analysis & transcription queued.`,
+        'Media Uploaded'
+      );
       setTimeout(() => {
         onProjectCreated(project.publicId);
       }, 800);

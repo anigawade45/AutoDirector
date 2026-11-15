@@ -20,14 +20,20 @@ async function main() {
     process.exit(1);
   }
 
-  const project = await ProjectModel.findById(asset.projectId) || await ProjectModel.findOne({ publicId: 'prj_nAXduOXD' });
-  console.log(`Processing Asset ${asset.publicId} for Project ${project?.publicId || asset.projectId}...`);
+  const project =
+    (await ProjectModel.findById(asset.projectId)) ||
+    (await ProjectModel.findOne({ publicId: 'prj_nAXduOXD' }));
+  console.log(
+    `Processing Asset ${asset.publicId} for Project ${project?.publicId || asset.projectId}...`
+  );
 
   const scratch = new JobScratchDirectory('manual_reanalyze');
   const localAudioPath = scratch.resolve('audio_16k.wav');
 
   // Download audio WAV from S3
-  const audioKey = asset.s3?.audioKey || `users/${asset.userId}/projects/${project?.publicId || 'prj_nAXduOXD'}/audio/${asset.publicId}.wav`;
+  const audioKey =
+    asset.s3?.audioKey ||
+    `users/${asset.userId}/projects/${project?.publicId || 'prj_nAXduOXD'}/audio/${asset.publicId}.wav`;
   console.log(`Downloading audio from S3: ${audioKey}...`);
   await S3Service.downloadFile(audioKey, localAudioPath);
 
@@ -108,4 +114,3 @@ main().catch((err) => {
   console.error('Re-analysis error:', err);
   process.exit(1);
 });
-

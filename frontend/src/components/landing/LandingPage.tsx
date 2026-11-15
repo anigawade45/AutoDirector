@@ -43,15 +43,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
   const [tier, setTier] = useState<'free' | 'pro' | 'enterprise'>('pro');
   const [inlineError, setInlineError] = useState<string | null>(null);
 
-  const { isAuthenticated, user, login, register, logout, isLoading, error, clearError } = useAuthStore();
+  const { isAuthenticated, user, login, register, logout, isLoading, error, clearError } =
+    useAuthStore();
 
-  const handleOpenAuth = (mode: 'login' | 'register', tier: 'free' | 'pro' | 'enterprise' = 'pro') => {
+  const handleOpenAuth = (
+    mode: 'login' | 'register',
+    tier: 'free' | 'pro' | 'enterprise' = 'pro'
+  ) => {
     setAuthMode(mode);
     setSelectedTier(tier);
     setAuthModalOpen(true);
   };
 
-  const scrollToAuth = (mode: 'login' | 'register', tierChoice: 'free' | 'pro' | 'enterprise' = 'pro') => {
+  const scrollToAuth = (
+    mode: 'login' | 'register',
+    tierChoice: 'free' | 'pro' | 'enterprise' = 'pro'
+  ) => {
     setInlineMode(mode);
     setTier(tierChoice);
     setInlineError(null);
@@ -142,11 +149,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
         </div>
 
         <nav className="hidden md:flex items-center space-x-7 lg:space-x-9 text-xs uppercase tracking-widest text-[#FFF5F5]/70 font-medium">
-          <a href="#editorial" className="hover:text-[#FFF5F5] transition-colors">Philosophy</a>
-          <a href="#workbench" className="hover:text-[#FFF5F5] transition-colors">Workbench</a>
-          <a href="#capabilities" className="hover:text-[#FFF5F5] transition-colors">Capabilities</a>
-          <a href="#editions" className="hover:text-[#FFF5F5] transition-colors">Editions</a>
-          <a href="#access" className="hover:text-[#FFF5F5] text-[#F7D7D1] transition-colors">Sign In / Register</a>
+          <a href="#editorial" className="hover:text-[#FFF5F5] transition-colors">
+            Philosophy
+          </a>
+          <a href="#workbench" className="hover:text-[#FFF5F5] transition-colors">
+            Workbench
+          </a>
+          <a href="#capabilities" className="hover:text-[#FFF5F5] transition-colors">
+            Capabilities
+          </a>
+          <a href="#editions" className="hover:text-[#FFF5F5] transition-colors">
+            Editions
+          </a>
+          <a href="#access" className="hover:text-[#FFF5F5] text-[#F7D7D1] transition-colors">
+            Sign In / Register
+          </a>
         </nav>
 
         <div className="flex items-center space-x-2 sm:space-x-3">
@@ -186,7 +203,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
         <div className="relative z-10 max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#2A2C2F] border border-[#F7D7D1]/20 text-[#F7D7D1] text-[11px] sm:text-xs font-mono tracking-wide mb-6 sm:mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE] shrink-0" />
-            <span className="hidden sm:inline">The Editorial Room • Reimagined for Modern Filmmaking</span>
+            <span className="hidden sm:inline">
+              The Editorial Room • Reimagined for Modern Filmmaking
+            </span>
             <span className="sm:hidden">The Editorial Room • Modern Filmmaking</span>
           </div>
 
@@ -198,8 +217,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
           </h1>
 
           <p className="text-sm sm:text-base md:text-lg text-[#FFF5F5]/75 leading-relaxed max-w-2xl mx-auto mb-7 sm:mb-10 font-normal">
-            A conversational cutting room built on deterministic multi-pass rendering, Whisper word-sync,
-            and reversible version trees. Speak your creative vision; let the director cut, grade, and pace.
+            A conversational cutting room built on deterministic multi-pass rendering, Whisper
+            word-sync, and reversible version trees. Speak your creative vision; let the director
+            cut, grade, and pace.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-8 sm:mb-14">
@@ -230,31 +250,55 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4 p-3.5 sm:p-5 rounded-xl bg-[#222326] border border-[#393B3F]/70 text-left">
             <div className="p-3 sm:p-3.5 rounded-lg bg-[#18191B]/60 border border-[#393B3F]/40 flex flex-col justify-between">
               <div>
-                <div className="text-[10px] sm:text-xs font-mono uppercase text-[#F7D7D1] tracking-wider mb-0.5 sm:mb-1">Architecture</div>
-                <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">Deterministic 5-Pass</div>
+                <div className="text-[10px] sm:text-xs font-mono uppercase text-[#F7D7D1] tracking-wider mb-0.5 sm:mb-1">
+                  Architecture
+                </div>
+                <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">
+                  Deterministic 5-Pass
+                </div>
               </div>
-              <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">Pixel-exact timeline export</div>
+              <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">
+                Pixel-exact timeline export
+              </div>
             </div>
             <div className="p-3 sm:p-3.5 rounded-lg bg-[#18191B]/60 border border-[#393B3F]/40 flex flex-col justify-between">
               <div>
-                <div className="text-[10px] sm:text-xs font-mono uppercase text-[#F7D7D1] tracking-wider mb-0.5 sm:mb-1">Responsiveness</div>
-                <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">&lt; 100ms Seek Latency</div>
+                <div className="text-[10px] sm:text-xs font-mono uppercase text-[#F7D7D1] tracking-wider mb-0.5 sm:mb-1">
+                  Responsiveness
+                </div>
+                <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">
+                  &lt; 100ms Seek Latency
+                </div>
               </div>
-              <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">Fluid multi-track scrubbing</div>
+              <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">
+                Fluid multi-track scrubbing
+              </div>
             </div>
             <div className="p-3 sm:p-3.5 rounded-lg bg-[#18191B]/60 border border-[#393B3F]/40 flex flex-col justify-between">
               <div>
-                <div className="text-[10px] sm:text-xs font-mono uppercase text-[#F7D7D1] tracking-wider mb-0.5 sm:mb-1">Typography</div>
-                <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">Whisper Word-Pop</div>
+                <div className="text-[10px] sm:text-xs font-mono uppercase text-[#F7D7D1] tracking-wider mb-0.5 sm:mb-1">
+                  Typography
+                </div>
+                <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">
+                  Whisper Word-Pop
+                </div>
               </div>
-              <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">Real-time phonetic sync</div>
+              <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">
+                Real-time phonetic sync
+              </div>
             </div>
             <div className="p-3 sm:p-3.5 rounded-lg bg-[#18191B]/60 border border-[#393B3F]/40 flex flex-col justify-between">
               <div>
-                <div className="text-[10px] sm:text-xs font-mono uppercase text-[#F7D7D1] tracking-wider mb-0.5 sm:mb-1">Safety</div>
-                <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">Branching History</div>
+                <div className="text-[10px] sm:text-xs font-mono uppercase text-[#F7D7D1] tracking-wider mb-0.5 sm:mb-1">
+                  Safety
+                </div>
+                <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">
+                  Branching History
+                </div>
               </div>
-              <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">Instant lossless time-travel</div>
+              <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">
+                Instant lossless time-travel
+              </div>
             </div>
           </div>
 
@@ -279,7 +323,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
         </div>
 
         {/* Workbench Mockup Showcase */}
-        <div id="workbench" className="mt-14 sm:mt-20 relative rounded-2xl border border-[#393B3F] bg-[#222326] shadow-xl overflow-hidden">
+        <div
+          id="workbench"
+          className="mt-14 sm:mt-20 relative rounded-2xl border border-[#393B3F] bg-[#222326] shadow-xl overflow-hidden"
+        >
           {/* Header Bar */}
           <div className="h-11 border-b border-[#393B3F] px-3 sm:px-4 bg-[#1C1D1F] flex items-center justify-between">
             <div className="flex items-center space-x-2 min-w-0 flex-1 mr-3">
@@ -338,7 +385,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
                     >
                       <Play className="w-3.5 h-3.5 fill-current" />
                     </button>
-                    <span className="text-[9px] sm:text-[11px] text-[#FFF5F5]">00:04.200 / 00:58.400</span>
+                    <span className="text-[9px] sm:text-[11px] text-[#FFF5F5]">
+                      00:04.200 / 00:58.400
+                    </span>
                   </div>
                   <div className="flex items-center space-x-1.5 sm:space-x-2 text-[10px]">
                     <span className="px-1.5 sm:px-2 py-0.5 rounded bg-[#2A2C2F] text-[#F7D7D1] border border-[#393B3F] text-[9px] sm:text-[10px]">
@@ -426,7 +475,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
                       Instruction 03
                     </span>
                     <p className="text-[11px] sm:text-xs text-[#FFF5F5]/90">
-                      "Generate word-pop subtitles with cream text and soft peach active word highlights."
+                      "Generate word-pop subtitles with cream text and soft peach active word
+                      highlights."
                     </p>
                   </div>
                 </div>
@@ -457,7 +507,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
       </section>
 
       {/* Capabilities Grid */}
-      <section id="capabilities" className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70">
+      <section
+        id="capabilities"
+        className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70"
+      >
         <div className="max-w-2xl mb-16">
           <div className="text-xs font-mono uppercase tracking-widest text-[#E3B5BE] mb-2">
             Features & Precision
@@ -475,7 +528,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">Voice Activity Excision</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
-              Heuristic Voice Activity Detection parses raw audio down to 100ms grains. Removes dead air without sacrificing natural conversational breathing.
+              Heuristic Voice Activity Detection parses raw audio down to 100ms grains. Removes dead
+              air without sacrificing natural conversational breathing.
             </p>
           </div>
 
@@ -486,7 +540,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">Kinetic Subtitle Typography</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
-              Whisper timestamped word-by-word alignment with active highlight styling. Clean typography that keeps viewers engaged across social feeds.
+              Whisper timestamped word-by-word alignment with active highlight styling. Clean
+              typography that keeps viewers engaged across social feeds.
             </p>
           </div>
 
@@ -497,7 +552,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">Color Science & LUT Matrix</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
-              Warm 35mm film, modern teal & orange, noir mono, and gentle saturation curves compiled via non-destructive FFmpeg matrix transforms.
+              Warm 35mm film, modern teal & orange, noir mono, and gentle saturation curves compiled
+              via non-destructive FFmpeg matrix transforms.
             </p>
           </div>
 
@@ -508,7 +564,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">Intelligent Audio Ducking</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
-              Smooth sidechain volume dip whenever speech is detected, normalized to -14 LUFS broadcast standards with true-peak limiter preservation.
+              Smooth sidechain volume dip whenever speech is detected, normalized to -14 LUFS
+              broadcast standards with true-peak limiter preservation.
             </p>
           </div>
 
@@ -519,7 +576,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">Reversible Version Tree</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
-              Every cut, color grade, and subtitle track is an immutable JSON operation. Jump backward or forward in history with guaranteed state integrity.
+              Every cut, color grade, and subtitle track is an immutable JSON operation. Jump
+              backward or forward in history with guaranteed state integrity.
             </p>
           </div>
 
@@ -530,14 +588,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">High-Resolution Pipeline</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
-              From 480p real-time canvas preview to full 4K UHD 60fps master exports. Pure FFmpeg native compilation without cloud lock-in.
+              From 480p real-time canvas preview to full 4K UHD 60fps master exports. Pure FFmpeg
+              native compilation without cloud lock-in.
             </p>
           </div>
         </div>
       </section>
 
       {/* Philosophy Section */}
-      <section id="editorial" className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70">
+      <section
+        id="editorial"
+        className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70"
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
           <div>
             <div className="text-xs font-mono uppercase tracking-widest text-[#F7D7D1] mb-3">
@@ -547,10 +609,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
               AI should be your skilled assistant editor, not a random filter.
             </h2>
             <p className="text-sm text-[#FFF5F5]/75 leading-relaxed mb-4">
-              Most automated video tools apply generic templates that rob footage of its character. AutoDirector approaches every project through the discipline of traditional film editing: pacing, rhythm, audio hierarchy, and color cohesion.
+              Most automated video tools apply generic templates that rob footage of its character.
+              AutoDirector approaches every project through the discipline of traditional film
+              editing: pacing, rhythm, audio hierarchy, and color cohesion.
             </p>
             <p className="text-sm text-[#FFF5F5]/75 leading-relaxed">
-              You maintain total inspector access to every keyframe, cut point, and typography parameter. Direct high-level creative directions, then fine-tune down to individual milliseconds.
+              You maintain total inspector access to every keyframe, cut point, and typography
+              parameter. Direct high-level creative directions, then fine-tune down to individual
+              milliseconds.
             </p>
           </div>
 
@@ -563,7 +629,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
               <p>&gt; Audio analysis: 4 dead air pauses detected [1.2s, 0.8s, 1.4s, 0.9s]</p>
               <p>&gt; Silence excision filter generated with 120ms safety boundary</p>
               <p>&gt; Whisper alignment: 16 subtitle cues synchronized to phonetic start times</p>
-              <p>&gt; Color grade: Kodak 35mm LUT applied (gamma: 1.05, sat: 0.95, vignette: 0.25)</p>
+              <p>
+                &gt; Color grade: Kodak 35mm LUT applied (gamma: 1.05, sat: 0.95, vignette: 0.25)
+              </p>
               <p>&gt; Audio ducking: speech trigger mapped to music layer at -12dB attenuation</p>
             </div>
             <div className="pt-3 border-t border-[#393B3F] text-[9px] sm:text-[10px] text-[#E3B5BE] flex flex-col xs:flex-row xs:items-center justify-between gap-1">
@@ -575,7 +643,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
       </section>
 
       {/* Editions / Pricing Matrix */}
-      <section id="editions" className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70">
+      <section
+        id="editions"
+        className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70"
+      >
         <div className="max-w-2xl mx-auto text-center mb-12 sm:mb-16">
           <div className="text-xs font-mono uppercase tracking-widest text-[#E3B5BE] mb-2">
             Studio Editions
@@ -637,7 +708,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
 
             <div>
-              <div className="text-xs font-mono uppercase text-[#F7D7D1] mb-1">Professional Suite</div>
+              <div className="text-xs font-mono uppercase text-[#F7D7D1] mb-1">
+                Professional Suite
+              </div>
               <h3 className="text-xl font-bold text-[#FFF5F5] mb-4">Director Pro</h3>
               <div className="text-3xl font-bold text-[#FFF5F5] mb-6">
                 $29<span className="text-xs font-normal text-[#FFF5F5]/60"> / month</span>
@@ -646,19 +719,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
               <ul className="space-y-3 text-xs text-[#FFF5F5]/90 mb-8">
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#F7D7D1] shrink-0" />
-                  <span><strong>500 AI prompts</strong> per day</span>
+                  <span>
+                    <strong>500 AI prompts</strong> per day
+                  </span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#F7D7D1] shrink-0" />
-                  <span><strong>300 Render minutes</strong> per month</span>
+                  <span>
+                    <strong>300 Render minutes</strong> per month
+                  </span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#F7D7D1] shrink-0" />
-                  <span><strong>20 GB High-speed storage</strong></span>
+                  <span>
+                    <strong>20 GB High-speed storage</strong>
+                  </span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#F7D7D1] shrink-0" />
-                  <span><strong>4K UHD master export</strong> @ 60fps</span>
+                  <span>
+                    <strong>4K UHD master export</strong> @ 60fps
+                  </span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#F7D7D1] shrink-0" />
@@ -682,7 +763,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
           {/* Enterprise */}
           <div className="p-5 sm:p-8 rounded-2xl bg-[#222326] border border-[#393B3F] flex flex-col justify-between">
             <div>
-              <div className="text-xs font-mono uppercase text-[#F7D7D1] mb-1">Production House</div>
+              <div className="text-xs font-mono uppercase text-[#F7D7D1] mb-1">
+                Production House
+              </div>
               <h3 className="text-xl font-bold text-[#FFF5F5] mb-4">Studio House</h3>
               <div className="text-3xl font-bold text-[#FFF5F5] mb-6">
                 $99<span className="text-xs font-normal text-[#FFF5F5]/60"> / month</span>
@@ -691,15 +774,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
               <ul className="space-y-3 text-xs text-[#FFF5F5]/80 mb-8">
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#E3B5BE] shrink-0" />
-                  <span><strong>1,000 AI prompts</strong> per day</span>
+                  <span>
+                    <strong>1,000 AI prompts</strong> per day
+                  </span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#E3B5BE] shrink-0" />
-                  <span><strong>1,200 Render minutes</strong> per month</span>
+                  <span>
+                    <strong>1,200 Render minutes</strong> per month
+                  </span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#E3B5BE] shrink-0" />
-                  <span><strong>100 GB Cloud storage</strong></span>
+                  <span>
+                    <strong>100 GB Cloud storage</strong>
+                  </span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#E3B5BE] shrink-0" />
@@ -723,7 +812,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
       </section>
 
       {/* Dedicated Inline Login & Registration Section */}
-      <section id="access" className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70">
+      <section
+        id="access"
+        className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70"
+      >
         <div className="max-w-2xl mx-auto text-center mb-10 sm:mb-14">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#2A2C2F] border border-[#393B3F] text-[#F7D7D1] text-[11px] font-mono tracking-wide mb-3">
             <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE]" />
@@ -920,7 +1012,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
                     </>
                   ) : (
                     <>
-                      <span>{inlineMode === 'login' ? 'Sign In to Studio' : 'Create Studio Account'}</span>
+                      <span>
+                        {inlineMode === 'login' ? 'Sign In to Studio' : 'Create Studio Account'}
+                      </span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}

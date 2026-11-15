@@ -422,7 +422,9 @@ export const InspectorPanel: React.FC = () => {
         <div className="flex items-center justify-between text-[#FFF5F5]/80 font-mono text-[11px] font-semibold mb-2">
           <span className="flex items-center space-x-1.5">
             <Layers className="w-3.5 h-3.5 text-[#E3B5BE]" />
-            <span className="uppercase tracking-wider">Inspector Layers ({effectivePlan?.layers.length || 0})</span>
+            <span className="uppercase tracking-wider">
+              Inspector Layers ({effectivePlan?.layers.length || 0})
+            </span>
           </span>
           <div className="relative">
             <button
@@ -560,143 +562,144 @@ export const InspectorPanel: React.FC = () => {
           </div>
 
           {/* 1. Color Layer Controls */}
-          {activeLayer.layer === 'color' && (() => {
-            const resolvedColor = resolveColorParams(activeLayer.params);
-            return (
-              <div className="space-y-3.5">
-                <div>
-                  <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1.5 font-medium font-mono">
-                    LUT Preset
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {colorPresets.map((preset) => (
-                      <button
-                        key={preset.id}
-                        onClick={() => {
-                          const p = COLOR_PRESETS[preset.id];
-                          updateDraft((d) => {
-                            const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                            if (c) {
-                              c.params.preset = preset.id;
-                              if (p) {
-                                c.params.contrast = p.contrast;
-                                c.params.saturation = p.saturation;
-                                c.params.brightness = p.brightness;
-                                c.params.vignette = p.vignette;
+          {activeLayer.layer === 'color' &&
+            (() => {
+              const resolvedColor = resolveColorParams(activeLayer.params);
+              return (
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1.5 font-medium font-mono">
+                      LUT Preset
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {colorPresets.map((preset) => (
+                        <button
+                          key={preset.id}
+                          onClick={() => {
+                            const p = COLOR_PRESETS[preset.id];
+                            updateDraft((d) => {
+                              const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                              if (c) {
+                                c.params.preset = preset.id;
+                                if (p) {
+                                  c.params.contrast = p.contrast;
+                                  c.params.saturation = p.saturation;
+                                  c.params.brightness = p.brightness;
+                                  c.params.vignette = p.vignette;
+                                }
                               }
-                            }
-                          });
-                        }}
-                        className={`px-2 py-1.5 rounded-lg text-[10px] font-medium border text-center transition-all ${
-                          activeLayer.params?.preset === preset.id
-                            ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border-[#E3B5BE] shadow-sm font-semibold'
-                            : 'bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-[#393B3F]'
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
+                            });
+                          }}
+                          className={`px-2 py-1.5 rounded-lg text-[10px] font-medium border text-center transition-all ${
+                            activeLayer.params?.preset === preset.id
+                              ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border-[#E3B5BE] shadow-sm font-semibold'
+                              : 'bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-[#393B3F]'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
-                    <span>Contrast</span>
-                    <span className="font-mono text-[#F7D7D1]">
-                      {(activeLayer.params?.contrast ?? resolvedColor.contrast).toFixed(2)}
-                    </span>
+                  <div>
+                    <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                      <span>Contrast</span>
+                      <span className="font-mono text-[#F7D7D1]">
+                        {(activeLayer.params?.contrast ?? resolvedColor.contrast).toFixed(2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.70"
+                      max="1.50"
+                      step="0.05"
+                      value={activeLayer.params?.contrast ?? resolvedColor.contrast}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateDraft((d) => {
+                          const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                          if (c) c.params.contrast = val;
+                        });
+                      }}
+                      className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min="0.70"
-                    max="1.50"
-                    step="0.05"
-                    value={activeLayer.params?.contrast ?? resolvedColor.contrast}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      updateDraft((d) => {
-                        const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                        if (c) c.params.contrast = val;
-                      });
-                    }}
-                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
-                  />
-                </div>
 
-                <div>
-                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
-                    <span>Saturation</span>
-                    <span className="font-mono text-[#F7D7D1]">
-                      {(activeLayer.params?.saturation ?? resolvedColor.saturation).toFixed(2)}
-                    </span>
+                  <div>
+                    <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                      <span>Saturation</span>
+                      <span className="font-mono text-[#F7D7D1]">
+                        {(activeLayer.params?.saturation ?? resolvedColor.saturation).toFixed(2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.00"
+                      max="2.00"
+                      step="0.05"
+                      value={activeLayer.params?.saturation ?? resolvedColor.saturation}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateDraft((d) => {
+                          const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                          if (c) c.params.saturation = val;
+                        });
+                      }}
+                      className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min="0.00"
-                    max="2.00"
-                    step="0.05"
-                    value={activeLayer.params?.saturation ?? resolvedColor.saturation}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      updateDraft((d) => {
-                        const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                        if (c) c.params.saturation = val;
-                      });
-                    }}
-                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
-                  />
-                </div>
 
-                <div>
-                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
-                    <span>Vignette Edge</span>
-                    <span className="font-mono text-[#F7D7D1]">
-                      {(activeLayer.params?.vignette ?? resolvedColor.vignette).toFixed(2)}
-                    </span>
+                  <div>
+                    <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                      <span>Vignette Edge</span>
+                      <span className="font-mono text-[#F7D7D1]">
+                        {(activeLayer.params?.vignette ?? resolvedColor.vignette).toFixed(2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.00"
+                      max="1.00"
+                      step="0.05"
+                      value={activeLayer.params?.vignette ?? resolvedColor.vignette}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateDraft((d) => {
+                          const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                          if (c) c.params.vignette = val;
+                        });
+                      }}
+                      className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min="0.00"
-                    max="1.00"
-                    step="0.05"
-                    value={activeLayer.params?.vignette ?? resolvedColor.vignette}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      updateDraft((d) => {
-                        const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                        if (c) c.params.vignette = val;
-                      });
-                    }}
-                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
-                  />
-                </div>
 
-                <div>
-                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
-                    <span>Brightness</span>
-                    <span className="font-mono text-[#F7D7D1]">
-                      {(activeLayer.params?.brightness ?? resolvedColor.brightness).toFixed(2)}
-                    </span>
+                  <div>
+                    <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                      <span>Brightness</span>
+                      <span className="font-mono text-[#F7D7D1]">
+                        {(activeLayer.params?.brightness ?? resolvedColor.brightness).toFixed(2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="-0.50"
+                      max="0.50"
+                      step="0.05"
+                      value={activeLayer.params?.brightness ?? resolvedColor.brightness}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateDraft((d) => {
+                          const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                          if (c) c.params.brightness = val;
+                        });
+                      }}
+                      className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min="-0.50"
-                    max="0.50"
-                    step="0.05"
-                    value={activeLayer.params?.brightness ?? resolvedColor.brightness}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      updateDraft((d) => {
-                        const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                        if (c) c.params.brightness = val;
-                      });
-                    }}
-                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
-                  />
                 </div>
-              </div>
-            );
-          })()}
+              );
+            })()}
 
           {/* 2. Subtitle Layer Controls */}
           {activeLayer.layer === 'subtitle' && (

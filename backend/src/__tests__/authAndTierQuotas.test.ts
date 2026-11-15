@@ -187,7 +187,11 @@ describe('Authentication & Authorization Suite', () => {
       const parts = token.split('.');
       // Tamper with the payload claim (e.g. elevate to enterprise)
       const tamperedPayload = Buffer.from(
-        JSON.stringify({ sub: '507f1f77bcf86cd799439011', email: 'user@studio.ai', tier: 'enterprise' })
+        JSON.stringify({
+          sub: '507f1f77bcf86cd799439011',
+          email: 'user@studio.ai',
+          tier: 'enterprise',
+        })
       ).toString('base64url');
 
       const tamperedToken = `${parts[0]}.${tamperedPayload}.${parts[2]}`;
@@ -511,7 +515,11 @@ describe('Authentication & Authorization Suite', () => {
         mockReq = {
           params: { id: 'prj_1' },
           body: { profile: 'final_1080p' },
-          user: { _id: '507f1f77bcf86cd799439011', id: '507f1f77bcf86cd799439011', tier: 'free' } as any,
+          user: {
+            _id: '507f1f77bcf86cd799439011',
+            id: '507f1f77bcf86cd799439011',
+            tier: 'free',
+          } as any,
         };
 
         await RendersController.enqueueExport(mockReq as Request, mockRes as Response, nextFn);
@@ -533,7 +541,11 @@ describe('Authentication & Authorization Suite', () => {
         mockReq = {
           params: { id: 'prj_1' },
           body: { prompt: 'Add dramatic cinematic music' },
-          user: { _id: '507f1f77bcf86cd799439011', id: '507f1f77bcf86cd799439011', tier: 'free' } as any,
+          user: {
+            _id: '507f1f77bcf86cd799439011',
+            id: '507f1f77bcf86cd799439011',
+            tier: 'free',
+          } as any,
         };
 
         await PromptsController.submitPrompt(mockReq as Request, mockRes as Response, nextFn);
@@ -563,7 +575,11 @@ describe('Authentication & Authorization Suite', () => {
             contentType: 'video/mp4',
             sizeBytes: 500 * 1024 * 1024, // 500 MB (exceeds 200MB remaining!)
           },
-          user: { _id: '507f1f77bcf86cd799439011', id: '507f1f77bcf86cd799439011', tier: 'free' } as any,
+          user: {
+            _id: '507f1f77bcf86cd799439011',
+            id: '507f1f77bcf86cd799439011',
+            tier: 'free',
+          } as any,
         };
 
         await UploadsController.createUpload(mockReq as Request, mockRes as Response, nextFn);
@@ -580,9 +596,11 @@ describe('Authentication & Authorization Suite', () => {
       const mockFindChain = {
         populate: vi.fn().mockReturnThis(),
         sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue([
-          { publicId: 'prj_userA_1', title: "User A's Vlog", userId: 'user_A' },
-        ]),
+        limit: vi
+          .fn()
+          .mockResolvedValue([
+            { publicId: 'prj_userA_1', title: "User A's Vlog", userId: 'user_A' },
+          ]),
       };
       (ProjectModel.find as any).mockReturnValue(mockFindChain);
 
@@ -607,7 +625,7 @@ describe('Authentication & Authorization Suite', () => {
       expect(data[0].publicId).toBe('prj_userA_1');
     });
 
-    it('rejects access to another user\'s project with 404 PROJECT_NOT_FOUND', async () => {
+    it("rejects access to another user's project with 404 PROJECT_NOT_FOUND", async () => {
       // Mock findOne returns null because project belongs to User B, not User A
       (ProjectModel.findOne as any).mockReturnValue({
         populate: vi.fn().mockResolvedValue(null),
@@ -632,7 +650,7 @@ describe('Authentication & Authorization Suite', () => {
       );
     });
 
-    it('prevents updating another user\'s project', async () => {
+    it("prevents updating another user's project", async () => {
       (ProjectModel.findOne as any).mockResolvedValue(null);
 
       mockReq = {
@@ -648,7 +666,7 @@ describe('Authentication & Authorization Suite', () => {
       );
     });
 
-    it('prevents deleting another user\'s project', async () => {
+    it("prevents deleting another user's project", async () => {
       (ProjectModel.findOne as any).mockResolvedValue(null);
 
       mockReq = {
@@ -727,7 +745,7 @@ describe('Authentication & Authorization Suite', () => {
       expect(data.messages[1].planVersion).toBe(2);
     });
 
-    it('rejects chat history retrieval for another user\'s project with 404', async () => {
+    it("rejects chat history retrieval for another user's project with 404", async () => {
       // User B tries to fetch User A's project chat
       (ProjectModel.findOne as any).mockResolvedValue(null);
 
