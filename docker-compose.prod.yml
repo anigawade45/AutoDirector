@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # -------------------------------------------------------------
   # 1. Production API Server
@@ -48,6 +46,9 @@ services:
   # -------------------------------------------------------------
   worker-analysis:
     image: ai-video-api:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: ai_video_prod_worker_analysis
     restart: always
     command: ['npm', '--workspace=backend', 'run', 'worker:analysis']
@@ -77,6 +78,9 @@ services:
   # -------------------------------------------------------------
   worker-render:
     image: ai-video-api:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: ai_video_prod_worker_render
     restart: always
     command: ['npm', '--workspace=backend', 'run', 'worker:render']
