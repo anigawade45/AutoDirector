@@ -9,7 +9,7 @@ import { EditPlanModel } from '../models/EditPlan.js';
 import { analysisQueue, previewQueue } from '../services/queue/queueService.js';
 import { startAnalysisWorker } from '../workers/analysisWorker.js';
 import { startRenderWorker } from '../workers/renderWorker.js';
-import { nanoid } from 'nanoid';
+import { nanoid } from '../utils/id.js';
 import mongoose from 'mongoose';
 
 async function runEndToEndWorkerVerification() {

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { nanoid } from 'nanoid';
+import { nanoid } from '../utils/id.js';
 
 declare global {
   namespace Express {

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { nanoid } from 'nanoid';
+import { nanoid } from '../utils/id.js';
 import { S3Service } from '../services/storage/s3Service.js';
 import { UploadSessionStore } from '../services/storage/uploadSessionStore.js';
 import { AssetModel } from '../models/Asset.js';

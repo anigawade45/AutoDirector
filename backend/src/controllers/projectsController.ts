@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import { nanoid } from 'nanoid';
+import { nanoid } from '../utils/id.js';
 import { ProjectModel } from '../models/Project.js';
 import { AssetModel } from '../models/Asset.js';
 import { AnalysisResultModel } from '../models/AnalysisResult.js';

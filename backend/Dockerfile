@@ -24,7 +24,7 @@ COPY backend/ ./backend/
 RUN npm run build:shared && npm run build:backend
 
 # Prune devDependencies to reduce image size
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev && mkdir -p /app/backend/node_modules
 
 # ==============================================================================
 # Final Production Runtime Stage
@@ -55,6 +55,7 @@ COPY --from=builder /app/shared/package*.json ./shared/
 COPY --from=builder /app/shared/dist ./shared/dist
 COPY --from=builder /app/backend/package*.json ./backend/
 COPY --from=builder /app/backend/dist ./backend/dist
+COPY --from=builder /app/backend/node_modules ./backend/node_modules
 
 # Create scratch directory for render isolation
 RUN mkdir -p /tmp/renders && chmod 777 /tmp/renders
