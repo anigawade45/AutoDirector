@@ -21,46 +21,50 @@ if (foundPath) {
 }
 
 const envSchema = z.object({
-  PORT: z.string().transform(Number),
-  NODE_ENV: z.enum(['development', 'production', 'test']),
-  API_BASE_URL: z.string(),
-  CORS_ORIGIN: z.string(),
+  PORT: z.string().optional().default('4000').transform(Number),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
+  API_BASE_URL: z.string().optional().default('http://localhost:4000/api'),
+  CORS_ORIGIN: z.string().optional().default('*'),
 
-  JWT_SECRET: z.string(),
-  INTERNAL_WORKER_SECRET: z.string(),
+  JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
+  INTERNAL_WORKER_SECRET: z.string().min(1, 'INTERNAL_WORKER_SECRET is required'),
 
-  MONGODB_URI: z.string(),
+  MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
 
-  REDIS_HOST: z.string(),
-  REDIS_PORT: z.string().transform(Number),
+  REDIS_HOST: z.string().optional().default('redis'),
+  REDIS_PORT: z.string().optional().default('6379').transform(Number),
   REDIS_PASSWORD: z.string().optional().default(''),
   REDIS_TLS: z
     .string()
     .optional()
+    .default('false')
     .transform((val) => val === 'true'),
 
   LOCALSTACK_AUTH_TOKEN: z.string().optional().default(''),
-  AWS_REGION: z.string(),
-  AWS_ACCESS_KEY_ID: z.string(),
-  AWS_SECRET_ACCESS_KEY: z.string(),
-  S3_BUCKET_NAME: z.string(),
-  S3_ENDPOINT: z.string(),
+  AWS_REGION: z.string().optional().default('ap-southeast-2'),
+  AWS_ACCESS_KEY_ID: z.string().min(1, 'AWS_ACCESS_KEY_ID is required'),
+  AWS_SECRET_ACCESS_KEY: z.string().min(1, 'AWS_SECRET_ACCESS_KEY is required'),
+  S3_BUCKET_NAME: z.string().min(1, 'S3_BUCKET_NAME is required'),
+  S3_ENDPOINT: z.string().optional().default(''),
   S3_FORCE_PATH_STYLE: z
     .string()
+    .optional()
+    .default('false')
     .transform((val) => val === 'true'),
 
-  AI_PROVIDER: z.enum(['gemini', 'openai']),
-  AI_MODEL: z.string(),
+  AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
+  AI_MODEL: z.string().default('gemini-1.5-flash'),
   GEMINI_API_KEY: z.string().optional().default(''),
   OPENAI_API_KEY: z.string().optional().default(''),
 
   WHISPER_PATH: z.string().optional().default(''),
-  WHISPER_MODEL: z.string(),
+  WHISPER_MODEL: z.string().optional().default('base'),
 
   ENABLE_IN_PROCESS_WORKERS: z
     .string()
     .optional()
-    .transform((val) => val !== 'false'),
+    .default('false')
+    .transform((val) => val === 'true'),
 
   FFMPEG_PATH: z
     .string()
@@ -79,7 +83,24 @@ const envSchema = z.object({
         return ffprobeInstaller.path;
       return val && val.trim() ? val : ffprobeInstaller?.path || 'ffprobe';
     }),
-  TEMP_MEDIA_DIR: z.string(),
+  TEMP_MEDIA_DIR: z.string().optional().default('/tmp/renders'),
 });
 
-export const env = envSchema.parse(process.env);
+let parsedEnv: z.infer<typeof envSchema>;
+try {
+  parsedEnv = envSchema.parse(process.env);
+} catch (err: any) {
+  console.error('\n======================================================');
+  console.error('❌ FATAL: Environment variable validation failed!');
+  if (err instanceof z.ZodError) {
+    err.errors.forEach((e) => {
+      console.error(`   - Missing or invalid: ${e.path.join('.')} (${e.message})`);
+    });
+  } else {
+    console.error('   ', err);
+  }
+  console.error('======================================================\n');
+  process.exit(1);
+}
+
+export const env = parsedEnv;

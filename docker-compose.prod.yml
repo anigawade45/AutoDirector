@@ -51,7 +51,7 @@ services:
       dockerfile: backend/Dockerfile
     container_name: ai_video_prod_worker_analysis
     restart: always
-    command: ['npm', '--workspace=backend', 'run', 'worker:analysis']
+    command: ['node', 'backend/dist/workers/analysisWorker.js']
     env_file:
       - .env.production
     environment:
@@ -83,7 +83,7 @@ services:
       dockerfile: backend/Dockerfile
     container_name: ai_video_prod_worker_render
     restart: always
-    command: ['npm', '--workspace=backend', 'run', 'worker:render']
+    command: ['node', 'backend/dist/workers/renderWorker.js']
     env_file:
       - .env.production
     environment:
