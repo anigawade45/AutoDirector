@@ -228,7 +228,7 @@ export class ProjectsController {
           planId: m.planId?.toString(),
           versionResult: m.versionResult,
           planVersion: m.versionResult,
-          timestamp: m.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestamp: m.createdAt.toISOString(),
           createdAt: m.createdAt.toISOString(),
         }));
       } catch (chatErr) {

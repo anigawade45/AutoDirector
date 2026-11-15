@@ -60,14 +60,13 @@ export const ChatPanel: React.FC = () => {
               role: m.role || 'user',
               text: m.text,
               planVersion: m.planVersion || m.versionResult,
-              timestamp:
-                m.timestamp ||
-                (m.createdAt
-                  ? new Date(m.createdAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
-                  : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+              timestamp: m.createdAt
+                ? new Date(m.createdAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : m.timestamp ||
+                  new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             }))
           );
         }

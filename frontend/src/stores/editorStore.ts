@@ -244,7 +244,13 @@ export const useEditorStore = create<EditorStoreState>()(
         };
         state.playback.duration = state.project.durationSec;
         if (Array.isArray(proj.chatMessages)) {
-          state.chat.messages = proj.chatMessages;
+          state.chat.messages = proj.chatMessages.map((m: any) => ({
+            ...m,
+            timestamp: m.createdAt
+              ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : m.timestamp ||
+                new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }));
         } else {
           state.chat.messages = [];
         }
