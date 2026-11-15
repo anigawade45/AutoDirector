@@ -15,7 +15,7 @@ import {
   mapCuesToOutput,
   verifyTimelineInvariants,
 } from '@ai-video/shared';
-import { nanoid } from 'nanoid';
+import { nanoid } from '../../utils/id.js';
 
 export interface ResolverInput {
   plan: EditPlan;
