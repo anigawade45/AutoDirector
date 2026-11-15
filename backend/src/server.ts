@@ -35,8 +35,8 @@ async function bootstrap() {
   // 4. Initialize Express application
   const app = createApp();
 
-  // 5. In development mode, run workers in-process for single-command developer workflow
-  if (env.NODE_ENV === 'development' && env.ENABLE_IN_PROCESS_WORKERS) {
+  // 5. Run in-process workers if enabled (e.g. for development or unified cloud hosting)
+  if (env.ENABLE_IN_PROCESS_WORKERS) {
     startAnalysisWorker();
     startRenderWorker('preview');
     startRenderWorker('render');

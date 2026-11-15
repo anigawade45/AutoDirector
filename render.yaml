@@ -13,6 +13,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: API_BASE_URL
+        value: https://ai-video-api-eaui.onrender.com/api
       - key: ENABLE_IN_PROCESS_WORKERS
         value: "true"
       - key: CORS_ORIGIN
@@ -72,7 +74,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: ai-video-api
-          property: host
+        value: https://ai-video-api-eaui.onrender.com/api
