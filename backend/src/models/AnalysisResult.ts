@@ -27,7 +27,7 @@ export interface IAnalysisResultDocument extends Document {
 
 const AnalysisResultSchema = new Schema<IAnalysisResultDocument>(
   {
-    assetId: { type: Schema.Types.ObjectId, ref: 'Asset', required: true, unique: true },
+    assetId: { type: Schema.Types.Mixed, ref: 'Asset', required: true, unique: true },
     version: { type: Number, default: 1 },
     status: {
       type: String,

@@ -40,6 +40,20 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
     return;
   }
 
+  // Handle MongoDB duplicate key errors (code 11000)
+  if (err.code === 11000 || (err.name === 'MongoServerError' && err.code === 11000)) {
+    const field = err.keyPattern ? Object.keys(err.keyPattern)[0] : 'field';
+    res.status(409).json({
+      success: false,
+      error: {
+        code: 'USER_EXISTS',
+        message: `An account with this ${field} already exists. Please sign in instead.`,
+      },
+      requestId,
+    });
+    return;
+  }
+
   // Handle known application errors
   if (err instanceof AppError) {
     res.status(err.statusCode).json({

@@ -9,6 +9,8 @@ import { TimelineModel } from '../models/Timeline.js';
 import { TimelineVersionModel } from '../models/TimelineVersion.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { CatalogModel } from '../models/Catalog.js';
+import { UserModel } from '../models/User.js';
+import mongoose from 'mongoose';
 import { PlannerService } from '../services/planner/plannerService.js';
 import { PlanResolver } from '../services/resolver/planResolver.js';
 import { previewQueue } from '../services/queue/queueService.js';
@@ -21,10 +23,25 @@ export class PromptsController {
   static async submitPrompt(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id: projectId } = req.params;
-      const { prompt, baseVersion, requestPreview = true } = req.body;
+      const { prompt, baseVersion, requestPreview = true, model } = req.body;
 
       if (!prompt) {
         throw new AppError(400, 'BAD_REQUEST', 'Prompt string is required');
+      }
+
+      // Tier prompt quota enforcement
+      const rawUserId = req.user?.id || req.user?._id;
+      if (rawUserId && mongoose.isValidObjectId(rawUserId) && typeof UserModel.findById === 'function') {
+        const user = await UserModel.findById(rawUserId);
+        if (user && user.quota && user.usage) {
+          if (user.usage.promptsToday >= user.quota.promptsPerDay) {
+            throw new AppError(
+              429,
+              'QUOTA_EXCEEDED',
+              `Daily prompt limit of ${user.quota.promptsPerDay} prompts reached for tier '${user.tier}'. Upgrade to increase limits.`
+            );
+          }
+        }
       }
 
       const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
@@ -40,8 +57,14 @@ export class PromptsController {
         );
       }
 
-      const asset = await AssetModel.findById(project.baseAssetId);
-      const analysis = await AnalysisResultModel.findOne({ assetId: project.baseAssetId });
+      const asset =
+        (await AssetModel.findById(project.baseAssetId)) ||
+        (await AssetModel.findOne({ publicId: project.baseAssetId }));
+      const analysis = await AnalysisResultModel.findOne({
+        assetId: {
+          $in: [project.baseAssetId, asset?._id, asset?.publicId].filter(Boolean),
+        },
+      });
 
       if (!asset || !analysis) {
         throw new AppError(
@@ -115,6 +138,7 @@ export class PromptsController {
       // Record user chat message
       await ChatMessageModel.create({
         projectId: project._id,
+        userId: rawUserId,
         role: 'user',
         text: prompt,
       });
@@ -128,31 +152,64 @@ export class PromptsController {
         project.headVersion,
         compactSummary,
         allowedCatalog,
-        currentPlan
+        currentPlan,
+        model
       );
 
-      // Persist immutable EditPlan
-      const planDoc = await EditPlanModel.create({
-        projectId: project._id,
-        version: nextVersion,
-        parentVersion: project.headVersion > 0 ? project.headVersion : null,
-        prompt,
-        plan,
-        patch: patch || [],
-        model: plan.meta.model,
-        tokensIn,
-        tokensOut,
-        validation: {
-          repairAttempts,
-          warnings: [],
-        },
-      });
+      // Persist immutable EditPlan (with duplicate-key resilience for crashed/replayed transactions)
+      let planDoc: any;
+      try {
+        planDoc = await EditPlanModel.create({
+          projectId: project._id,
+          version: nextVersion,
+          parentVersion: project.headVersion > 0 ? project.headVersion : null,
+          prompt,
+          plan,
+          patch: patch || [],
+          model: plan.meta.model,
+          tokensIn,
+          tokensOut,
+          validation: {
+            repairAttempts,
+            warnings: [],
+          },
+        });
+      } catch (err: any) {
+        if (err.code === 11000 && typeof EditPlanModel.findOneAndUpdate === 'function') {
+          planDoc = await EditPlanModel.findOneAndUpdate(
+            { projectId: project._id, version: nextVersion },
+            {
+              $set: {
+                parentVersion: project.headVersion > 0 ? project.headVersion : null,
+                prompt,
+                plan,
+                patch: patch || [],
+                model: plan.meta.model,
+                tokensIn,
+                tokensOut,
+                validation: {
+                  repairAttempts,
+                  warnings: [],
+                },
+              },
+            },
+            { upsert: true, new: true }
+          );
+        } else {
+          throw err;
+        }
+      }
 
       // Record assistant chat message
+      const assistantText =
+        (plan.meta as any)?.rationale ||
+        `Created EditPlan v${nextVersion}. Configured ${plan.layers?.length || 0} active layers.`;
+
       await ChatMessageModel.create({
         projectId: project._id,
+        userId: rawUserId,
         role: 'assistant',
-        text: `Generated edit plan v${nextVersion}`,
+        text: assistantText,
         planId: planDoc._id,
         versionResult: nextVersion,
       });
@@ -184,21 +241,44 @@ export class PromptsController {
         }
       );
 
-      // Save immutable snapshot in timelineVersions
-      await TimelineVersionModel.create({
-        projectId: project._id,
-        userId: req.user!._id,
-        version: nextVersion,
-        parentVersion: project.headVersion,
-        source: 'ai',
-        label: prompt.slice(0, 40),
-        planId: planDoc._id,
-        snapshot: resolvedTimeline,
-        snapshotHash,
-      });
+      // Save immutable snapshot in timelineVersions (with duplicate-key resilience)
+      try {
+        await TimelineVersionModel.create({
+          projectId: project._id,
+          userId: req.user!._id,
+          version: nextVersion,
+          parentVersion: project.headVersion,
+          source: 'ai',
+          label: prompt.slice(0, 40),
+          planId: planDoc._id,
+          snapshot: resolvedTimeline,
+          snapshotHash,
+        });
+      } catch (err: any) {
+        if (err.code === 11000 && typeof TimelineVersionModel.findOneAndUpdate === 'function') {
+          await TimelineVersionModel.findOneAndUpdate(
+            { projectId: project._id, version: nextVersion },
+            {
+              $set: {
+                userId: req.user!._id,
+                parentVersion: project.headVersion,
+                source: 'ai',
+                label: prompt.slice(0, 40),
+                planId: planDoc._id,
+                snapshot: resolvedTimeline,
+                snapshotHash,
+              },
+            },
+            { upsert: true, new: true }
+          );
+        } else {
+          throw err;
+        }
+      }
 
       // Update project headVersion and version list index
       project.headVersion = nextVersion;
+      project.versions = project.versions.filter((v) => v.version !== nextVersion);
       project.versions.push({
         version: nextVersion,
         label: prompt.slice(0, 40),
@@ -239,6 +319,14 @@ export class PromptsController {
         previewJobId = `job_${previewJob._id.toString()}`;
       }
 
+      // Record prompt usage for tier quota tracking
+      if (rawUserId && mongoose.isValidObjectId(rawUserId) && typeof UserModel.updateOne === 'function') {
+        await UserModel.updateOne(
+          { _id: rawUserId },
+          { $inc: { 'usage.promptsToday': 1 } }
+        );
+      }
+
       res.status(200).json({
         success: true,
         data: {
@@ -248,6 +336,95 @@ export class PromptsController {
           state: 'planned',
           plan,
           previewJobId,
+        },
+        requestId: req.id,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getChatHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const rawUserId = req.user?._id;
+
+      const project = await ProjectModel.findOne({
+        publicId: id,
+        userId: rawUserId,
+        deletedAt: null,
+      });
+
+      if (!project) {
+        throw new AppError(404, 'PROJECT_NOT_FOUND', `Project ${id} not found or unauthorized`);
+      }
+
+      const messages = await ChatMessageModel.find({
+        projectId: project._id,
+        $or: [{ userId: rawUserId }, { userId: { $exists: false } }],
+      }).sort({ createdAt: 1 });
+
+      const formatted = messages.map((m) => ({
+        id: m._id.toString(),
+        projectId: project.publicId || project._id.toString(),
+        role: m.role,
+        text: m.text,
+        planId: m.planId?.toString(),
+        versionResult: m.versionResult,
+        planVersion: m.versionResult,
+        timestamp: m.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        createdAt: m.createdAt.toISOString(),
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: {
+          projectId: project.publicId || project._id.toString(),
+          messages: formatted,
+        },
+        requestId: req.id,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async postChatMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { text, role = 'user' } = req.body;
+      const rawUserId = req.user?._id;
+
+      if (!text || typeof text !== 'string' || !text.trim()) {
+        throw new AppError(400, 'INVALID_MESSAGE', 'Message text must be a non-empty string');
+      }
+
+      const project = await ProjectModel.findOne({
+        publicId: id,
+        userId: rawUserId,
+        deletedAt: null,
+      });
+
+      if (!project) {
+        throw new AppError(404, 'PROJECT_NOT_FOUND', `Project ${id} not found or unauthorized`);
+      }
+
+      const msg = await ChatMessageModel.create({
+        projectId: project._id,
+        userId: rawUserId,
+        role: ['user', 'assistant', 'system'].includes(role) ? role : 'user',
+        text: text.trim(),
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          id: msg._id.toString(),
+          projectId: project.publicId || project._id.toString(),
+          role: msg.role,
+          text: msg.text,
+          timestamp: msg.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          createdAt: msg.createdAt.toISOString(),
         },
         requestId: req.id,
       });

@@ -5,6 +5,8 @@ import { UploadSessionStore } from '../services/storage/uploadSessionStore.js';
 import { AssetModel } from '../models/Asset.js';
 import { ProjectModel } from '../models/Project.js';
 import { RenderJobModel } from '../models/RenderJob.js';
+import { UserModel } from '../models/User.js';
+import mongoose from 'mongoose';
 import { analysisQueue } from '../services/queue/queueService.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { env } from '../config/env.js';
@@ -62,6 +64,22 @@ export class UploadsController {
       const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project does not exist or unauthorized');
+      }
+
+      // Tier storage quota enforcement
+      const rawUserId = req.user?.id || req.user?._id;
+      if (rawUserId && mongoose.isValidObjectId(rawUserId) && typeof UserModel.findById === 'function') {
+        const user = await UserModel.findById(rawUserId);
+        if (user && user.quota && user.usage) {
+          if (user.usage.storageBytesUsed + sizeBytes > user.quota.storageBytes) {
+            const availableMb = Math.max(0, (user.quota.storageBytes - user.usage.storageBytesUsed) / (1024 * 1024)).toFixed(1);
+            throw new AppError(
+              403,
+              'QUOTA_EXCEEDED',
+              `Upload of ${(sizeBytes / (1024 * 1024)).toFixed(1)} MB exceeds remaining storage (${availableMb} MB available) for tier '${user.tier}'. Upgrade to expand storage.`
+            );
+          }
+        }
       }
 
       // Check upload deduplication by checksumSha256

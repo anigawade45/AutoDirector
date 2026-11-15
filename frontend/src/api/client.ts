@@ -11,13 +11,19 @@ import {
   EnqueueJobResponseData,
   DownloadUrlResponseData,
   ApiSuccessResponse,
+  UserProfile,
+  AuthResponseData,
+  RegisterRequest,
+  LoginRequest,
 } from '@ai-video/shared';
 
-const BASE_URL = '/api';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
   const headers = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   };
 
@@ -29,13 +35,31 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const payload = await response.json();
 
   if (!response.ok || !payload.success) {
-    throw new Error(payload?.error?.message || 'API request failed');
+    const error = new Error(payload?.error?.message || 'API request failed') as any;
+    error.status = response.status;
+    error.code = payload?.error?.code;
+    throw error;
   }
 
   return (payload as ApiSuccessResponse<T>).data;
 }
 
 export const api = {
+  // Auth
+  register: (data: RegisterRequest) =>
+    request<AuthResponseData>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  login: (data: LoginRequest) =>
+    request<AuthResponseData>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getMe: () => request<{ user: UserProfile }>('/auth/me'),
+
   // Uploads
   createUploadSession: (data: CreateUploadRequest) =>
     request<CreateUploadResponseData>('/uploads', {
@@ -88,6 +112,15 @@ export const api = {
     }),
 
   // Prompts & AI Planning
+  getChatHistory: (projectId: string) =>
+    request<{ projectId: string; messages: any[] }>(`/projects/${projectId}/chat`),
+
+  sendChatMessage: (projectId: string, text: string, role: string = 'user') =>
+    request<any>(`/projects/${projectId}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ text, role }),
+    }),
+
   submitPrompt: (projectId: string, data: PromptRequest) =>
     request<PromptResponseData>(`/projects/${projectId}/prompt`, {
       method: 'POST',
@@ -95,13 +128,24 @@ export const api = {
     }),
 
   // Plan versions & patches
-  getPlanVersion: (projectId: string, version: number) =>
-    request<any>(`/projects/${projectId}/plans/${version}`),
+  getPlanVersion: (projectId: string, version?: number | string) => {
+    const v =
+      version !== undefined && version !== null && !isNaN(Number(version)) ? version : 'latest';
+    return request<any>(`/projects/${projectId}/plans/${v}`);
+  },
 
-  patchPlan: (projectId: string, version: number, data: PatchPlanRequest) =>
-    request<any>(`/projects/${projectId}/plans/${version}`, {
+  patchPlan: (projectId: string, version: number | string, data: PatchPlanRequest) => {
+    const v =
+      version !== undefined && version !== null && !isNaN(Number(version)) ? version : 'latest';
+    return request<any>(`/projects/${projectId}/plans/${v}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    });
+  },
+
+  revertPlan: (projectId: string, version: number | string) =>
+    request<any>(`/projects/${projectId}/plans/${version}/revert`, {
+      method: 'POST',
     }),
 
   // Previews & Exports
@@ -117,6 +161,13 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  // Captions
+  updateCaptions: (projectId: string, cues: any[], language?: string) =>
+    request<any>(`/projects/${projectId}/captions`, {
+      method: 'PATCH',
+      body: JSON.stringify({ cues, language }),
+    }),
+
   // Jobs & SSE
   getJobStatus: (jobId: string) => request<any>(`/jobs/${jobId}`),
 
@@ -128,38 +179,102 @@ export const api = {
     onError?: (err: any) => void
   ): (() => void) => {
     const cleanId = jobId.replace(/^job_/, '');
-    const eventSource = new EventSource(`${BASE_URL}/jobs/${cleanId}/events`);
+    let isFinished = false;
+    let eventSource: EventSource | null = null;
+    let pollTimer: any = null;
 
-    eventSource.addEventListener('progress', (e) => {
-      try {
-        onProgress(JSON.parse(e.data));
-      } catch (err) {
-        console.error('Error parsing progress SSE event:', err);
+    const handleTerminalOrProgress = (data: any) => {
+      if (isFinished) return;
+      const state = data?.state;
+      const isDone = state === 'done' || state === 'completed';
+      const isFailed = state === 'failed';
+
+      if (isDone) {
+        isFinished = true;
+        onProgress({ ...data, state: 'done', percent: 100 });
+        cleanup();
+      } else if (isFailed) {
+        isFinished = true;
+        onProgress({ ...data, state: 'failed' });
+        cleanup();
+      } else {
+        onProgress(data);
       }
-    });
+    };
 
-    eventSource.addEventListener('state', (e) => {
+    // 1. Live SSE Connection
+    try {
+      eventSource = new EventSource(`${BASE_URL}/jobs/${cleanId}/events`);
+
+      eventSource.addEventListener('progress', (e) => {
+        try {
+          handleTerminalOrProgress(JSON.parse(e.data));
+        } catch (err) {
+          console.error('Error parsing progress SSE event:', err);
+        }
+      });
+
+      eventSource.addEventListener('state', (e) => {
+        try {
+          handleTerminalOrProgress(JSON.parse(e.data));
+        } catch (err) {
+          console.error('Error parsing state SSE event:', err);
+        }
+      });
+
+      eventSource.addEventListener('done', (e) => {
+        try {
+          handleTerminalOrProgress(JSON.parse(e.data));
+        } catch (err) {
+          console.error('Error parsing done SSE event:', err);
+        }
+      });
+
+      eventSource.onmessage = (e) => {
+        try {
+          handleTerminalOrProgress(JSON.parse(e.data));
+        } catch {}
+      };
+
+      eventSource.addEventListener('error', (e) => {
+        // SSE error or early socket close - fallback poller will complete the job seamlessly
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to initialize EventSource, using polling fallback:', e);
+    }
+
+    // 2. High-res polling fallback: guarantees job completion even if job finished before SSE attached
+    const pollStatus = async () => {
+      if (isFinished) return;
       try {
-        onProgress(JSON.parse(e.data));
+        const job = await api.getJobStatus(cleanId);
+        if (job) {
+          handleTerminalOrProgress(job);
+        }
       } catch (err) {
-        console.error('Error parsing state SSE event:', err);
+        // Ignore background polling errors
       }
-    });
+    };
 
-    eventSource.addEventListener('done', (e) => {
-      try {
-        onProgress(JSON.parse(e.data));
+    // Immediate poll check (covers jobs finished in < 100ms)
+    pollStatus();
+    pollTimer = setInterval(pollStatus, 1500);
+
+    const cleanup = () => {
+      if (eventSource) {
         eventSource.close();
-      } catch (err) {
-        console.error('Error parsing done SSE event:', err);
+        eventSource = null;
       }
-    });
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
 
-    eventSource.addEventListener('error', (e) => {
-      if (onError) onError(e);
-      eventSource.close();
-    });
-
-    return () => eventSource.close();
+    return cleanup;
   },
 };

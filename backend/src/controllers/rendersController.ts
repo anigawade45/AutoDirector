@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { ProjectModel } from '../models/Project.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { TimelineVersionModel } from '../models/TimelineVersion.js';
+import { UserModel } from '../models/User.js';
+import mongoose from 'mongoose';
 import { previewQueue, renderQueue } from '../services/queue/queueService.js';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -116,6 +118,21 @@ export class RendersController {
             'UPGRADE_REQUIRED',
             '4K export profile is reserved for Pro and Enterprise tiers. Please upgrade your plan.'
           );
+        }
+      }
+
+      // Enforce render minutes quota
+      const rawUserId = req.user?.id || req.user?._id;
+      if (rawUserId && mongoose.isValidObjectId(rawUserId) && typeof UserModel.findById === 'function') {
+        const user = await UserModel.findById(rawUserId);
+        if (user && user.quota && user.usage) {
+          if (user.usage.renderMinutesUsed >= user.quota.renderMinutes) {
+            throw new AppError(
+              403,
+              'QUOTA_EXCEEDED',
+              `Monthly render quota of ${user.quota.renderMinutes} minutes exceeded for tier '${user.tier}'. Upgrade to increase limits.`
+            );
+          }
         }
       }
 

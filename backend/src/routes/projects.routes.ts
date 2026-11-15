@@ -19,7 +19,9 @@ projectsRouter.post('/:id/unarchive', ProjectsController.unarchiveProject);
 projectsRouter.delete('/:id', ProjectsController.deleteProject);
 projectsRouter.delete('/:id/purge', ProjectsController.purgeProject);
 
-// AI Prompt to Edit Plan
+// AI Prompt & Chat History
+projectsRouter.get('/:id/chat', PromptsController.getChatHistory);
+projectsRouter.post('/:id/chat', PromptsController.postChatMessage);
 projectsRouter.post('/:id/prompt', PromptsController.submitPrompt);
 
 // Immutable Plan Versioning & Patches
@@ -30,3 +32,6 @@ projectsRouter.post('/:id/plans/:v/revert', PlansController.revertPlan);
 // Previews & Exports
 projectsRouter.post('/:id/preview', RendersController.enqueuePreview);
 projectsRouter.post('/:id/export', RendersController.enqueueExport);
+
+// Captions & Subtitles
+projectsRouter.patch('/:id/captions', ProjectsController.updateCaptions);

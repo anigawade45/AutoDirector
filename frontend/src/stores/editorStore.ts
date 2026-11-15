@@ -58,6 +58,7 @@ export interface EditorStoreState {
     status: string;
     assetId: string;
     durationSec: number;
+    headVersion?: number;
     aspect?: string;
     fps?: number;
     resolution?: string;
@@ -101,8 +102,11 @@ export interface EditorStoreState {
   preview: {
     mode: 'proxy' | 'live';
     url: string | null;
+    baseProxyUrl?: string | null;
+    versionUrlMap?: Record<number, string>;
     planVersion: number | null;
     stale: boolean;
+    isRendered?: boolean;
   };
 
   jobs: Record<
@@ -120,7 +124,10 @@ export interface EditorStoreState {
     pending: boolean;
   };
 
+  selectedAiModel: string;
+
   // Actions
+  setSelectedAiModel: (model: string) => void;
   setActiveTab: (tab: 'project' | 'inspector') => void;
   setProject: (project: any, analysisSummary?: AnalysisSummaryData | null) => void;
   setPlan: (plan: EditPlan) => void;
@@ -142,9 +149,16 @@ export interface EditorStoreState {
   selectLayer: (layerId: string | null, multi?: boolean) => void;
   deleteSelectedLayers: () => void;
   addChatMessage: (msg: Omit<ChatMessageItem, 'id' | 'timestamp'>) => void;
+  setChatMessages: (messages: ChatMessageItem[]) => void;
+  clearChat: () => void;
   setChatPending: (pending: boolean) => void;
   updateJob: (jobId: string, update: Partial<EditorStoreState['jobs'][string]>) => void;
-  setPreviewUrl: (url: string, planVersion: number) => void;
+  setPreviewUrl: (
+    url: string,
+    planVersion: number,
+    isRendered?: boolean,
+    baseProxyUrl?: string
+  ) => void;
 }
 
 export const useEditorStore = create<EditorStoreState>()(
@@ -180,6 +194,8 @@ export const useEditorStore = create<EditorStoreState>()(
     preview: {
       mode: 'live',
       url: null,
+      baseProxyUrl: null,
+      versionUrlMap: {},
       planVersion: null,
       stale: false,
     },
@@ -190,6 +206,13 @@ export const useEditorStore = create<EditorStoreState>()(
       messages: [],
       pending: false,
     },
+
+    selectedAiModel: 'gemini-3.5-flash-lite',
+
+    setSelectedAiModel: (model) =>
+      set((state) => {
+        state.selectedAiModel = model;
+      }),
 
     setActiveTab: (tab) =>
       set((state) => {
@@ -212,6 +235,7 @@ export const useEditorStore = create<EditorStoreState>()(
           status: proj.status,
           assetId: proj.baseAssetId?.publicId || proj.baseAssetId || '',
           durationSec: media.durationMs / 1000,
+          headVersion: proj.headVersion ?? 1,
           aspect: proj.settings?.aspect || '16:9',
           fps: proj.settings?.fps || media.fps || 30,
           resolution: proj.settings?.resolution || `${media.height || 1080}p`,
@@ -219,6 +243,11 @@ export const useEditorStore = create<EditorStoreState>()(
           analysisSummary: analysisSummary || proj.analysisSummary || null,
         };
         state.playback.duration = state.project.durationSec;
+        if (Array.isArray(proj.chatMessages)) {
+          state.chat.messages = proj.chatMessages;
+        } else {
+          state.chat.messages = [];
+        }
       }),
 
     setPlan: (plan) =>
@@ -226,6 +255,9 @@ export const useEditorStore = create<EditorStoreState>()(
         state.plan.current = plan;
         state.plan.draft = null;
         state.plan.version = plan.version;
+        if (state.project) {
+          state.project.headVersion = plan.version;
+        }
         if (!state.plan.versionMap) {
           state.plan.versionMap = {};
         }
@@ -252,6 +284,7 @@ export const useEditorStore = create<EditorStoreState>()(
         }
         if (state.plan.draft) {
           modifier(state.plan.draft);
+          state.preview.stale = true;
         }
       }),
 
@@ -299,7 +332,22 @@ export const useEditorStore = create<EditorStoreState>()(
             state.plan.current = JSON.parse(JSON.stringify(state.plan.versionMap[targetVersion]));
           }
           state.plan.draft = null;
-          state.preview.stale = true;
+
+          // Seamlessly restore preview URL for undone version
+          if (state.preview.versionUrlMap?.[targetVersion]) {
+            state.preview.url = state.preview.versionUrlMap[targetVersion];
+            state.preview.planVersion = targetVersion;
+            state.preview.isRendered = true;
+            state.preview.stale = false;
+          } else {
+            // Revert back to clean source video so baked pixels from the undone edit disappear immediately
+            if (state.preview.baseProxyUrl) {
+              state.preview.url = state.preview.baseProxyUrl;
+            }
+            state.preview.planVersion = targetVersion;
+            state.preview.isRendered = false;
+            state.preview.stale = true;
+          }
         }
       }),
 
@@ -313,7 +361,21 @@ export const useEditorStore = create<EditorStoreState>()(
             state.plan.current = JSON.parse(JSON.stringify(state.plan.versionMap[targetVersion]));
           }
           state.plan.draft = null;
-          state.preview.stale = true;
+
+          // Seamlessly restore preview URL for redone version
+          if (state.preview.versionUrlMap?.[targetVersion]) {
+            state.preview.url = state.preview.versionUrlMap[targetVersion];
+            state.preview.planVersion = targetVersion;
+            state.preview.isRendered = true;
+            state.preview.stale = false;
+          } else {
+            if (state.preview.baseProxyUrl) {
+              state.preview.url = state.preview.baseProxyUrl;
+            }
+            state.preview.planVersion = targetVersion;
+            state.preview.isRendered = false;
+            state.preview.stale = true;
+          }
         }
       }),
 
@@ -422,6 +484,17 @@ export const useEditorStore = create<EditorStoreState>()(
         });
       }),
 
+    setChatMessages: (messages) =>
+      set((state) => {
+        state.chat.messages = messages;
+      }),
+
+    clearChat: () =>
+      set((state) => {
+        state.chat.messages = [];
+        state.chat.pending = false;
+      }),
+
     setChatPending: (pending) =>
       set((state) => {
         state.chat.pending = pending;
@@ -435,12 +508,24 @@ export const useEditorStore = create<EditorStoreState>()(
         };
       }),
 
-    setPreviewUrl: (url, planVersion) =>
+    setPreviewUrl: (url, planVersion, isRendered = false, baseProxyUrl) =>
       set((state) => {
         state.preview.url = url;
         state.preview.planVersion = planVersion;
         state.preview.stale = false;
         state.preview.mode = 'proxy';
+        state.preview.isRendered = isRendered;
+        if (baseProxyUrl) {
+          state.preview.baseProxyUrl = baseProxyUrl;
+        } else if (!state.preview.baseProxyUrl && !isRendered) {
+          state.preview.baseProxyUrl = url;
+        }
+        if (!state.preview.versionUrlMap) {
+          state.preview.versionUrlMap = {};
+        }
+        if (isRendered) {
+          state.preview.versionUrlMap[planVersion] = url;
+        }
       }),
   }))
 );

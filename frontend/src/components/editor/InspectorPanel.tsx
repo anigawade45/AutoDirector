@@ -17,11 +17,19 @@ import {
   Sparkles,
   ArrowRight,
   Film,
+  RefreshCw,
 } from 'lucide-react';
-import { compare, Operation } from 'fast-json-patch';
+import { compare, Operation, applyPatch } from 'fast-json-patch';
 import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
 import { api } from '../../api/client';
-import { ColorPreset, JsonPatchOperation, EditLayer } from '@ai-video/shared';
+import { toast } from '../../stores/toastStore';
+import {
+  ColorPreset,
+  JsonPatchOperation,
+  EditLayer,
+  COLOR_PRESETS,
+  resolveColorParams,
+} from '@ai-video/shared';
 
 export const InspectorPanel: React.FC = () => {
   const { project, plan, updateDraft, commitDraft, setPlan, timeline, selectLayer } =
@@ -52,39 +60,159 @@ export const InspectorPanel: React.FC = () => {
       setSaveStatus('saving');
       setStatusMessage('Syncing changes...');
 
-      const response = await api.patchPlan(project.id, plan.version, {
+      let activeBaseVersion = plan.version;
+      if (
+        project.headVersion !== undefined &&
+        project.headVersion !== null &&
+        plan.version < project.headVersion
+      ) {
+        try {
+          const revertRes = await api.revertPlan(project.id, plan.version);
+          if (revertRes?.version) {
+            activeBaseVersion = revertRes.version;
+            if (revertRes.plan) {
+              setPlan(revertRes.plan);
+            }
+          }
+        } catch (revertErr) {
+          console.warn('[InspectorPanel] Pre-patch revert notice:', revertErr);
+        }
+      }
+
+      const response = await api.patchPlan(project.id, activeBaseVersion, {
         patch: patch as JsonPatchOperation[],
-        baseVersion: plan.version,
+        baseVersion: activeBaseVersion,
       });
 
       commitDraft(response.plan);
       setSaveStatus('saved');
       setStatusMessage('All changes saved');
+      toast.success(`Inspector parameters saved (v${response.plan.version})`, 'Sequence Updated');
     } catch (err: any) {
       console.error('Patch plan failed:', err);
 
-      if (err.message && (err.message.includes('Conflict') || err.message.includes('409'))) {
+      const isConflict =
+        err.status === 409 ||
+        err.statusCode === 409 ||
+        err.code === 'VERSION_CONFLICT' ||
+        (err.message &&
+          (err.message.includes('stale base version') ||
+            err.message.includes('Latest is') ||
+            err.message.includes('Conflict') ||
+            err.message.includes('conflict') ||
+            err.message.includes('409')));
+
+      if (isConflict) {
         setSaveStatus('conflict');
-        setStatusMessage('Conflict: Plan was updated on server. Refreshing...');
+        setStatusMessage('Syncing with latest server version...');
+        toast.warning('Version conflict detected, re-syncing with server...', 'Version Conflict');
 
         try {
           const latest = await api.getProject(project.id);
-          const headV = latest.project?.headVersion || latest.headVersion || plan.version + 1;
-          const headPlanData = await api.getPlanVersion(project.id, headV);
-          if (headPlanData?.plan) {
-            setPlan(headPlanData.plan);
-            setStatusMessage(`Synchronized with v${headV}`);
-            setTimeout(() => setSaveStatus('saved'), 2000);
+          const headV = latest.project?.headVersion ?? latest.headVersion ?? plan.version ?? 1;
+          const truePlan = latest.plan || (await api.getPlanVersion(project.id, headV))?.plan;
+          if (truePlan) {
+            // Attempt smart optimistic rebase of user's local edits onto the newer head plan
+            let rebaseSuccess = false;
+            try {
+              const localPatch = compare(plan.current, plan.draft);
+              if (localPatch.length > 0) {
+                const rebasedCandidate = JSON.parse(JSON.stringify(truePlan));
+                applyPatch(rebasedCandidate, localPatch, false, true);
+                const rebasedPatch = compare(truePlan, rebasedCandidate);
+                if (rebasedPatch.length > 0) {
+                  const rebaseRes = await api.patchPlan(project.id, headV, {
+                    patch: rebasedPatch as JsonPatchOperation[],
+                    baseVersion: headV,
+                  });
+                  commitDraft(rebaseRes.plan);
+                  setSaveStatus('saved');
+                  setStatusMessage(`Auto-synced to v${rebaseRes.plan.version}`);
+                  toast.success(`Auto-synced to v${rebaseRes.plan.version}`, 'Rebased');
+                  setTimeout(() => setStatusMessage('All changes saved'), 2500);
+                  rebaseSuccess = true;
+                }
+              }
+            } catch (rebaseErr) {
+              console.warn(
+                'Could not cleanly rebase patch onto latest plan, falling back to server state:',
+                rebaseErr
+              );
+            }
+
+            if (!rebaseSuccess) {
+              setPlan(truePlan);
+              setSaveStatus('saved');
+              setStatusMessage(`Synchronized with v${headV}`);
+              toast.info(`Synchronized with v${headV}`, 'State Refreshed');
+              setTimeout(() => setStatusMessage('All changes saved'), 2500);
+            }
           }
         } catch (fetchErr) {
           console.error('Failed to reload head version after conflict:', fetchErr);
+          setSaveStatus('error');
+          setStatusMessage('Version mismatch. Click "Sync" to reload.');
+          toast.error('Version mismatch. Click "Sync" to reload.', 'Sync Error');
         }
       } else {
         setSaveStatus('error');
         setStatusMessage(err.message || 'Failed to save');
+        toast.error(err.message || 'Failed to save changes', 'Save Error');
       }
     }
   }, [project, plan.current, plan.draft, plan.version, commitDraft, setPlan]);
+
+  const handleForceSync = async () => {
+    if (!project) return;
+    setSaveStatus('saving');
+    setStatusMessage('Syncing to latest version...');
+    try {
+      const latest = await api.getProject(project.id);
+      const headV = latest.project?.headVersion ?? latest.headVersion ?? plan.version ?? 1;
+      const truePlan = latest.plan || (await api.getPlanVersion(project.id, headV))?.plan;
+      if (truePlan) {
+        setPlan(truePlan);
+        setSaveStatus('saved');
+        setStatusMessage(`Synchronized with v${headV}`);
+        toast.success(`Synchronized with v${headV}`, 'State Refreshed');
+        setTimeout(() => setStatusMessage('All changes saved'), 2500);
+      } else {
+        setSaveStatus('error');
+        setStatusMessage('No plan found on server');
+        toast.error('No plan found on server', 'Sync Error');
+      }
+    } catch (err: any) {
+      console.error('Failed to sync to latest:', err);
+      setSaveStatus('error');
+      setStatusMessage('Failed to sync. Please refresh page.');
+      toast.error('Failed to sync. Please refresh page.', 'Sync Error');
+    }
+  };
+
+  // Auto-sync on window focus if server headVersion has moved ahead
+  useEffect(() => {
+    const handleFocus = async () => {
+      if (!project || plan.draft) return;
+      try {
+        const latest = await api.getProject(project.id);
+        const headV = latest.project?.headVersion || latest.headVersion;
+        if (headV && headV > plan.version) {
+          const headPlanData = await api.getPlanVersion(project.id, headV);
+          const truePlan = headPlanData?.plan || headPlanData?.data || latest.plan;
+          if (truePlan) {
+            setPlan(truePlan);
+            setStatusMessage(`Updated to v${headV}`);
+            setTimeout(() => setStatusMessage('All changes saved'), 2000);
+          }
+        }
+      } catch {
+        // Silently ignore background poll errors
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [project, plan.version, plan.draft, setPlan]);
 
   useEffect(() => {
     if (!plan.draft) return;
@@ -98,7 +226,7 @@ export const InspectorPanel: React.FC = () => {
 
     debounceTimerRef.current = setTimeout(() => {
       syncDraftToServer();
-    }, 450);
+    }, 2000);
 
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -226,19 +354,31 @@ export const InspectorPanel: React.FC = () => {
       d.layers.push(newLayer);
       selectLayer(newId);
     });
+    toast.success(`Added ${type} layer to sequence`, 'Layer Added');
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5 select-none text-xs">
+    <div className="flex-1 overflow-y-auto p-4 space-y-5 select-none text-xs font-sans">
       {/* Auto-Sync & Status Bar */}
-      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#0B0F17] border border-surfaceBorder text-[11px]">
-        <span className="text-slate-400 font-medium">Auto-Sync Status</span>
+      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#18191B] border border-[#393B3F] text-[11px]">
+        <span className="text-[#FFF5F5]/70 font-medium">Auto-Sync Status</span>
         <div className="flex items-center space-x-1.5 font-mono">
           {saveStatus === 'saving' && (
-            <>
-              <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
-              <span className="text-blue-400">{statusMessage || 'Saving...'}</span>
-            </>
+            <div className="flex items-center space-x-2">
+              <Loader2 className="w-3 h-3 text-[#E3B5BE] animate-spin" />
+              <span className="text-[#E3B5BE]">{statusMessage || 'Saving...'}</span>
+              {plan.draft && (
+                <button
+                  onClick={() => {
+                    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+                    syncDraftToServer();
+                  }}
+                  className="px-2 py-0.5 rounded bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] text-[10px] font-sans font-bold transition-colors cursor-pointer"
+                >
+                  Save Now
+                </button>
+              )}
+            </div>
           )}
           {saveStatus === 'saved' && (
             <>
@@ -247,78 +387,94 @@ export const InspectorPanel: React.FC = () => {
             </>
           )}
           {saveStatus === 'conflict' && (
-            <>
+            <div className="flex items-center space-x-2">
               <AlertTriangle className="w-3 h-3 text-amber-400" />
               <span className="text-amber-400">{statusMessage}</span>
-            </>
+              <button
+                onClick={handleForceSync}
+                className="flex items-center space-x-1 px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-sans font-medium transition-colors"
+                title="Sync with server version"
+              >
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span>Sync</span>
+              </button>
+            </div>
           )}
           {saveStatus === 'error' && (
-            <>
+            <div className="flex items-center space-x-2">
               <AlertTriangle className="w-3 h-3 text-red-400" />
               <span className="text-red-400">{statusMessage}</span>
-            </>
+              <button
+                onClick={handleForceSync}
+                className="flex items-center space-x-1 px-2 py-0.5 rounded bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] text-[10px] font-sans font-bold transition-colors"
+                title="Sync with latest server version"
+              >
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span>Sync</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
 
       {/* Layer Tabs / Selector Bar */}
       <div>
-        <div className="flex items-center justify-between text-slate-300 font-semibold mb-2">
+        <div className="flex items-center justify-between text-[#FFF5F5]/80 font-mono text-[11px] font-semibold mb-2">
           <span className="flex items-center space-x-1.5">
-            <Layers className="w-3.5 h-3.5 text-blue-400" />
-            <span>Inspector Layers ({effectivePlan?.layers.length || 0})</span>
+            <Layers className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span className="uppercase tracking-wider">Inspector Layers ({effectivePlan?.layers.length || 0})</span>
           </span>
           <div className="relative">
             <button
               onClick={() => setIsAddMenuOpen(!isAddMenuOpen)}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-medium transition-colors"
+              className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm"
             >
               <Plus className="w-3 h-3" />
               <span>Add Layer</span>
             </button>
 
             {isAddMenuOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-44 bg-[#0F141E] border border-surfaceBorder rounded-xl shadow-xl z-50 p-1 space-y-0.5 text-[11px]">
+              <div className="absolute right-0 top-full mt-1.5 w-44 bg-[#222326] border border-[#393B3F] rounded-xl shadow-xl z-50 p-1.5 space-y-0.5 text-[11px]">
                 <button
                   onClick={() => handleAddLayer('text')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 transition-colors flex items-center space-x-2"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
                 >
-                  <Type className="w-3.5 h-3.5 text-sky-400" />
+                  <Type className="w-3.5 h-3.5 text-[#F7D7D1]" />
                   <span>Text Overlay</span>
                 </button>
                 <button
                   onClick={() => handleAddLayer('color')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 transition-colors flex items-center space-x-2"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
                 >
-                  <Palette className="w-3.5 h-3.5 text-indigo-400" />
+                  <Palette className="w-3.5 h-3.5 text-[#E3B5BE]" />
                   <span>Color LUT Grade</span>
                 </button>
                 <button
                   onClick={() => handleAddLayer('subtitle')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 transition-colors flex items-center space-x-2"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
                 >
-                  <Type className="w-3.5 h-3.5 text-amber-400" />
+                  <Type className="w-3.5 h-3.5 text-[#F7D7D1]" />
                   <span>Subtitles</span>
                 </button>
                 <button
                   onClick={() => handleAddLayer('music')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 transition-colors flex items-center space-x-2"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
                 >
                   <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Background Music</span>
                 </button>
                 <button
                   onClick={() => handleAddLayer('speed')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 transition-colors flex items-center space-x-2"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
                 >
-                  <Gauge className="w-3.5 h-3.5 text-cyan-400" />
+                  <Gauge className="w-3.5 h-3.5 text-[#E3B5BE]" />
                   <span>Speed Factor</span>
                 </button>
                 <button
                   onClick={() => handleAddLayer('intro')}
-                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-800 text-slate-200 transition-colors flex items-center space-x-2"
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
                 >
-                  <Film className="w-3.5 h-3.5 text-purple-400" />
+                  <Film className="w-3.5 h-3.5 text-[#F7D7D1]" />
                   <span>Intro Title Card</span>
                 </button>
               </div>
@@ -327,7 +483,7 @@ export const InspectorPanel: React.FC = () => {
         </div>
 
         {/* Horizontal Layer Chips */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1.5">
+        <div className="flex gap-1.5 overflow-x-auto pb-1.5 custom-scrollbar">
           {effectivePlan?.layers.map((layer) => {
             const isSelected = layer.id === selectedLayerId;
             return (
@@ -336,13 +492,13 @@ export const InspectorPanel: React.FC = () => {
                 onClick={() => selectLayer(layer.id)}
                 className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border flex items-center space-x-1.5 shrink-0 transition-all ${
                   isSelected
-                    ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
-                    : 'bg-[#0B0F17] hover:bg-slate-800 text-slate-300 border-surfaceBorder'
+                    ? 'bg-[#E3B5BE]/15 text-[#F7D7D1] border-[#E3B5BE] shadow-sm'
+                    : 'bg-[#18191B] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-[#393B3F]'
                 }`}
               >
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
-                    layer.enabled ? 'bg-emerald-400' : 'bg-slate-600'
+                    layer.enabled ? 'bg-[#E3B5BE]' : 'bg-[#484949]'
                   }`}
                 />
                 <span className="capitalize">{layer.layer}</span>
@@ -354,41 +510,48 @@ export const InspectorPanel: React.FC = () => {
 
       {/* Layer-Specific Inspector Panel — Derived strictly from activeLayer */}
       {activeLayer ? (
-        <div className="bg-[#0B0F17] p-3.5 rounded-xl border border-surfaceBorder space-y-4">
+        <div className="bg-[#18191B] p-3.5 rounded-xl border border-[#393B3F] space-y-4">
           {/* Layer Header: Name, ID, Enable/Disable, Delete */}
-          <div className="flex items-center justify-between pb-2 border-b border-surfaceBorder">
+          <div className="flex items-center justify-between pb-2 border-b border-[#393B3F]">
             <div className="flex items-center space-x-2">
-              <span className="font-semibold text-slate-200 capitalize text-xs">
+              <span className="font-semibold text-[#FFF5F5] capitalize text-xs">
                 {activeLayer.layer} Layer Properties
               </span>
-              <span className="font-mono text-[10px] text-slate-500">({activeLayer.id})</span>
+              <span className="font-mono text-[10px] text-[#FFF5F5]/50">({activeLayer.id})</span>
             </div>
 
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => {
+                  const willBeEnabled = !activeLayer.enabled;
                   updateDraft((d) => {
                     const l = d.layers.find((lyr) => lyr.id === activeLayer.id);
-                    if (l) l.enabled = !l.enabled;
+                    if (l) l.enabled = willBeEnabled;
                   });
+                  toast.info(
+                    `${activeLayer.layer} layer ${willBeEnabled ? 'enabled' : 'disabled'}`,
+                    'Layer Visibility'
+                  );
                 }}
-                className="p-1 text-slate-400 hover:text-white transition-colors"
+                className="p-1 text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors"
                 title={activeLayer.enabled ? 'Disable layer' : 'Enable layer'}
               >
                 {activeLayer.enabled ? (
-                  <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                  <Eye className="w-3.5 h-3.5 text-[#E3B5BE]" />
                 ) : (
-                  <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+                  <EyeOff className="w-3.5 h-3.5 text-[#484949]" />
                 )}
               </button>
 
               <button
                 onClick={() => {
+                  const lyrName = activeLayer.layer;
                   updateDraft((d) => {
                     d.layers = d.layers.filter((lyr) => lyr.id !== activeLayer.id);
                   });
+                  toast.warning(`Removed ${lyrName} layer from sequence`, 'Layer Removed');
                 }}
-                className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                className="p-1 text-[#FFF5F5]/40 hover:text-red-400 transition-colors"
                 title="Remove layer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -397,137 +560,149 @@ export const InspectorPanel: React.FC = () => {
           </div>
 
           {/* 1. Color Layer Controls */}
-          {activeLayer.layer === 'color' && (
-            <div className="space-y-3.5">
-              <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1.5 font-medium">
-                  LUT Preset
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {colorPresets.map((preset) => (
-                    <button
-                      key={preset.id}
-                      onClick={() => {
-                        updateDraft((d) => {
-                          const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                          if (c) c.params.preset = preset.id;
-                        });
-                      }}
-                      className={`px-2 py-1.5 rounded-lg text-[10px] font-medium border text-center transition-all ${
-                        activeLayer.params?.preset === preset.id
-                          ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
-                          : 'bg-surface hover:bg-slate-800 text-slate-300 border-surfaceBorder'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
+          {activeLayer.layer === 'color' && (() => {
+            const resolvedColor = resolveColorParams(activeLayer.params);
+            return (
+              <div className="space-y-3.5">
+                <div>
+                  <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1.5 font-medium font-mono">
+                    LUT Preset
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {colorPresets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => {
+                          const p = COLOR_PRESETS[preset.id];
+                          updateDraft((d) => {
+                            const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                            if (c) {
+                              c.params.preset = preset.id;
+                              if (p) {
+                                c.params.contrast = p.contrast;
+                                c.params.saturation = p.saturation;
+                                c.params.brightness = p.brightness;
+                                c.params.vignette = p.vignette;
+                              }
+                            }
+                          });
+                        }}
+                        className={`px-2 py-1.5 rounded-lg text-[10px] font-medium border text-center transition-all ${
+                          activeLayer.params?.preset === preset.id
+                            ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border-[#E3B5BE] shadow-sm font-semibold'
+                            : 'bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-[#393B3F]'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
-                  <span>Contrast</span>
-                  <span className="font-mono text-slate-200">
-                    {(activeLayer.params?.contrast ?? 1.0).toFixed(2)}
-                  </span>
+                <div>
+                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                    <span>Contrast</span>
+                    <span className="font-mono text-[#F7D7D1]">
+                      {(activeLayer.params?.contrast ?? resolvedColor.contrast).toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.70"
+                    max="1.50"
+                    step="0.05"
+                    value={activeLayer.params?.contrast ?? resolvedColor.contrast}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      updateDraft((d) => {
+                        const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                        if (c) c.params.contrast = val;
+                      });
+                    }}
+                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="0.70"
-                  max="1.50"
-                  step="0.05"
-                  value={activeLayer.params?.contrast ?? 1.0}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    updateDraft((d) => {
-                      const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                      if (c) c.params.contrast = val;
-                    });
-                  }}
-                  className="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
 
-              <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
-                  <span>Saturation</span>
-                  <span className="font-mono text-slate-200">
-                    {(activeLayer.params?.saturation ?? 1.0).toFixed(2)}
-                  </span>
+                <div>
+                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                    <span>Saturation</span>
+                    <span className="font-mono text-[#F7D7D1]">
+                      {(activeLayer.params?.saturation ?? resolvedColor.saturation).toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.00"
+                    max="2.00"
+                    step="0.05"
+                    value={activeLayer.params?.saturation ?? resolvedColor.saturation}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      updateDraft((d) => {
+                        const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                        if (c) c.params.saturation = val;
+                      });
+                    }}
+                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="0.00"
-                  max="2.00"
-                  step="0.05"
-                  value={activeLayer.params?.saturation ?? 1.0}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    updateDraft((d) => {
-                      const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                      if (c) c.params.saturation = val;
-                    });
-                  }}
-                  className="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
 
-              <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
-                  <span>Vignette Edge</span>
-                  <span className="font-mono text-slate-200">
-                    {(activeLayer.params?.vignette ?? 0.0).toFixed(2)}
-                  </span>
+                <div>
+                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                    <span>Vignette Edge</span>
+                    <span className="font-mono text-[#F7D7D1]">
+                      {(activeLayer.params?.vignette ?? resolvedColor.vignette).toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.00"
+                    max="1.00"
+                    step="0.05"
+                    value={activeLayer.params?.vignette ?? resolvedColor.vignette}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      updateDraft((d) => {
+                        const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                        if (c) c.params.vignette = val;
+                      });
+                    }}
+                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="0.00"
-                  max="1.00"
-                  step="0.05"
-                  value={activeLayer.params?.vignette ?? 0.0}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    updateDraft((d) => {
-                      const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                      if (c) c.params.vignette = val;
-                    });
-                  }}
-                  className="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
-              </div>
 
-              <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
-                  <span>Brightness</span>
-                  <span className="font-mono text-slate-200">
-                    {(activeLayer.params?.brightness ?? 0.0).toFixed(2)}
-                  </span>
+                <div>
+                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                    <span>Brightness</span>
+                    <span className="font-mono text-[#F7D7D1]">
+                      {(activeLayer.params?.brightness ?? resolvedColor.brightness).toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-0.50"
+                    max="0.50"
+                    step="0.05"
+                    value={activeLayer.params?.brightness ?? resolvedColor.brightness}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      updateDraft((d) => {
+                        const c = d.layers.find((l) => l.id === activeLayer.id) as any;
+                        if (c) c.params.brightness = val;
+                      });
+                    }}
+                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="range"
-                  min="-0.50"
-                  max="0.50"
-                  step="0.05"
-                  value={activeLayer.params?.brightness ?? 0.0}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    updateDraft((d) => {
-                      const c = d.layers.find((l) => l.id === activeLayer.id) as any;
-                      if (c) c.params.brightness = val;
-                    });
-                  }}
-                  className="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
-                />
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 2. Subtitle Layer Controls */}
           {activeLayer.layer === 'subtitle' && (
             <div className="space-y-3.5">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">Animation Style</span>
+                <span className="text-[#FFF5F5]/70 text-[11px]">Animation Style</span>
                 <select
                   value={activeLayer.params?.style || 'word_pop'}
                   onChange={(e) => {
@@ -537,7 +712,7 @@ export const InspectorPanel: React.FC = () => {
                       if (s) s.params.style = style;
                     });
                   }}
-                  className="bg-surface border border-surfaceBorder rounded px-2 py-1 text-slate-200 text-xs focus:outline-none"
+                  className="bg-[#222326] border border-[#393B3F] rounded-lg px-2.5 py-1 text-[#FFF5F5] text-xs focus:outline-none focus:border-[#E3B5BE] transition-colors"
                 >
                   <option value="word_pop">Word-Pop</option>
                   <option value="fade">Fade In</option>
@@ -548,7 +723,7 @@ export const InspectorPanel: React.FC = () => {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">Position</span>
+                <span className="text-[#FFF5F5]/70 text-[11px]">Position</span>
                 <div className="flex items-center space-x-1">
                   {(['bottom', 'center', 'top'] as const).map((pos) => (
                     <button
@@ -559,10 +734,10 @@ export const InspectorPanel: React.FC = () => {
                           if (s) s.params.position = pos;
                         });
                       }}
-                      className={`px-2 py-0.5 rounded text-[10px] capitalize transition-colors ${
+                      className={`px-2.5 py-1 rounded-lg text-[10px] capitalize transition-colors ${
                         (activeLayer.params?.position || 'bottom') === pos
-                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold'
-                          : 'bg-surface text-slate-400 border border-surfaceBorder'
+                          ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border border-[#E3B5BE] font-semibold'
+                          : 'bg-[#222326] text-[#FFF5F5]/60 border border-[#393B3F] hover:bg-[#2A2C2F]'
                       }`}
                     >
                       {pos}
@@ -572,9 +747,9 @@ export const InspectorPanel: React.FC = () => {
               </div>
 
               <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
+                <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
                   <span>Font Size</span>
-                  <span className="font-mono text-slate-200">
+                  <span className="font-mono text-[#F7D7D1]">
                     {activeLayer.params?.size || 48} px
                   </span>
                 </div>
@@ -591,16 +766,16 @@ export const InspectorPanel: React.FC = () => {
                       if (s) s.params.size = size;
                     });
                   }}
-                  className="w-full accent-amber-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="flex items-center justify-between bg-slate-900/60 p-2 rounded-lg border border-surfaceBorder">
-                  <span className="text-slate-400 text-[10px]">Primary</span>
+                <div className="flex items-center justify-between bg-[#222326] p-2.5 rounded-lg border border-[#393B3F]">
+                  <span className="text-[#FFF5F5]/70 text-[10px] font-mono">Primary Color</span>
                   <input
                     type="color"
-                    value={activeLayer.params?.primaryColor || '#FFFFFF'}
+                    value={activeLayer.params?.primaryColor || '#FFF5F5'}
                     onChange={(e) => {
                       const col = e.target.value;
                       updateDraft((d) => {
@@ -608,15 +783,15 @@ export const InspectorPanel: React.FC = () => {
                         if (s) s.params.primaryColor = col;
                       });
                     }}
-                    className="w-5 h-5 rounded cursor-pointer border border-white/20 bg-transparent"
+                    className="w-5 h-5 rounded cursor-pointer border border-[#393B3F] bg-transparent"
                   />
                 </div>
 
-                <div className="flex items-center justify-between bg-slate-900/60 p-2 rounded-lg border border-surfaceBorder">
-                  <span className="text-slate-400 text-[10px]">Highlight</span>
+                <div className="flex items-center justify-between bg-[#222326] p-2.5 rounded-lg border border-[#393B3F]">
+                  <span className="text-[#FFF5F5]/70 text-[10px] font-mono">Highlight Pop</span>
                   <input
                     type="color"
-                    value={activeLayer.params?.highlightColor || '#FFD84D'}
+                    value={activeLayer.params?.highlightColor || '#F7D7D1'}
                     onChange={(e) => {
                       const col = e.target.value;
                       updateDraft((d) => {
@@ -624,7 +799,7 @@ export const InspectorPanel: React.FC = () => {
                         if (s) s.params.highlightColor = col;
                       });
                     }}
-                    className="w-5 h-5 rounded cursor-pointer border border-white/20 bg-transparent"
+                    className="w-5 h-5 rounded cursor-pointer border border-[#393B3F] bg-transparent"
                   />
                 </div>
               </div>
@@ -635,7 +810,7 @@ export const InspectorPanel: React.FC = () => {
           {activeLayer.layer === 'text' && (
             <div className="space-y-3.5">
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1 font-medium">
+                <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1 font-medium font-mono">
                   Overlay Text
                 </label>
                 <input
@@ -648,12 +823,12 @@ export const InspectorPanel: React.FC = () => {
                       if (t) t.params.content = text;
                     });
                   }}
-                  className="w-full bg-surface border border-surfaceBorder rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[#222326] border border-[#393B3F] rounded-lg px-2.5 py-1.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE] transition-colors"
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">Animation</span>
+                <span className="text-[#FFF5F5]/70 text-[11px]">Animation</span>
                 <select
                   value={activeLayer.params?.animation || 'fade'}
                   onChange={(e) => {
@@ -663,7 +838,7 @@ export const InspectorPanel: React.FC = () => {
                       if (t) t.params.animation = anim;
                     });
                   }}
-                  className="bg-surface border border-surfaceBorder rounded px-2 py-1 text-slate-200 text-xs focus:outline-none"
+                  className="bg-[#222326] border border-[#393B3F] rounded-lg px-2.5 py-1 text-[#FFF5F5] text-xs focus:outline-none focus:border-[#E3B5BE] transition-colors"
                 >
                   <option value="fade">Fade</option>
                   <option value="slide_up">Slide Up</option>
@@ -673,9 +848,9 @@ export const InspectorPanel: React.FC = () => {
               </div>
 
               <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
+                <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
                   <span>Font Size</span>
-                  <span className="font-mono text-slate-200">
+                  <span className="font-mono text-[#F7D7D1]">
                     {activeLayer.params?.size || 42} px
                   </span>
                 </div>
@@ -692,15 +867,15 @@ export const InspectorPanel: React.FC = () => {
                       if (t) t.params.size = sz;
                     });
                   }}
-                  className="w-full accent-sky-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                 />
               </div>
 
-              <div className="flex items-center justify-between bg-slate-900/60 p-2 rounded-lg border border-surfaceBorder">
-                <span className="text-slate-400 text-[10px]">Text Color</span>
+              <div className="flex items-center justify-between bg-[#222326] p-2.5 rounded-lg border border-[#393B3F]">
+                <span className="text-[#FFF5F5]/70 text-[10px] font-mono">Text Color</span>
                 <input
                   type="color"
-                  value={activeLayer.params?.color || '#FFFFFF'}
+                  value={activeLayer.params?.color || '#FFF5F5'}
                   onChange={(e) => {
                     const c = e.target.value;
                     updateDraft((d) => {
@@ -708,7 +883,7 @@ export const InspectorPanel: React.FC = () => {
                       if (t) t.params.color = c;
                     });
                   }}
-                  className="w-5 h-5 rounded cursor-pointer border border-white/20 bg-transparent"
+                  className="w-5 h-5 rounded cursor-pointer border border-[#393B3F] bg-transparent"
                 />
               </div>
             </div>
@@ -718,7 +893,7 @@ export const InspectorPanel: React.FC = () => {
           {activeLayer.layer === 'music' && (
             <div className="space-y-3.5">
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1 font-medium">
+                <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1 font-medium font-mono">
                   Licensed Music Track
                 </label>
                 <select
@@ -730,7 +905,7 @@ export const InspectorPanel: React.FC = () => {
                       if (m) m.params.trackId = trk;
                     });
                   }}
-                  className="w-full bg-surface border border-surfaceBorder rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-[#222326] border border-[#393B3F] rounded-lg px-2.5 py-1.5 text-xs text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE] transition-colors"
                 >
                   <option value="mus_calm_01">Calm Cinematic Ambient (96 BPM)</option>
                   <option value="mus_upbeat_01">Upbeat Creator Energy (128 BPM)</option>
@@ -741,8 +916,8 @@ export const InspectorPanel: React.FC = () => {
 
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-slate-400 text-[11px] block">Speech Ducking</span>
-                  <span className="text-[10px] text-slate-600">&gt;8 dB auto-attenuation</span>
+                  <span className="text-[#FFF5F5]/70 text-[11px] block">Speech Ducking</span>
+                  <span className="text-[10px] text-[#FFF5F5]/40">&gt;8 dB auto-attenuation</span>
                 </div>
                 <button
                   onClick={() => {
@@ -753,8 +928,8 @@ export const InspectorPanel: React.FC = () => {
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
                     activeLayer.params?.duckUnderSpeech
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-surface text-slate-500 border border-surfaceBorder'
+                      ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border border-[#E3B5BE]/50'
+                      : 'bg-[#222326] text-[#FFF5F5]/50 border border-[#393B3F]'
                   }`}
                 >
                   {activeLayer.params?.duckUnderSpeech ? 'ACTIVE (-12 dB)' : 'DISABLED'}
@@ -763,8 +938,8 @@ export const InspectorPanel: React.FC = () => {
 
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-slate-400 text-[11px] block">Beat Synchronization</span>
-                  <span className="text-[10px] text-slate-600">
+                  <span className="text-[#FFF5F5]/70 text-[11px] block">Beat Synchronization</span>
+                  <span className="text-[10px] text-[#FFF5F5]/40">
                     Snap cuts to beat grid within 60ms
                   </span>
                 </div>
@@ -777,8 +952,8 @@ export const InspectorPanel: React.FC = () => {
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
                     activeLayer.params?.beatSync
-                      ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                      : 'bg-surface text-slate-500 border border-surfaceBorder'
+                      ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border border-[#E3B5BE]/50'
+                      : 'bg-[#222326] text-[#FFF5F5]/50 border border-[#393B3F]'
                   }`}
                 >
                   {activeLayer.params?.beatSync ? 'ENABLED' : 'OFF'}
@@ -786,9 +961,9 @@ export const InspectorPanel: React.FC = () => {
               </div>
 
               <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
+                <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
                   <span>Music Volume</span>
-                  <span className="font-mono text-slate-200">
+                  <span className="font-mono text-[#F7D7D1]">
                     {Math.round((activeLayer.params?.volume ?? 0.35) * 100)}%
                   </span>
                 </div>
@@ -805,15 +980,15 @@ export const InspectorPanel: React.FC = () => {
                       if (m) m.params.volume = vol;
                     });
                   }}
-                  className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <div className="flex justify-between text-slate-400 text-[11px] mb-1">
+                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
                     <span>Fade In</span>
-                    <span className="font-mono text-slate-200">
+                    <span className="font-mono text-[#F7D7D1]">
                       {activeLayer.params?.fadeIn ?? 1.5}s
                     </span>
                   </div>
@@ -830,13 +1005,13 @@ export const InspectorPanel: React.FC = () => {
                         if (m) m.params.fadeIn = f;
                       });
                     }}
-                    className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                   />
                 </div>
                 <div>
-                  <div className="flex justify-between text-slate-400 text-[11px] mb-1">
+                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
                     <span>Fade Out</span>
-                    <span className="font-mono text-slate-200">
+                    <span className="font-mono text-[#F7D7D1]">
                       {activeLayer.params?.fadeOut ?? 3.0}s
                     </span>
                   </div>
@@ -853,7 +1028,7 @@ export const InspectorPanel: React.FC = () => {
                         if (m) m.params.fadeOut = f;
                       });
                     }}
-                    className="w-full accent-emerald-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                    className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                   />
                 </div>
               </div>
@@ -864,9 +1039,9 @@ export const InspectorPanel: React.FC = () => {
           {activeLayer.layer === 'audio' && (
             <div className="space-y-3.5">
               <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
+                <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
                   <span>Loudness Target (EBU R128)</span>
-                  <span className="font-mono text-slate-200">
+                  <span className="font-mono text-[#F7D7D1]">
                     {activeLayer.params?.normalizeLufs ?? -16} LUFS
                   </span>
                 </div>
@@ -883,14 +1058,14 @@ export const InspectorPanel: React.FC = () => {
                       if (a) a.params.normalizeLufs = lufs;
                     });
                   }}
-                  className="w-full accent-cyan-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                 />
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-slate-400 text-[11px] block">Background Denoise</span>
-                  <span className="text-[10px] text-slate-600">FFT audio filter (afftdn)</span>
+                  <span className="text-[#FFF5F5]/70 text-[11px] block">Background Denoise</span>
+                  <span className="text-[10px] text-[#FFF5F5]/40">FFT audio filter (afftdn)</span>
                 </div>
                 <button
                   onClick={() => {
@@ -901,8 +1076,8 @@ export const InspectorPanel: React.FC = () => {
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
                     activeLayer.params?.denoise
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                      : 'bg-surface text-slate-500 border border-surfaceBorder'
+                      ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border border-[#E3B5BE]/50'
+                      : 'bg-[#222326] text-[#FFF5F5]/50 border border-[#393B3F]'
                   }`}
                 >
                   {activeLayer.params?.denoise ? 'ACTIVE' : 'OFF'}
@@ -915,22 +1090,22 @@ export const InspectorPanel: React.FC = () => {
           {activeLayer.layer === 'cut' && (
             <div className="space-y-3.5">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">Cut Reason</span>
-                <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] font-mono capitalize">
+                <span className="text-[#FFF5F5]/70 text-[11px]">Cut Reason</span>
+                <span className="px-2 py-0.5 rounded bg-red-950/40 text-red-300 border border-red-800/40 text-[10px] font-mono capitalize">
                   {activeLayer.params?.reason || 'silence'}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="bg-slate-900/60 p-2 rounded-lg border border-surfaceBorder">
-                  <span className="text-slate-500 block text-[10px]">Start Cut</span>
-                  <span className="font-mono text-slate-200">
+                <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F]">
+                  <span className="text-[#FFF5F5]/50 block text-[10px] font-mono">Start Cut</span>
+                  <span className="font-mono text-[#F7D7D1]">
                     {(activeLayer.range?.start || 0).toFixed(2)}s
                   </span>
                 </div>
-                <div className="bg-slate-900/60 p-2 rounded-lg border border-surfaceBorder">
-                  <span className="text-slate-500 block text-[10px]">End Cut</span>
-                  <span className="font-mono text-slate-200">
+                <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F]">
+                  <span className="text-[#FFF5F5]/50 block text-[10px] font-mono">End Cut</span>
+                  <span className="font-mono text-[#F7D7D1]">
                     {(activeLayer.range?.end || 0).toFixed(2)}s
                   </span>
                 </div>
@@ -942,9 +1117,9 @@ export const InspectorPanel: React.FC = () => {
           {activeLayer.layer === 'speed' && (
             <div className="space-y-3.5">
               <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
+                <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
                   <span>Speed Multiplier</span>
-                  <span className="font-mono text-slate-200 font-semibold">
+                  <span className="font-mono text-[#F7D7D1] font-semibold">
                     {activeLayer.params?.factor ?? 1.5}x
                   </span>
                 </div>
@@ -961,12 +1136,12 @@ export const InspectorPanel: React.FC = () => {
                       if (sp) sp.params.factor = factor;
                     });
                   }}
-                  className="w-full accent-cyan-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                 />
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-[11px]">Pitch Correction</span>
+                <span className="text-[#FFF5F5]/70 text-[11px]">Pitch Correction</span>
                 <input
                   type="checkbox"
                   checked={activeLayer.params?.keepPitch ?? true}
@@ -977,7 +1152,7 @@ export const InspectorPanel: React.FC = () => {
                       if (sp) sp.params.keepPitch = chk;
                     });
                   }}
-                  className="rounded accent-cyan-500"
+                  className="rounded accent-[#E3B5BE] cursor-pointer"
                 />
               </div>
             </div>
@@ -987,7 +1162,7 @@ export const InspectorPanel: React.FC = () => {
           {(activeLayer.layer === 'intro' || activeLayer.layer === 'outro') && (
             <div className="space-y-3.5">
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1 font-medium">
+                <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1 font-medium font-mono">
                   Headline Text
                 </label>
                 <input
@@ -1000,12 +1175,12 @@ export const InspectorPanel: React.FC = () => {
                       if (card) card.params.text = txt;
                     });
                   }}
-                  className="w-full bg-surface border border-surfaceBorder rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[#222326] border border-[#393B3F] rounded-lg px-2.5 py-1.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE] transition-colors"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-500 uppercase tracking-wide block mb-1 font-medium">
+                <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1 font-medium font-mono">
                   Subtext
                 </label>
                 <input
@@ -1018,14 +1193,14 @@ export const InspectorPanel: React.FC = () => {
                       if (card) card.params.subtext = st;
                     });
                   }}
-                  className="w-full bg-surface border border-surfaceBorder rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[#222326] border border-[#393B3F] rounded-lg px-2.5 py-1.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE] transition-colors"
                 />
               </div>
 
               <div>
-                <div className="flex justify-between text-slate-400 text-[11px] mb-1">
+                <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
                   <span>Duration</span>
-                  <span className="font-mono text-slate-200">
+                  <span className="font-mono text-[#F7D7D1]">
                     {activeLayer.params?.duration ?? 3}s
                   </span>
                 </div>
@@ -1042,16 +1217,16 @@ export const InspectorPanel: React.FC = () => {
                       if (card) card.params.duration = dur;
                     });
                   }}
-                  className="w-full accent-purple-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                 />
               </div>
             </div>
           )}
         </div>
       ) : (
-        <div className="p-6 text-center text-slate-500 border border-dashed border-surfaceBorder rounded-xl">
-          <p className="font-medium">No Layer Selected</p>
-          <p className="text-[11px] mt-1 text-slate-600">
+        <div className="p-6 text-center text-[#FFF5F5]/50 border border-dashed border-[#393B3F] rounded-xl bg-[#18191B]">
+          <p className="font-medium text-[#FFF5F5]">No Layer Selected</p>
+          <p className="text-[11px] mt-1 text-[#FFF5F5]/40">
             Click any clip on the timeline or select a layer chip above to inspect its parameters.
           </p>
         </div>

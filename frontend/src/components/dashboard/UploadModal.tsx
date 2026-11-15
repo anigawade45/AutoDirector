@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, UploadCloud, AlertCircle, Loader2 } from 'lucide-react';
 import { api } from '../../api/client';
+import { toast } from '../../stores/toastStore';
 
 interface UploadModalProps {
   onClose: () => void;
@@ -26,7 +27,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
   };
 
   const handleStartUpload = async () => {
-    if (!file || !title) return;
+    if (!file) {
+      toast.warning('Please select a video file to upload', 'File Missing');
+      return;
+    }
+    if (!title.trim()) {
+      toast.warning('Please enter a project title', 'Title Required');
+      return;
+    }
     setIsUploading(true);
     setErrorMsg(null);
 
@@ -130,34 +138,37 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
 
       setProgressPercent(100);
       setStepLabel('Analysis enqueued! Redirecting to editor...');
+      toast.success(`"${title}" uploaded! Video analysis & transcription queued.`, 'Media Uploaded');
       setTimeout(() => {
         onProjectCreated(project.publicId);
       }, 800);
     } catch (err: any) {
       console.error('Upload error:', err);
-      setErrorMsg(err.message || 'An error occurred during video upload');
+      const errMsg = err.message || 'An error occurred during video upload';
+      setErrorMsg(errMsg);
+      toast.error(errMsg, 'Upload Failed');
       setIsUploading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-surface border border-surfaceBorder rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-[#222326] border border-[#393B3F] rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative my-auto text-[#FFF5F5]">
         <button
           onClick={onClose}
           disabled={isUploading}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white"
+          className="absolute top-4 right-4 text-[#FFF5F5]/60 hover:text-[#FFF5F5]"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <h3 className="text-xl font-bold mb-1">Create New Video Project</h3>
-        <p className="text-xs text-slate-400 mb-6">
-          Upload your raw video. Large files are streamed directly to S3 via chunked presigned URLs.
+        <h3 className="text-xl font-bold mb-1 text-[#FFF5F5]">Create New Video Project</h3>
+        <p className="text-xs text-[#FFF5F5]/70 mb-6 font-mono">
+          Upload raw footage. Multi-part chunks are analyzed with Whisper word sync & VAD.
         </p>
 
         {errorMsg && (
-          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center space-x-2">
+          <div className="mb-4 p-3 rounded-lg bg-red-950/40 border border-red-800/50 text-red-300 text-xs flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -165,22 +176,24 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">Project Title</label>
+            <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
+              Project Title
+            </label>
             <input
               type="text"
               value={title}
               disabled={isUploading}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Summer Vacation Reel"
-              className="w-full bg-[#0B0F17] border border-surfaceBorder rounded-lg px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+              placeholder="e.g. Cinematic Sequence 01"
+              className="w-full bg-[#18191B] border border-[#393B3F] rounded-lg px-3.5 py-2.5 text-xs text-[#FFF5F5] placeholder:text-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1.5">
-              Video File (MP4, MOV)
+            <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
+              Video File (MP4, MOV, WebM)
             </label>
-            <div className="border-2 border-dashed border-surfaceBorder hover:border-blue-500/50 rounded-xl p-6 text-center cursor-pointer transition-colors relative">
+            <div className="border-2 border-dashed border-[#393B3F] hover:border-[#E3B5BE] rounded-xl p-6 text-center cursor-pointer transition-colors relative bg-[#18191B]/40">
               <input
                 type="file"
                 accept="video/mp4,video/quicktime,video/webm"
@@ -188,21 +201,21 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
                 onChange={handleFileChange}
                 className="absolute inset-0 opacity-0 cursor-pointer"
               />
-              <UploadCloud className="w-10 h-10 text-slate-500 mx-auto mb-2" />
+              <UploadCloud className="w-10 h-10 text-[#E3B5BE] mx-auto mb-2" />
               {file ? (
                 <div>
-                  <p className="text-sm font-semibold text-slate-200">{file.name}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-sm font-semibold text-[#FFF5F5]">{file.name}</p>
+                  <p className="text-xs font-mono text-[#F7D7D1] mt-0.5">
                     {(file.size / (1024 * 1024)).toFixed(1)} MB
                   </p>
                 </div>
               ) : (
                 <div>
-                  <p className="text-sm font-medium text-slate-300">
+                  <p className="text-sm font-medium text-[#FFF5F5]/90">
                     Click to select or drag and drop
                   </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Up to 5GB • 480p proxy generated automatically
+                  <p className="text-xs text-[#FFF5F5]/50 mt-1 font-mono">
+                    High-res media stream • 480p proxy generated automatically
                   </p>
                 </div>
               )}
@@ -210,17 +223,17 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
           </div>
 
           {isUploading && (
-            <div className="mt-4 p-4 rounded-xl bg-[#0B0F17] border border-surfaceBorder">
-              <div className="flex items-center justify-between text-xs text-slate-300 mb-2">
+            <div className="mt-4 p-4 rounded-xl bg-[#18191B] border border-[#393B3F]">
+              <div className="flex items-center justify-between text-xs text-[#FFF5F5]/80 mb-2 font-mono">
                 <span className="flex items-center space-x-2">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#E3B5BE]" />
                   <span>{stepLabel}</span>
                 </span>
-                <span className="font-mono text-blue-400 font-semibold">{progressPercent}%</span>
+                <span className="text-[#F7D7D1] font-semibold">{progressPercent}%</span>
               </div>
-              <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-[#2A2C2F] rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all duration-300 rounded-full"
+                  className="h-full bg-[#E3B5BE] transition-all duration-300 rounded-full"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
@@ -231,14 +244,14 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
             <button
               onClick={onClose}
               disabled={isUploading}
-              className="px-4 py-2 text-sm text-slate-300 hover:text-white"
+              className="px-4 py-2 text-xs font-semibold text-[#FFF5F5]/70 hover:text-[#FFF5F5]"
             >
               Cancel
             </button>
             <button
               onClick={handleStartUpload}
               disabled={!file || !title || isUploading}
-              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-5 py-2 rounded-lg text-sm transition-colors shadow-md shadow-blue-600/20"
+              className="bg-[#E3B5BE] hover:bg-[#F7D7D1] disabled:opacity-40 disabled:cursor-not-allowed text-[#18191B] font-bold uppercase tracking-wider px-5 py-2.5 rounded-lg text-xs transition-colors shadow-sm"
             >
               Upload & Analyze
             </button>

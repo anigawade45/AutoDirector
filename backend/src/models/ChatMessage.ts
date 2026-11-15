@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IChatMessageDocument extends Document {
   projectId: mongoose.Types.ObjectId;
+  userId?: mongoose.Types.ObjectId;
   role: 'user' | 'assistant' | 'system';
   text: string;
   planId?: mongoose.Types.ObjectId;
@@ -12,6 +13,7 @@ export interface IChatMessageDocument extends Document {
 const ChatMessageSchema = new Schema<IChatMessageDocument>(
   {
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User' },
     role: { type: String, enum: ['user', 'assistant', 'system'], required: true },
     text: { type: String, required: true },
     planId: { type: Schema.Types.ObjectId, ref: 'EditPlan' },
@@ -21,6 +23,7 @@ const ChatMessageSchema = new Schema<IChatMessageDocument>(
   { timestamps: { createdAt: true, updatedAt: false } }
 );
 
+ChatMessageSchema.index({ userId: 1, projectId: 1, createdAt: 1 });
 ChatMessageSchema.index({ projectId: 1, createdAt: 1 });
 
 export const ChatMessageModel = mongoose.model<IChatMessageDocument>(

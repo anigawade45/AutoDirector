@@ -2,10 +2,13 @@ import { Redis } from 'ioredis';
 import { env } from './env.js';
 
 export function createRedisConnection(): Redis {
+  const isTls = env.REDIS_TLS || env.REDIS_HOST.includes('upstash.io');
+
   const client = new Redis({
     host: env.REDIS_HOST,
     port: env.REDIS_PORT,
     password: env.REDIS_PASSWORD || undefined,
+    tls: isTls ? {} : undefined,
     maxRetriesPerRequest: null, // Required by BullMQ
     lazyConnect: true,
   });

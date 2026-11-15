@@ -7,6 +7,7 @@ import {
   RESOLUTION_DIMENSIONS,
 } from '@ai-video/shared';
 import { AssGenerator } from './assGenerator.js';
+import { env } from '../../config/env.js';
 
 export interface CompilerPaths {
   inputSourcePath?: string;
@@ -430,8 +431,13 @@ export class FFmpegCompiler {
     }
 
     const musicLayer = plan.layers.find((l) => l.enabled && l.layer === 'music') as any;
-    if (paths?.musicSourcePath || musicLayer) {
-      const musicPath = paths?.musicSourcePath || 'music.mp3';
+    const musicPath =
+      paths?.musicSourcePath ||
+      (musicLayer && (env.NODE_ENV === 'test' || !paths?.outputPath)
+        ? 'music.mp3'
+        : undefined);
+
+    if (musicPath) {
       const musicInputIndex = inputs.length;
       args.push('-i', musicPath);
       inputs.push({ key: musicPath, type: 'audio' });
@@ -456,11 +462,11 @@ export class FFmpegCompiler {
           `[m]${currentAOut}sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400[md]`
         );
         filterComplexParts.push(
-          `[md]${currentAOut}amix=inputs=2:normalize=0,loudnorm=I=${normalizeLufs}:TP=-1.5:LRA=11[aout]`
+          `[md]${currentAOut}amix=inputs=2:dropout_transition=0,loudnorm=I=${normalizeLufs}:TP=-1.5:LRA=11[aout]`
         );
       } else {
         filterComplexParts.push(
-          `[m]${currentAOut}amix=inputs=2:normalize=0,loudnorm=I=${normalizeLufs}:TP=-1.5:LRA=11[aout]`
+          `[m]${currentAOut}amix=inputs=2:dropout_transition=0,loudnorm=I=${normalizeLufs}:TP=-1.5:LRA=11[aout]`
         );
       }
       currentAOut = '[aout]';

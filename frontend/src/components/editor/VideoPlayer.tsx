@@ -12,6 +12,7 @@ import {
   Grid,
 } from 'lucide-react';
 import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
+import { computeColorCssFilter, resolveColorParams } from '@ai-video/shared';
 
 export const VideoPlayer: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -51,12 +52,51 @@ export const VideoPlayer: React.FC = () => {
     }
   }, [setPlaybackStatus]);
 
-  // Synchronize playback rate
+  // Check if current preview is pre-baked by server preview worker with burned-in effects
+  const isVideoBaked =
+    preview.mode === 'proxy' &&
+    !preview.stale &&
+    Boolean(preview.isRendered) &&
+    preview.planVersion === effectivePlan?.version;
+
+  // Active Speed Layer calculation (Live video speed scaling when not baked by FFmpeg)
+  const speedLayer = effectivePlan?.layers.find(
+    (l) => l.enabled && l.layer === 'speed'
+  ) as any;
+
+  const currentSpeedFactor = (() => {
+    if (!speedLayer || isVideoBaked) return 1.0;
+    const curSec = playback.currentTime;
+    if (speedLayer.range) {
+      if (curSec >= speedLayer.range.start && curSec <= speedLayer.range.end) {
+        return speedLayer.params?.factor ?? 1.0;
+      }
+      return 1.0;
+    }
+    return speedLayer.params?.factor ?? 1.0;
+  })();
+
+  const effectivePlaybackRate = Math.max(
+    0.25,
+    Math.min(4.0, (playback.rate || 1.0) * currentSpeedFactor)
+  );
+
+  // Synchronize playback rate and audio pitch preservation
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.playbackRate = playback.rate || 1.0;
+      if (Math.abs(videoRef.current.playbackRate - effectivePlaybackRate) > 0.02) {
+        videoRef.current.playbackRate = effectivePlaybackRate;
+      }
+      const keepPitch = speedLayer?.params?.keepPitch !== false;
+      if ('preservesPitch' in videoRef.current) {
+        videoRef.current.preservesPitch = keepPitch;
+      } else if ('mozPreservesPitch' in videoRef.current) {
+        (videoRef.current as any).mozPreservesPitch = keepPitch;
+      } else if ('webkitPreservesPitch' in videoRef.current) {
+        (videoRef.current as any).webkitPreservesPitch = keepPitch;
+      }
     }
-  }, [playback.rate]);
+  }, [effectivePlaybackRate, speedLayer?.params?.keepPitch]);
 
   // Synchronize volume and mute state
   useEffect(() => {
@@ -286,20 +326,23 @@ export const VideoPlayer: React.FC = () => {
 
     // 3. Derive Vignette from Color Layer
     const colorLayer = effectivePlan.layers.find((l) => l.enabled && l.layer === 'color') as any;
-    if (colorLayer?.params?.vignette) {
-      const v = colorLayer.params.vignette;
-      const gradient = ctx.createRadialGradient(
-        canvas.width / 2,
-        canvas.height / 2,
-        canvas.width * 0.28,
-        canvas.width / 2,
-        canvas.height / 2,
-        canvas.width * 0.72
-      );
-      gradient.addColorStop(0, 'rgba(0,0,0,0)');
-      gradient.addColorStop(1, `rgba(0,0,0,${Math.min(0.9, v * 0.75)})`);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (colorLayer && !isVideoBaked) {
+      const resolved = resolveColorParams(colorLayer.params);
+      if (resolved.vignette > 0) {
+        const v = resolved.vignette;
+        const gradient = ctx.createRadialGradient(
+          canvas.width / 2,
+          canvas.height / 2,
+          canvas.width * 0.28,
+          canvas.width / 2,
+          canvas.height / 2,
+          canvas.width * 0.72
+        );
+        gradient.addColorStop(0, 'rgba(0,0,0,0)');
+        gradient.addColorStop(1, `rgba(0,0,0,${Math.min(0.9, v * 0.75)})`);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
     }
 
     // 4. Derive Graphic Text Overlays from Text Layers
@@ -343,20 +386,21 @@ export const VideoPlayer: React.FC = () => {
     const subtitleLayer = effectivePlan.layers.find(
       (l) => l.enabled && l.layer === 'subtitle'
     ) as any;
-    if (subtitleLayer) {
+    if (subtitleLayer && !isVideoBaked) {
       const p = subtitleLayer.params;
       const cues = project?.analysisSummary?.cues;
-      const activeCue = cues?.find((c) => curMs >= c.startMs && curMs <= c.endMs);
+      // Hold cue visible for +500ms after endMs so final words remain readable on screen
+      const activeCue = cues?.find((c) => curMs >= c.startMs && curMs <= (c.endMs + 500));
 
       const fontSize = p.size || 48;
       const fontFamily = p.font || 'Montserrat';
       const pos = p.position || 'bottom';
-      const primaryColor = p.primaryColor || '#FFFFFF';
-      const highlightColor = p.highlightColor || '#FFD84D';
-      const maxWordsPerLine = p.maxWordsPerLine || 5;
+      const primaryColor = p.primaryColor || '#FFF5F5';
+      const highlightColor = p.highlightColor || '#F7D7D1';
+      const maxWordsPerLine = Math.max(3, p.maxWordsPerLine || 6);
 
-      let yPos = canvas.height * 0.86;
-      if (pos === 'top') yPos = canvas.height * 0.14;
+      let yPos = canvas.height * 0.80;
+      if (pos === 'top') yPos = canvas.height * 0.16;
       if (pos === 'center') yPos = canvas.height * 0.5;
 
       ctx.save();
@@ -368,26 +412,61 @@ export const VideoPlayer: React.FC = () => {
       ctx.lineJoin = 'round';
 
       if (activeCue) {
-        if (activeCue.words && activeCue.words.length > 0) {
+        // Extract words with fallback to splitting activeCue.text so no final words are ever lost
+        let allWords = (activeCue.words && activeCue.words.length > 0) ? activeCue.words : [];
+        const cueTokens = (activeCue.text || '').trim().split(/\s+/).filter(Boolean);
+
+        if (cueTokens.length > allWords.length) {
+          // Reconcile words array with complete cue text so words like "Diwali" always render
+          const lastItem = allWords.length > 0 ? (allWords[allWords.length - 1] as any) : null;
+          const baseStart = lastItem ? (lastItem.endMs || lastItem.s || activeCue.startMs) : activeCue.startMs;
+          const cueEnd = Math.max(baseStart + 400, activeCue.endMs);
+          const missingTokens = cueTokens.slice(allWords.length);
+          const perWordDur = Math.max(250, Math.floor((cueEnd - baseStart) / Math.max(1, missingTokens.length)));
+
+          missingTokens.forEach((tok: string, mIdx: number) => {
+            const s = baseStart + mIdx * perWordDur;
+            const e = s + perWordDur;
+            (allWords as any).push({
+              word: tok,
+              w: tok,
+              startMs: s,
+              s,
+              endMs: e,
+              e,
+            });
+          });
+        }
+
+        if (allWords.length > 0) {
           // Break words into lines based on maxWordsPerLine
-          const allWords = activeCue.words;
           const lines: (typeof allWords)[] = [];
           for (let i = 0; i < allWords.length; i += maxWordsPerLine) {
             lines.push(allWords.slice(i, i + maxWordsPerLine));
           }
 
           const lineHeight = fontSize * 1.25;
-          const startY = yPos - ((lines.length - 1) * lineHeight) / 2;
+          let startY = yPos - ((lines.length - 1) * lineHeight) / 2;
+          const maxBottomY = canvas.height * 0.88;
+          if (startY + (lines.length - 1) * lineHeight > maxBottomY) {
+            startY = maxBottomY - (lines.length - 1) * lineHeight;
+          }
 
           lines.forEach((lineWords, lineIdx) => {
             const currentLineY = startY + lineIdx * lineHeight;
-            const wordWidths = lineWords.map((w) => ctx.measureText(w.word + ' ').width);
+            const wordWidths = lineWords.map((w: any) => {
+              const textVal = w.word || w.w || '';
+              return ctx.measureText(textVal + ' ').width;
+            });
             const totalLineWidth = wordWidths.reduce((a, b) => a + b, 0);
             let currentX = canvas.width / 2 - totalLineWidth / 2;
 
-            lineWords.forEach((wordObj, i) => {
-              const isWordActive = curMs >= wordObj.startMs && curMs <= wordObj.endMs;
-              const wordText = wordObj.word + ' ';
+            lineWords.forEach((wordObj: any, i) => {
+              const textVal = wordObj.word || wordObj.w || '';
+              const startVal = wordObj.startMs !== undefined ? wordObj.startMs : (wordObj.s || 0);
+              const endVal = wordObj.endMs !== undefined ? wordObj.endMs : (wordObj.e || startVal + 350);
+              const isWordActive = curMs >= startVal && curMs <= endVal;
+              const wordText = textVal + ' ';
               const wWidth = wordWidths[i];
 
               ctx.save();
@@ -438,14 +517,14 @@ export const VideoPlayer: React.FC = () => {
         ctx.restore();
       }
     }
-  }, [playback.currentTime, effectivePlan, project, showSafeGuides]);
+  }, [playback.currentTime, effectivePlan, project, showSafeGuides, isVideoBaked]);
 
   // Compute CSS filter for live video color grade approximation from ColorLayer
   const colorLayer = effectivePlan?.layers.find((l) => l.enabled && l.layer === 'color') as any;
-  const contrast = colorLayer?.params?.contrast ?? 1.0;
-  const saturation = colorLayer?.params?.saturation ?? 1.0;
-  const brightness = 1.0 + (colorLayer?.params?.brightness ?? 0.0);
-  const filterStyle = `contrast(${contrast}) saturate(${saturation}) brightness(${brightness})`;
+  const colorFilterResult = colorLayer ? computeColorCssFilter(colorLayer.params) : null;
+  const filterStyle = colorFilterResult ? colorFilterResult.cssFilter : 'none';
+
+  const activeFilter = colorLayer && !isVideoBaked ? filterStyle : 'none';
 
   const formatTime = (sec: number) => {
     const mins = Math.floor(sec / 60);
@@ -459,22 +538,20 @@ export const VideoPlayer: React.FC = () => {
   return (
     <main
       ref={containerRef}
-      className="flex-1 flex flex-col bg-black relative overflow-hidden select-none"
+      className="flex-1 min-h-0 flex flex-col bg-black relative overflow-hidden select-none"
     >
       {/* Video Canvas Container */}
-      <div className="flex-1 relative flex items-center justify-center p-4">
-        <div className="relative aspect-video max-h-full max-w-full bg-[#05080E] rounded-xl overflow-hidden shadow-2xl border border-surfaceBorder">
+      <div className="flex-1 min-h-0 relative flex items-center justify-center p-3">
+        <div className="relative aspect-video max-h-full max-w-full bg-[#05080E] rounded-xl overflow-hidden shadow-2xl border border-surfaceBorder group">
           {/* Master Video Element */}
           <video
             ref={videoRef}
-            src={
-              preview.url ||
-              'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
-            }
+            src={preview.url || undefined}
             playsInline
             muted={playback.muted}
             style={{
-              filter: preview.mode === 'live' || preview.stale ? filterStyle : 'none',
+              filter: activeFilter,
+              transition: 'filter 0.2s ease',
             }}
             className="w-full h-full object-contain"
             onEnded={() => {
@@ -482,6 +559,33 @@ export const VideoPlayer: React.FC = () => {
               setPlaybackStatus('ended');
             }}
           />
+
+          {/* Real-time CSS Vignette Overlay */}
+          {colorLayer && !isVideoBaked && (() => {
+            const resolved = resolveColorParams(colorLayer.params);
+            if (resolved.vignette <= 0) return null;
+            return (
+              <div
+                className="absolute inset-0 pointer-events-none transition-all duration-200 z-[5]"
+                style={{
+                  background: `radial-gradient(circle at center, transparent 36%, rgba(0,0,0,${Math.min(0.92, (resolved.vignette * 0.88)).toFixed(2)}) 100%)`,
+                }}
+              />
+            );
+          })()}
+
+          {/* Central Click-To-Play / Pause Overlay */}
+          <div
+            onClick={togglePlay}
+            className="absolute inset-0 flex items-center justify-center cursor-pointer z-10"
+            title={isPlaying ? 'Click to Pause' : 'Click to Play'}
+          >
+            {!isPlaying && (
+              <div className="w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-[#393B3F] flex items-center justify-center text-white shadow-2xl transition-all transform hover:scale-110 active:scale-95 group-hover:bg-[#E3B5BE]/80">
+                <Play className="w-7 h-7 ml-1 fill-white text-white" />
+              </div>
+            )}
+          </div>
 
           {/* Real-time Canvas 2D Overlay (Subtitles, Overlays, Vignette, Intros) */}
           <canvas
@@ -492,7 +596,7 @@ export const VideoPlayer: React.FC = () => {
           />
 
           {/* Preview Mode & Stale State Indicator */}
-          <div className="absolute top-3 left-3 flex items-center space-x-2 px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-md border border-white/10 text-[11px] text-slate-300">
+          <div className="absolute top-3 left-3 flex items-center space-x-2 px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-md border border-[#393B3F] text-[11px] text-[#FFF5F5]/80">
             <span
               className={`w-2 h-2 rounded-full ${
                 preview.stale ? 'bg-amber-400' : 'bg-emerald-400'
@@ -513,8 +617,8 @@ export const VideoPlayer: React.FC = () => {
               onClick={() => setShowSafeGuides(!showSafeGuides)}
               className={`p-1.5 rounded-md backdrop-blur-sm border transition-colors ${
                 showSafeGuides
-                  ? 'bg-blue-600/40 border-blue-400 text-blue-200'
-                  : 'bg-black/60 border-white/10 text-slate-400 hover:text-white'
+                  ? 'bg-[#E3B5BE]/20 border-[#E3B5BE] text-[#F7D7D1]'
+                  : 'bg-black/60 border-white/10 text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
               }`}
               title="Toggle Safe Margins (90% Title, 80% Action)"
             >
@@ -522,7 +626,7 @@ export const VideoPlayer: React.FC = () => {
             </button>
 
             {effectivePlan && (
-              <div className="px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm border border-white/10 text-[10px] font-mono text-slate-400">
+              <div className="px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm border border-[#393B3F] text-[10px] font-mono text-[#FFF5F5]/60">
                 EditPlan v{effectivePlan.version}
               </div>
             )}
@@ -531,72 +635,76 @@ export const VideoPlayer: React.FC = () => {
       </div>
 
       {/* Transport Control Bar */}
-      <div className="h-12 bg-surface/90 border-t border-surfaceBorder px-4 flex items-center justify-between">
+      <div className="h-12 flex-shrink-0 bg-surface/90 border-t border-surfaceBorder px-2 sm:px-4 flex items-center justify-between z-20 gap-1">
         {/* Playback Transport Buttons */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
           {/* Rewind */}
           <button
             onClick={() => {
               if (videoRef.current) videoRef.current.currentTime = 0;
               setCurrentTime(0);
             }}
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-1 sm:p-1.5 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors shrink-0"
             title="Rewind to start (Home)"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           {/* Step Back 1 Frame */}
           <button
             onClick={() => stepFrame(-1)}
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="hidden xs:flex p-1 sm:p-1.5 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors shrink-0"
             title="Step Back 1 Frame (Left Arrow)"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           {/* Play / Pause Master */}
           <button
             onClick={togglePlay}
-            className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow transition-transform active:scale-95"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] flex items-center justify-center shadow transition-transform active:scale-95 shrink-0"
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+            {isPlaying ? (
+              <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#18191B]" />
+            ) : (
+              <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-0.5 fill-[#18191B]" />
+            )}
           </button>
 
           {/* Step Forward 1 Frame */}
           <button
             onClick={() => stepFrame(1)}
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="hidden xs:flex p-1 sm:p-1.5 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors shrink-0"
             title="Step Forward 1 Frame (Right Arrow)"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           {/* Timecode Readout */}
-          <div className="text-xs font-mono text-slate-300 ml-2">
+          <div className="text-[10px] sm:text-xs font-mono text-[#F7D7D1] ml-1 sm:ml-2 truncate">
             <span>{formatTime(playback.currentTime)}</span>
-            <span className="text-slate-500"> / </span>
-            <span className="text-slate-500">{formatTime(playback.duration)}</span>
-            <span className="text-slate-600 ml-2 text-[10px]">({fps}fps)</span>
+            <span className="text-[#393B3F]"> / </span>
+            <span className="text-[#FFF5F5]/50">{formatTime(playback.duration)}</span>
+            <span className="hidden md:inline text-[#FFF5F5]/40 ml-1.5 text-[10px]">({fps}fps)</span>
           </div>
         </div>
 
         {/* Right audio, speed & display controls */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
           {/* Playback Speed Rate Menu */}
           <div className="relative">
             <button
               onClick={() => setShowRateMenu(!showRateMenu)}
-              className="flex items-center space-x-1 px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-mono border border-surfaceBorder transition-colors"
+              className="flex items-center space-x-1 px-1.5 sm:px-2 py-1 rounded bg-[#2A2C2F] hover:bg-[#34373B] text-[#FFF5F5] text-[10px] sm:text-xs font-mono border border-[#393B3F] transition-colors"
               title="Playback Rate (J/L keys)"
             >
-              <Gauge className="w-3.5 h-3.5 text-blue-400" />
-              <span>{playback.rate || 1.0}x</span>
+              <Gauge className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#E3B5BE]" />
+              <span>{effectivePlaybackRate}x</span>
             </button>
 
             {showRateMenu && (
-              <div className="absolute bottom-full mb-1.5 right-0 bg-[#0F141E] border border-surfaceBorder rounded-lg shadow-xl p-1 space-y-0.5 z-50">
+              <div className="absolute bottom-full mb-1.5 right-0 bg-[#222326] border border-[#393B3F] rounded-lg shadow-xl p-1 space-y-0.5 z-50">
                 {playbackRates.map((r) => (
                   <button
                     key={r}
@@ -606,8 +714,8 @@ export const VideoPlayer: React.FC = () => {
                     }}
                     className={`w-full px-2.5 py-1 text-left text-xs font-mono rounded transition-colors ${
                       (playback.rate || 1.0) === r
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-300 hover:bg-slate-800'
+                        ? 'bg-[#E3B5BE] text-[#18191B] font-bold'
+                        : 'text-[#FFF5F5]/70 hover:bg-[#2A2C2F]'
                     }`}
                   >
                     {r}x
@@ -618,14 +726,14 @@ export const VideoPlayer: React.FC = () => {
           </div>
 
           {/* Volume Slider & Mute Toggle */}
-          <div className="flex items-center space-x-1.5 bg-slate-900/60 px-2 py-1 rounded-lg border border-surfaceBorder">
+          <div className="flex items-center space-x-1.5 bg-[#2A2C2F] px-1.5 sm:px-2 py-1 rounded-lg border border-[#393B3F]">
             <button
               onClick={toggleMute}
-              className="text-slate-400 hover:text-white transition-colors"
+              className="text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors"
               title={playback.muted ? 'Unmute (M)' : 'Mute (M)'}
             >
               {playback.muted || playback.volume === 0 ? (
-                <VolumeX className="w-3.5 h-3.5 text-amber-400" />
+                <VolumeX className="w-3.5 h-3.5 text-[#E3B5BE]" />
               ) : (
                 <Volume2 className="w-3.5 h-3.5" />
               )}
@@ -637,7 +745,7 @@ export const VideoPlayer: React.FC = () => {
               step="0.05"
               value={playback.muted ? 0 : playback.volume}
               onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-16 h-1 accent-blue-500 bg-slate-800 rounded cursor-pointer"
+              className="hidden sm:inline-block w-16 h-1 accent-[#E3B5BE] bg-[#18191B] rounded cursor-pointer"
               title={`Volume: ${Math.round(playback.volume * 100)}%`}
             />
           </div>
@@ -653,10 +761,10 @@ export const VideoPlayer: React.FC = () => {
                 }
               }
             }}
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-1 sm:p-1.5 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors"
             title="Fullscreen (F)"
           >
-            <Maximize2 className="w-4 h-4" />
+            <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </div>

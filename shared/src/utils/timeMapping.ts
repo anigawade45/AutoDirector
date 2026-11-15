@@ -199,8 +199,41 @@ export function buildKeepSegments(
     keepIntervals.push({ start: 0, end: maxDur });
   }
 
+  // Active speed layers
+  const activeSpeeds = (speeds || []).filter(
+    (sp) => sp.params && typeof sp.params.factor === 'number'
+  );
+
+  // If there are speed ranges that slice through intervals, split keepIntervals at those boundaries
+  const slicedIntervals: Array<{ start: number; end: number }> = [];
+  for (const interval of keepIntervals) {
+    const splitPoints = new Set<number>();
+    splitPoints.add(interval.start);
+    splitPoints.add(interval.end);
+
+    for (const sp of activeSpeeds) {
+      if (sp.range) {
+        if (sp.range.start > interval.start + 0.04 && sp.range.start < interval.end - 0.04) {
+          splitPoints.add(sp.range.start);
+        }
+        if (sp.range.end > interval.start + 0.04 && sp.range.end < interval.end - 0.04) {
+          splitPoints.add(sp.range.end);
+        }
+      }
+    }
+
+    const sortedPoints = Array.from(splitPoints).sort((a, b) => a - b);
+    for (let i = 0; i < sortedPoints.length - 1; i++) {
+      const segStart = sortedPoints[i];
+      const segEnd = sortedPoints[i + 1];
+      if (segEnd > segStart + 0.02) {
+        slicedIntervals.push({ start: segStart, end: segEnd });
+      }
+    }
+  }
+
   // Snap to frame grid if fps provided
-  return keepIntervals.map((interval) => {
+  return slicedIntervals.map((interval) => {
     let start = interval.start;
     let end = interval.end;
 
@@ -212,8 +245,19 @@ export function buildKeepSegments(
       }
     }
 
-    // Match applicable speed factor
-    const matchingSpeed = speeds.find((sp) => sp.range.start <= start && sp.range.end >= end);
+    const midPoint = (start + end) / 2;
+
+    // Match applicable speed factor:
+    // 1. Speed layer containing interval midpoint
+    // 2. Speed layer covering the whole interval
+    // 3. Global speed layer (without range)
+    const matchingSpeed =
+      activeSpeeds.find(
+        (sp) => sp.range && midPoint >= sp.range.start - 0.02 && midPoint <= sp.range.end + 0.02
+      ) ||
+      activeSpeeds.find((sp) => sp.range && sp.range.start <= start + 0.02 && sp.range.end >= end - 0.02) ||
+      activeSpeeds.find((sp) => !sp.range);
+
     const speed = matchingSpeed?.params?.factor
       ? Math.max(0.25, Math.min(4.0, matchingSpeed.params.factor))
       : 1.0;

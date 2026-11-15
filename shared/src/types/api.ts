@@ -69,6 +69,7 @@ export interface PromptRequest {
   prompt: string;
   baseVersion?: number;
   requestPreview?: boolean;
+  model?: string;
 }
 
 export interface PromptResponseData {
@@ -108,7 +109,42 @@ export interface DownloadUrlResponseData {
   expiresInSeconds: number;
 }
 
-// Project management endpoints
+// Authentication endpoints
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  tier: 'free' | 'pro' | 'enterprise';
+  quota?: {
+    storageBytes: number;
+    renderMinutes: number;
+    promptsPerDay: number;
+  };
+  usage?: {
+    storageBytesUsed: number;
+    renderMinutesUsed: number;
+    promptsToday: number;
+  };
+}
+
+export interface AuthResponseData {
+  user: UserProfile;
+  token: string;
+  jwt?: string;
+}
+
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  password?: string;
+  tier?: 'free' | 'pro' | 'enterprise';
+}
+
+export interface LoginRequest {
+  email: string;
+  password?: string;
+}
+
 export interface UpdateProjectRequest {
   title?: string;
   status?: 'draft' | 'uploading' | 'analyzing' | 'ready' | 'rendering' | 'error' | 'archived';
@@ -120,3 +156,22 @@ export interface UpdateProjectRequest {
     language?: string;
   };
 }
+
+export interface ChatMessageDto {
+  id: string;
+  projectId: string;
+  userId?: string;
+  role: 'user' | 'assistant' | 'system';
+  text: string;
+  planId?: string;
+  versionResult?: number;
+  planVersion?: number;
+  timestamp: string;
+  createdAt?: string;
+}
+
+export interface ChatHistoryResponseData {
+  projectId: string;
+  messages: ChatMessageDto[];
+}
+

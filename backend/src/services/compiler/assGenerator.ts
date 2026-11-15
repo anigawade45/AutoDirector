@@ -153,7 +153,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if (chunk.length === 0) continue;
 
         const chunkStartMs = chunk[0].s;
-        const chunkEndMs = Math.max(chunk[0].s + 100, chunk[chunk.length - 1].e);
+        const chunkEndMs = Math.max(chunk[0].s + 150, chunk[chunk.length - 1].e);
 
         if (style === 'word_pop') {
           // Word-Pop: each active word scales up and illuminates in highlightColor
@@ -161,7 +161,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const activeWord = chunk[i];
             const nextWord = chunk[i + 1];
             const wordStartMs = activeWord.s;
-            const wordEndMs = nextWord ? nextWord.s : activeWord.e;
+            const wordEndMs = nextWord
+              ? Math.max(activeWord.s + 150, nextWord.s)
+              : Math.max(activeWord.s + 400, activeWord.e);
 
             if (wordEndMs <= wordStartMs) continue;
 

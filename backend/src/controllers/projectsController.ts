@@ -1,10 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { nanoid } from 'nanoid';
 import { ProjectModel } from '../models/Project.js';
 import { AssetModel } from '../models/Asset.js';
 import { AnalysisResultModel } from '../models/AnalysisResult.js';
 import { CaptionSetModel } from '../models/CaptionSet.js';
 import { TimelineModel } from '../models/Timeline.js';
+import { EditPlanModel } from '../models/EditPlan.js';
+import { ChatMessageModel } from '../models/ChatMessage.js';
 import { S3Service } from '../services/storage/s3Service.js';
 import { StorageKeys } from '../config/s3.js';
 import { PurgeService } from '../services/maintenance/purgeService.js';
@@ -102,9 +105,20 @@ export class ProjectsController {
 
       let analysisSummary = null;
       let previewUrl = null;
+      let baseProxyUrl = null;
+      let isRenderedPreview = false;
 
       if (project.baseAssetId) {
         const baseAsset = project.baseAssetId as any;
+
+        const cleanProxyKey = baseAsset.s3?.proxyKey || baseAsset.s3?.rawKey;
+        if (cleanProxyKey) {
+          try {
+            baseProxyUrl = await S3Service.getPresignedDownloadUrl(cleanProxyKey, 7200);
+          } catch (s3Err) {
+            console.warn('[ProjectsController] Base proxy Presigned URL notice:', s3Err);
+          }
+        }
 
         // Check for rendered captioned preview first, then fall back to 480p proxy, then raw video
         const previewKey = StorageKeys.previewVideo(
@@ -112,28 +126,42 @@ export class ProjectsController {
           project.publicId,
           project.headVersion || 1
         );
-        let keyToSign = baseAsset.s3?.proxyKey || baseAsset.s3?.rawKey;
+        let keyToSign = cleanProxyKey;
 
         try {
           const hasPreview = await S3Service.fileExists(previewKey);
           if (hasPreview) {
             keyToSign = previewKey;
+            isRenderedPreview = true;
           }
         } catch {
           // Keep proxy fallback
         }
 
         if (keyToSign) {
-          try {
-            previewUrl = await S3Service.getPresignedDownloadUrl(keyToSign, 7200);
-          } catch (s3Err) {
-            console.warn('[ProjectsController] Presigned URL notice:', s3Err);
+          if (keyToSign === cleanProxyKey && baseProxyUrl) {
+            previewUrl = baseProxyUrl;
+          } else {
+            try {
+              previewUrl = await S3Service.getPresignedDownloadUrl(keyToSign, 7200);
+            } catch (s3Err) {
+              console.warn('[ProjectsController] Presigned URL notice:', s3Err);
+            }
           }
         }
 
+        const assetDocId = baseAsset._id || project.baseAssetId;
+        const lookupIds: any[] = [assetDocId];
+        if (baseAsset.publicId) {
+          lookupIds.push(baseAsset.publicId);
+        }
+
         const [analysis, captionSet] = await Promise.all([
-          AnalysisResultModel.findOne({ assetId: project.baseAssetId }),
-          CaptionSetModel.findOne({ projectId: project._id, assetId: project.baseAssetId }),
+          AnalysisResultModel.findOne({ assetId: { $in: lookupIds } }),
+          CaptionSetModel.findOne({
+            projectId: { $in: [project._id, project.publicId] },
+            assetId: { $in: lookupIds },
+          }),
         ]);
 
         if (analysis) {
@@ -155,16 +183,68 @@ export class ProjectsController {
             cuesCount: cues.length,
             wordCount: totalWords,
             transcriptSnippet: snippet || undefined,
+            cues: cues.map((c: any) => ({
+              startMs: c.startMs,
+              endMs: c.endMs,
+              text: c.text,
+              words: (c.words || []).map((w: any) => ({
+                word: w.w || w.word || '',
+                startMs: w.s !== undefined ? w.s : w.startMs || 0,
+                endMs: w.e !== undefined ? w.e : w.endMs || 0,
+                score: w.conf,
+              })),
+            })),
           };
         }
+      }
+
+      let headPlan = null;
+      if (project.headVersion > 0) {
+        const headPlanDoc =
+          (await EditPlanModel.findOne({
+            projectId: project._id,
+            version: project.headVersion,
+          })) ||
+          (await EditPlanModel.findOne({
+            projectId: project._id,
+          }).sort({ version: -1 }));
+        if (headPlanDoc) {
+          headPlan = headPlanDoc.plan;
+        }
+      }
+
+      let chatMessages: any[] = [];
+      try {
+        const msgs = await ChatMessageModel.find({
+          projectId: project._id,
+          $or: [{ userId: req.user!._id }, { userId: { $exists: false } }],
+        }).sort({ createdAt: 1 });
+
+        chatMessages = msgs.map((m) => ({
+          id: m._id.toString(),
+          projectId: project.publicId || project._id.toString(),
+          role: m.role,
+          text: m.text,
+          planId: m.planId?.toString(),
+          versionResult: m.versionResult,
+          planVersion: m.versionResult,
+          timestamp: m.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          createdAt: m.createdAt.toISOString(),
+        }));
+      } catch (chatErr) {
+        console.warn('[ProjectsController] Chat messages load warning:', chatErr);
       }
 
       res.status(200).json({
         success: true,
         data: {
           project,
+          plan: headPlan,
           previewUrl,
+          baseProxyUrl: baseProxyUrl || previewUrl,
+          isRenderedPreview,
           analysisSummary,
+          chatMessages,
         },
         requestId: req.id,
       });
@@ -322,6 +402,49 @@ export class ProjectsController {
       res.status(200).json({
         success: true,
         data: result,
+        requestId: req.id,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async updateCaptions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const { cues, language } = req.body;
+      const rawUserId = req.user?._id;
+
+      const project = await ProjectModel.findOne({
+        publicId: id,
+        userId: rawUserId,
+        deletedAt: null,
+      });
+
+      if (!project) {
+        throw new AppError(404, 'PROJECT_NOT_FOUND', `Project ${id} not found or unauthorized`);
+      }
+
+      if (!Array.isArray(cues)) {
+        throw new AppError(400, 'INVALID_CUES', 'cues must be an array of caption cues');
+      }
+
+      const captionSet = await CaptionSetModel.findOneAndUpdate(
+        { projectId: { $in: [project._id, project.publicId] } },
+        {
+          $set: {
+            cues,
+            origin: 'manual',
+            ...(language ? { language } : {}),
+            contentHash: crypto.createHash('sha256').update(JSON.stringify(cues)).digest('hex'),
+          },
+        },
+        { new: true, upsert: true }
+      );
+
+      res.status(200).json({
+        success: true,
+        data: captionSet,
         requestId: req.id,
       });
     } catch (err) {

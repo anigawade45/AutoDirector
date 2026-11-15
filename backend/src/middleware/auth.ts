@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from './errorHandler.js';
 import { UserModel } from '../models/User.js';
+import { TokenService } from '../services/auth/tokenService.js';
 import mongoose from 'mongoose';
 
 declare global {
@@ -23,27 +24,6 @@ export async function authMiddleware(
 ): Promise<void> {
   const authHeader = req.headers.authorization;
 
-  // In development and testing, allow default fallback user if no auth header provided
-  if (!authHeader && process.env.NODE_ENV !== 'production') {
-    let devUser = await UserModel.findOne({ email: 'dev@example.com' });
-    if (!devUser) {
-      devUser = await UserModel.create({
-        email: 'dev@example.com',
-        name: 'Developer',
-        authProvider: 'local',
-        tier: 'pro',
-      });
-    }
-
-    req.user = {
-      _id: devUser._id as mongoose.Types.ObjectId,
-      id: devUser._id.toString(),
-      email: devUser.email,
-      tier: devUser.tier,
-    };
-    return next();
-  }
-
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return next(new AppError(401, 'UNAUTHENTICATED', 'Authentication token missing or invalid'));
   }
@@ -52,17 +32,25 @@ export async function authMiddleware(
 
   try {
     let user = null;
-    const cleanToken = token.startsWith('user_') ? token.replace(/^user_/, '') : token;
 
-    if (mongoose.isValidObjectId(cleanToken)) {
-      user = await UserModel.findById(cleanToken);
+    // 1. Try decoding RFC 7519 standard JWT token
+    const jwtPayload = TokenService.verifyToken(token);
+    if (jwtPayload) {
+      if (jwtPayload.sub && mongoose.isValidObjectId(jwtPayload.sub)) {
+        user = await UserModel.findById(jwtPayload.sub);
+      }
+      if (!user && jwtPayload.email && typeof UserModel.findOne === 'function') {
+        user = await UserModel.findOne({ email: jwtPayload.email });
+      }
     }
 
+    // 2. Direct user ObjectId or registered email lookup
     if (!user) {
-      if (token.includes('@')) {
-        user = await UserModel.findOne({ email: token });
-      } else {
-        user = await UserModel.findOne({ email: 'dev@example.com' });
+      const cleanToken = token.startsWith('user_') ? token.replace(/^user_/, '') : token;
+      if (mongoose.isValidObjectId(cleanToken)) {
+        user = await UserModel.findById(cleanToken);
+      } else if (token.includes('@') && typeof UserModel.findOne === 'function') {
+        user = await UserModel.findOne({ email: token.toLowerCase() });
       }
     }
 
@@ -71,14 +59,15 @@ export async function authMiddleware(
     }
 
     req.user = {
-      _id: user._id as mongoose.Types.ObjectId,
-      id: user._id.toString(),
+      _id: (user._id || user.id) as mongoose.Types.ObjectId,
+      id: (user._id || user.id).toString(),
       email: user.email,
       tier: user.tier,
     };
 
     next();
-  } catch (error) {
-    next(new AppError(401, 'UNAUTHENTICATED', 'Failed to authenticate bearer token'));
+  } catch (err) {
+    next(err);
   }
 }
+

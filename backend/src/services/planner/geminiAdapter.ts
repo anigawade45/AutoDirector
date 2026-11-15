@@ -20,57 +20,81 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       return this.generateHeuristicPlan(input);
     }
 
-    try {
-      const model = this.client.getGenerativeModel({
-        model: env.AI_MODEL || 'gemini-1.5-pro',
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: 'application/json',
-          maxOutputTokens: input.maxOutputTokens || 4096,
-        },
-      });
+    const targetModel = input.model || env.AI_MODEL || 'gemini-3.5-flash-lite';
+    const fallbackCandidates = [
+      targetModel,
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-flash-lite-latest',
+      'gemini-3.5-flash',
+      'gemini-3.6-flash',
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-4-argon',
+    ].filter((m, i, arr) => arr.indexOf(m) === i);
 
-      const promptText = `${input.systemInstructions}\n\n${input.userPrompt}`;
-      const result = await model.generateContent(promptText);
-      const response = await result.response;
-      let text = response.text();
-
-      if (!text) {
-        throw new Error('Gemini returned an empty or invalid response');
-      }
-
-      // Strip markdown code fences if model returned them
-      text = text.trim();
-      if (text.startsWith('```')) {
-        text = text
-          .replace(/^```(json)?\n?/, '')
-          .replace(/\n?```$/, '')
-          .trim();
-      }
-
-      let structuredOutput: unknown;
+    let lastError: Error | null = null;
+    for (const modelName of fallbackCandidates) {
       try {
-        structuredOutput = JSON.parse(text);
-      } catch (e) {
-        throw new Error(`Failed to parse Gemini output as JSON: ${text.slice(0, 200)}`);
-      }
+        const model = this.client.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: 'application/json',
+            maxOutputTokens: input.maxOutputTokens || 4096,
+          },
+        });
 
-      return {
-        provider: 'gemini',
-        model: env.AI_MODEL || 'gemini-1.5-pro',
-        structuredOutput,
-        usage: {
-          inputTokens: response.usageMetadata?.promptTokenCount,
-          outputTokens: response.usageMetadata?.candidatesTokenCount,
-        },
-      };
-    } catch (err: any) {
-      // If API fails due to network or missing remote access in test/local sandbox, fallback gracefully
-      console.warn(
-        `[GeminiPlannerAdapter] Remote call failed (${err.message}). Falling back to heuristic planner.`
-      );
-      return this.generateHeuristicPlan(input);
+        const promptText = `${input.systemInstructions}\n\n${input.userPrompt}`;
+        const result = await model.generateContent(promptText);
+        const response = await result.response;
+        let text = response.text();
+
+        if (!text) {
+          throw new Error(`Gemini (${modelName}) returned an empty response`);
+        }
+
+        // Strip markdown code fences if model returned them
+        text = text.trim();
+        if (text.startsWith('```')) {
+          text = text
+            .replace(/^```(json)?\n?/, '')
+            .replace(/\n?```$/, '')
+            .trim();
+        }
+
+        let structuredOutput: unknown;
+        try {
+          structuredOutput = JSON.parse(text);
+        } catch (e) {
+          throw new Error(`Failed to parse Gemini output as JSON: ${text.slice(0, 200)}`);
+        }
+
+        if (modelName !== targetModel) {
+          console.log(
+            `[GeminiPlannerAdapter] ✓ Automatically switched to fallback model: ${modelName} (original ${targetModel} unavailable)`
+          );
+        }
+
+        return {
+          provider: 'gemini',
+          model: modelName,
+          structuredOutput,
+          usage: {
+            inputTokens: response.usageMetadata?.promptTokenCount,
+            outputTokens: response.usageMetadata?.candidatesTokenCount,
+          },
+        };
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[GeminiPlannerAdapter] Model ${modelName} notice: ${err.message}. Trying fallback...`);
+      }
     }
+
+    console.warn(
+      `[GeminiPlannerAdapter] Remote call failed (${lastError?.message}). Falling back to heuristic planner.`
+    );
+    return this.generateHeuristicPlan(input);
   }
 
   private generateHeuristicPlan(input: PlannerProviderInput): PlannerProviderOutput {
@@ -303,15 +327,28 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       // Speed adjustments
       if (
         instruction.includes('faster') ||
-        instruction.includes('speed up') ||
+        instruction.includes('speed') ||
+        instruction.includes('fast') ||
+        instruction.includes('slow') ||
         instruction.includes('pacing')
       ) {
+        const speedMatch =
+          instruction.match(/(\d+(?:\.\d+)?)\s*x\s*speed/i) ||
+          instruction.match(/speed\s*(?:of\s*video\s*)?(?:to|by|at)?\s*(\d+(?:\.\d+)?)\s*x?/i) ||
+          instruction.match(/(\d+(?:\.\d+)?)\s*x/i);
+        let factor = speedMatch
+          ? parseFloat(speedMatch[1])
+          : instruction.includes('slow')
+          ? 0.75
+          : 1.5;
+        factor = Math.max(0.25, Math.min(4.0, Number(factor.toFixed(2))));
+
         const spdLayer = currentPlan.layers?.find((l: any) => l.layer === 'speed');
         if (spdLayer) {
           patches.push({
             op: 'replace',
             path: `/layers/${spdLayer.id}/params/factor`,
-            value: 1.25,
+            value: factor,
           });
         } else {
           patches.push({
@@ -323,7 +360,7 @@ export class GeminiPlannerAdapter implements PlannerProvider {
               enabled: true,
               timebase: 'source',
               range: { start: 0, end: totalDurationSec },
-              params: { factor: 1.25, keepPitch: true },
+              params: { factor, keepPitch: true },
             },
           });
         }
@@ -385,7 +422,7 @@ export class GeminiPlannerAdapter implements PlannerProvider {
             },
             params: {
               reason: 'silence',
-              padding: 0.05,
+              padding: 0.15,
             },
           });
         }
@@ -500,9 +537,20 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     if (
       instruction.includes('speed') ||
       instruction.includes('fast') ||
-      instruction.includes('quick')
+      instruction.includes('quick') ||
+      instruction.includes('slow') ||
+      instruction.includes('pacing')
     ) {
-      const factor = instruction.includes('1.5') ? 1.5 : 1.25;
+      const speedMatch =
+        instruction.match(/(\d+(?:\.\d+)?)\s*x\s*speed/i) ||
+        instruction.match(/speed\s*(?:of\s*video\s*)?(?:to|by|at)?\s*(\d+(?:\.\d+)?)\s*x?/i) ||
+        instruction.match(/(\d+(?:\.\d+)?)\s*x/i);
+      let factor = speedMatch
+        ? parseFloat(speedMatch[1])
+        : instruction.includes('slow')
+        ? 0.75
+        : 1.5;
+      factor = Math.max(0.25, Math.min(4.0, Number(factor.toFixed(2))));
       layers.push({
         id: `lyr_spd_${layerCounter++}`,
         layer: 'speed',

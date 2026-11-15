@@ -6,6 +6,7 @@ import { TimelineVersionModel } from '../models/TimelineVersion.js';
 import { AssetModel } from '../models/Asset.js';
 import { PlanResolver } from '../services/resolver/planResolver.js';
 import { EditPlanSchema, EditPlan, validateEditPlan } from '@ai-video/shared';
+import { PlanNormalizer } from '../services/planner/planNormalizer.js';
 import { AppError } from '../middleware/errorHandler.js';
 import fastJsonPatch from 'fast-json-patch';
 import crypto from 'crypto';
@@ -21,9 +22,15 @@ export class PlansController {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found');
       }
 
-      const planDoc = await EditPlanModel.findOne({ projectId: project._id, version });
+      let planDoc = null;
+      if (versionStr === 'latest' || isNaN(version)) {
+        planDoc = await EditPlanModel.findOne({ projectId: project._id }).sort({ version: -1 });
+      } else {
+        planDoc = await EditPlanModel.findOne({ projectId: project._id, version });
+      }
+
       if (!planDoc) {
-        throw new AppError(404, 'PLAN_NOT_FOUND', `Edit plan version ${version} not found`);
+        throw new AppError(404, 'PLAN_NOT_FOUND', `Edit plan version ${versionStr} not found`);
       }
 
       res.status(200).json({
@@ -41,6 +48,10 @@ export class PlansController {
       const { id: projectId, v: versionStr } = req.params;
       const baseVersion = parseInt(versionStr, 10);
       const { patch } = req.body;
+
+      if (isNaN(baseVersion)) {
+        throw new AppError(400, 'BAD_REQUEST', 'Base version must be a valid number');
+      }
 
       if (!Array.isArray(patch)) {
         throw new AppError(
@@ -72,21 +83,42 @@ export class PlansController {
         throw new AppError(404, 'PLAN_NOT_FOUND', 'Base plan version not found');
       }
 
-      // Clone and apply JSON patch
+      // Clone and apply JSON patch with fallback for unresolvable leaf paths
       const clonedPlan = JSON.parse(JSON.stringify(currentPlanDoc.plan));
-      const patchResult = fastJsonPatch.applyPatch(clonedPlan, patch, true, true);
+      let patchResult: any;
+      try {
+        patchResult = fastJsonPatch.applyPatch(clonedPlan, patch, true, true);
+      } catch (patchErr: any) {
+        // Fallback: If op: 'replace' targeted a property that does not exist yet, convert to op: 'add'
+        try {
+          const fallbackPatch = patch.map((op: any) =>
+            op.op === 'replace' ? { ...op, op: 'add' } : op
+          );
+          patchResult = fastJsonPatch.applyPatch(clonedPlan, fallbackPatch, false, true);
+        } catch {
+          throw new AppError(
+            400,
+            'PATCH_APPLICATION_FAILED',
+            `JSON patch application failed: ${patchErr.message || patchErr}`
+          );
+        }
+      }
       const patchedObject = patchResult.newDocument || clonedPlan;
 
       const nextVersion = baseVersion + 1;
-      patchedObject.version = nextVersion;
-      patchedObject.parentVersion = baseVersion;
-
-      // Validate patched object with Zod schema
-      const validatedPlan = EditPlanSchema.parse(patchedObject) as EditPlan;
-
-      // Update Timeline & validate asset timeline invariants
       const asset = await AssetModel.findById(project.baseAssetId);
       const assetDurationSec = (asset?.media?.durationMs || 60000) / 1000;
+
+      // Normalize patched object to ensure all layer types, defaults, and ranges are valid
+      const normalizedPlan = PlanNormalizer.normalize(patchedObject, {
+        assetDurationSec,
+        prompt: `Manual edit on v${baseVersion}`,
+      });
+      normalizedPlan.version = nextVersion;
+      normalizedPlan.parentVersion = baseVersion;
+
+      // Validate patched object with Zod schema
+      const validatedPlan = EditPlanSchema.parse(normalizedPlan) as EditPlan;
 
       const planValidation = validateEditPlan(validatedPlan, {
         assetDurationSec,
@@ -101,16 +133,37 @@ export class PlansController {
         );
       }
 
-      // Persist new EditPlan version
-      const newPlanDoc = await EditPlanModel.create({
-        projectId: project._id,
-        version: nextVersion,
-        parentVersion: baseVersion,
-        prompt: `Manual edit: patched ${patch.length} properties`,
-        plan: validatedPlan,
-        patch,
-        model: 'manual-editor',
-      });
+      // Persist new EditPlan version (with duplicate-key resilience for crashed/replayed transactions)
+      let newPlanDoc: any;
+      try {
+        newPlanDoc = await EditPlanModel.create({
+          projectId: project._id,
+          version: nextVersion,
+          parentVersion: baseVersion,
+          prompt: `Manual edit: patched ${patch.length} properties`,
+          plan: validatedPlan,
+          patch,
+          model: 'manual-editor',
+        });
+      } catch (err: any) {
+        if (err.code === 11000 && typeof EditPlanModel.findOneAndUpdate === 'function') {
+          newPlanDoc = await EditPlanModel.findOneAndUpdate(
+            { projectId: project._id, version: nextVersion },
+            {
+              $set: {
+                parentVersion: baseVersion,
+                prompt: `Manual edit: patched ${patch.length} properties`,
+                plan: validatedPlan,
+                patch,
+                model: 'manual-editor',
+              },
+            },
+            { upsert: true, new: true }
+          );
+        } else {
+          throw err;
+        }
+      }
 
       const resolvedTimeline = PlanResolver.resolve({
         plan: validatedPlan,
@@ -137,19 +190,42 @@ export class PlansController {
         }
       );
 
-      await TimelineVersionModel.create({
-        projectId: project._id,
-        userId: req.user!._id,
-        version: nextVersion,
-        parentVersion: baseVersion,
-        source: 'manual',
-        label: 'Manual adjustment',
-        planId: newPlanDoc._id,
-        snapshot: resolvedTimeline,
-        snapshotHash,
-      });
+      try {
+        await TimelineVersionModel.create({
+          projectId: project._id,
+          userId: req.user!._id,
+          version: nextVersion,
+          parentVersion: baseVersion,
+          source: 'manual',
+          label: 'Manual adjustment',
+          planId: newPlanDoc._id,
+          snapshot: resolvedTimeline,
+          snapshotHash,
+        });
+      } catch (err: any) {
+        if (err.code === 11000 && typeof TimelineVersionModel.findOneAndUpdate === 'function') {
+          await TimelineVersionModel.findOneAndUpdate(
+            { projectId: project._id, version: nextVersion },
+            {
+              $set: {
+                userId: req.user!._id,
+                parentVersion: baseVersion,
+                source: 'manual',
+                label: 'Manual adjustment',
+                planId: newPlanDoc._id,
+                snapshot: resolvedTimeline,
+                snapshotHash,
+              },
+            },
+            { upsert: true, new: true }
+          );
+        } else {
+          throw err;
+        }
+      }
 
       project.headVersion = nextVersion;
+      project.versions = project.versions.filter((v) => v.version !== nextVersion);
       project.versions.push({
         version: nextVersion,
         label: 'Manual adjustment',
@@ -196,24 +272,51 @@ export class PlansController {
         );
       }
 
-      const nextVersion = project.headVersion + 1;
-      const revertedPlan = JSON.parse(JSON.stringify(targetPlanDoc.plan));
-      revertedPlan.version = nextVersion;
-      revertedPlan.parentVersion = project.headVersion;
-
-      const validatedPlan = EditPlanSchema.parse(revertedPlan) as EditPlan;
-
-      const newPlanDoc = await EditPlanModel.create({
-        projectId: project._id,
-        version: nextVersion,
-        parentVersion: project.headVersion,
-        prompt: `Reverted to version ${targetVersion}`,
-        plan: validatedPlan,
-        patch: [],
-        model: 'history-revert',
-      });
-
       const asset = await AssetModel.findById(project.baseAssetId);
+      const assetDurationSec = (asset?.media?.durationMs || 60000) / 1000;
+
+      const nextVersion = project.headVersion + 1;
+      const normalizedPlan = PlanNormalizer.normalize(targetPlanDoc.plan, {
+        assetDurationSec,
+        prompt: `Reverted to version ${targetVersion}`,
+      });
+      normalizedPlan.version = nextVersion;
+      normalizedPlan.parentVersion = project.headVersion;
+
+      const validatedPlan = EditPlanSchema.parse(normalizedPlan) as EditPlan;
+
+      // Persist new EditPlan version (with duplicate-key resilience)
+      let newPlanDoc: any;
+      try {
+        newPlanDoc = await EditPlanModel.create({
+          projectId: project._id,
+          version: nextVersion,
+          parentVersion: project.headVersion,
+          prompt: `Reverted to version ${targetVersion}`,
+          plan: validatedPlan,
+          patch: [],
+          model: 'history-revert',
+        });
+      } catch (err: any) {
+        if (err.code === 11000 && typeof EditPlanModel.findOneAndUpdate === 'function') {
+          newPlanDoc = await EditPlanModel.findOneAndUpdate(
+            { projectId: project._id, version: nextVersion },
+            {
+              $set: {
+                parentVersion: project.headVersion,
+                prompt: `Reverted to version ${targetVersion}`,
+                plan: validatedPlan,
+                patch: [],
+                model: 'history-revert',
+              },
+            },
+            { upsert: true, new: true }
+          );
+        } else {
+          throw err;
+        }
+      }
+
       const resolvedTimeline = PlanResolver.resolve({
         plan: validatedPlan,
         assetDurationMs: asset?.media?.durationMs || 60000,
@@ -239,20 +342,43 @@ export class PlansController {
         }
       );
 
-      await TimelineVersionModel.create({
-        projectId: project._id,
-        userId: req.user!._id,
-        version: nextVersion,
-        parentVersion: project.headVersion,
-        source: 'restore',
-        label: `Revert to v${targetVersion}`,
-        planId: newPlanDoc._id,
-        snapshot: resolvedTimeline,
-        snapshotHash,
-      });
+      try {
+        await TimelineVersionModel.create({
+          projectId: project._id,
+          userId: req.user!._id,
+          version: nextVersion,
+          parentVersion: project.headVersion,
+          source: 'restore',
+          label: `Revert to v${targetVersion}`,
+          planId: newPlanDoc._id,
+          snapshot: resolvedTimeline,
+          snapshotHash,
+        });
+      } catch (err: any) {
+        if (err.code === 11000 && typeof TimelineVersionModel.findOneAndUpdate === 'function') {
+          await TimelineVersionModel.findOneAndUpdate(
+            { projectId: project._id, version: nextVersion },
+            {
+              $set: {
+                userId: req.user!._id,
+                parentVersion: project.headVersion,
+                source: 'restore',
+                label: `Revert to v${targetVersion}`,
+                planId: newPlanDoc._id,
+                snapshot: resolvedTimeline,
+                snapshotHash,
+              },
+            },
+            { upsert: true, new: true }
+          );
+        } else {
+          throw err;
+        }
+      }
 
       const previousHead = project.headVersion;
       project.headVersion = nextVersion;
+      project.versions = project.versions.filter((v) => v.version !== nextVersion);
       project.versions.push({
         version: nextVersion,
         label: `Revert to v${targetVersion}`,

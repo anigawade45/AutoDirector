@@ -3,6 +3,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IUser extends Document {
   email: string;
   name: string;
+  passwordHash?: string;
+  salt?: string;
   authProvider: 'local' | 'google' | 'github';
   tier: 'free' | 'pro' | 'enterprise';
   quota: {
@@ -21,8 +23,10 @@ export interface IUser extends Document {
 
 const UserSchema = new Schema<IUser>(
   {
-    email: { type: String, required: true, unique: true, index: true },
+    email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
     name: { type: String, required: true },
+    passwordHash: { type: String, select: false },
+    salt: { type: String, select: false },
     authProvider: { type: String, enum: ['local', 'google', 'github'], default: 'local' },
     tier: { type: String, enum: ['free', 'pro', 'enterprise'], default: 'free' },
     quota: {

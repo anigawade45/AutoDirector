@@ -1,3 +1,5 @@
+import { env } from '../../config/env.js';
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface LogContext {
@@ -84,7 +86,7 @@ export class StructuredLogger {
   }
 
   static debug(message: string, context?: LogContext): void {
-    if (process.env.DEBUG || process.env.NODE_ENV === 'development') {
+    if (env.NODE_ENV === 'development') {
       console.debug(this.formatLog('debug', message, context));
     }
   }

@@ -35,8 +35,8 @@ async function bootstrap() {
   // 4. Initialize Express application
   const app = createApp();
 
-  // 5. In development mode, run workers in-process for single-command developer workflow (can be disabled via ENABLE_IN_PROCESS_WORKERS=false)
-  if (env.NODE_ENV === 'development' && process.env.ENABLE_IN_PROCESS_WORKERS !== 'false') {
+  // 5. In development mode, run workers in-process for single-command developer workflow
+  if (env.NODE_ENV === 'development' && env.ENABLE_IN_PROCESS_WORKERS) {
     startAnalysisWorker();
     startRenderWorker('preview');
     startRenderWorker('render');
@@ -46,8 +46,8 @@ async function bootstrap() {
   }
 
   const server = app.listen(env.PORT, () => {
-    console.log(`[API Server] Running on http://localhost:${env.PORT}`);
-    console.log(`[API Server] Base endpoint: http://localhost:${env.PORT}/api`);
+    console.log(`[API Server] Running on port ${env.PORT} (${env.NODE_ENV})`);
+    console.log(`[API Server] Base endpoint: ${env.API_BASE_URL}`);
   });
 
   // 6. Start scheduled background maintenance (cleans abandoned S3 multipart uploads)

@@ -1,63 +1,66 @@
 import dotenv from 'dotenv';
-import { z } from 'zod';
+import path from 'path';
 import fs from 'fs';
+import { z } from 'zod';
 // @ts-ignore
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 // @ts-ignore
 import ffprobeInstaller from '@ffprobe-installer/ffprobe';
 
-dotenv.config();
+const candidatePaths = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), 'backend/.env'),
+  typeof __dirname !== 'undefined' ? path.resolve(__dirname, '../../.env') : '',
+];
 
-function resolveBinary(
-  envValue: string | undefined,
-  installerValue: string | undefined,
-  binaryName: string
-): string {
-  // If user provided a specific valid file path on disk, use it
-  if (envValue && envValue !== binaryName && fs.existsSync(envValue)) {
-    return envValue;
-  }
-  // If static installed bundle exists on disk, prefer it over missing PATH binary
-  if (installerValue && fs.existsSync(installerValue)) {
-    return installerValue;
-  }
-  return envValue || binaryName;
+const foundPath = candidatePaths.find((p) => p && fs.existsSync(p));
+if (foundPath) {
+  dotenv.config({ path: foundPath });
+} else {
+  dotenv.config();
 }
 
-const defaultFfmpeg = resolveBinary(process.env.FFMPEG_PATH, ffmpegInstaller?.path, 'ffmpeg');
-const defaultFfprobe = resolveBinary(process.env.FFPROBE_PATH, ffprobeInstaller?.path, 'ffprobe');
-
 const envSchema = z.object({
-  PORT: z.string().default('4000').transform(Number),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  API_BASE_URL: z.string().default('http://localhost:4000/api'),
-  CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  PORT: z.string().transform(Number),
+  NODE_ENV: z.enum(['development', 'production', 'test']),
+  API_BASE_URL: z.string(),
+  CORS_ORIGIN: z.string(),
 
-  JWT_SECRET: z.string().default('dev-jwt-secret-replace-in-production'),
-  INTERNAL_WORKER_SECRET: z.string().default('dev-worker-hmac-shared-secret-key-32-chars'),
+  JWT_SECRET: z.string(),
+  INTERNAL_WORKER_SECRET: z.string(),
 
-  MONGODB_URI: z
-    .string()
-    .default('mongodb://localhost:27017/ai_video_editor?replicaSet=rs0&directConnection=true'),
+  MONGODB_URI: z.string(),
 
-  REDIS_HOST: z.string().default('localhost'),
-  REDIS_PORT: z.string().default('6379').transform(Number),
+  REDIS_HOST: z.string(),
+  REDIS_PORT: z.string().transform(Number),
   REDIS_PASSWORD: z.string().optional().default(''),
-
-  AWS_REGION: z.string().default('us-east-1'),
-  AWS_ACCESS_KEY_ID: z.string().default('test'),
-  AWS_SECRET_ACCESS_KEY: z.string().default('test'),
-  S3_BUCKET_NAME: z.string().default('ai-video-editing-platform'),
-  S3_ENDPOINT: z.string().default('http://127.0.0.1:4566'),
-  S3_FORCE_PATH_STYLE: z
+  REDIS_TLS: z
     .string()
-    .default('true')
+    .optional()
     .transform((val) => val === 'true'),
 
-  AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
-  AI_MODEL: z.string().default('gemini-1.5-pro'),
+  LOCALSTACK_AUTH_TOKEN: z.string().optional().default(''),
+  AWS_REGION: z.string(),
+  AWS_ACCESS_KEY_ID: z.string(),
+  AWS_SECRET_ACCESS_KEY: z.string(),
+  S3_BUCKET_NAME: z.string(),
+  S3_ENDPOINT: z.string(),
+  S3_FORCE_PATH_STYLE: z
+    .string()
+    .transform((val) => val === 'true'),
+
+  AI_PROVIDER: z.enum(['gemini', 'openai']),
+  AI_MODEL: z.string(),
   GEMINI_API_KEY: z.string().optional().default(''),
   OPENAI_API_KEY: z.string().optional().default(''),
+
+  WHISPER_PATH: z.string().optional().default(''),
+  WHISPER_MODEL: z.string(),
+
+  ENABLE_IN_PROCESS_WORKERS: z
+    .string()
+    .optional()
+    .transform((val) => val !== 'false'),
 
   FFMPEG_PATH: z
     .string()
@@ -76,7 +79,7 @@ const envSchema = z.object({
         return ffprobeInstaller.path;
       return val && val.trim() ? val : ffprobeInstaller?.path || 'ffprobe';
     }),
-  TEMP_MEDIA_DIR: z.string().default('./tmp/media'),
+  TEMP_MEDIA_DIR: z.string(),
 });
 
 export const env = envSchema.parse(process.env);

@@ -43,8 +43,8 @@ export interface ICaptionSetDocument extends Document {
 
 const CaptionSetSchema = new Schema<ICaptionSetDocument>(
   {
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
-    assetId: { type: Schema.Types.ObjectId, ref: 'Asset', required: true },
+    projectId: { type: Schema.Types.Mixed, ref: 'Project', required: true },
+    assetId: { type: Schema.Types.Mixed, ref: 'Asset', required: true },
     language: { type: String, default: 'en' },
     origin: { type: String, enum: ['whisper', 'manual', 'imported'], default: 'whisper' },
     basedOn: { type: Schema.Types.ObjectId, ref: 'CaptionSet', default: null },

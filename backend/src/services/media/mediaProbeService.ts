@@ -274,14 +274,28 @@ export class MediaProbeService {
       let integratedLufs = -16.0;
       let truePeakDb = -1.0;
 
-      const lufsMatch = output.match(/I:\s+([-\d.]+)\s+LUFS/);
-      if (lufsMatch) {
-        integratedLufs = parseFloat(lufsMatch[1]);
+      // Extract from the final EBU R128 summary block:
+      // Integrated loudness:
+      //   I:         -15.8 LUFS
+      const summaryLufs = output.match(/Integrated loudness:[\s\S]*?I:\s+([-\d.]+)\s+LUFS/i);
+      if (summaryLufs) {
+        integratedLufs = parseFloat(summaryLufs[1]);
+      } else {
+        const allMatches = [...output.matchAll(/I:\s+([-\d.]+)\s+LUFS/g)];
+        if (allMatches.length > 0) {
+          integratedLufs = parseFloat(allMatches[allMatches.length - 1][1]);
+        }
       }
 
-      const peakMatch = output.match(/Peak:\s+([-\d.]+)\s+dBFS/);
-      if (peakMatch) {
-        truePeakDb = parseFloat(peakMatch[1]);
+      // Match peak from summary block:
+      const summaryPeak = output.match(/(?:True peak|Peak):[\s\S]*?Peak:\s+([-\d.]+)\s+dBFS/i);
+      if (summaryPeak) {
+        truePeakDb = parseFloat(summaryPeak[1]);
+      } else {
+        const allPeaks = [...output.matchAll(/Peak:\s+([-\d.]+)\s+dBFS/g)];
+        if (allPeaks.length > 0) {
+          truePeakDb = parseFloat(allPeaks[allPeaks.length - 1][1]);
+        }
       }
 
       return { integratedLufs, truePeakDb };

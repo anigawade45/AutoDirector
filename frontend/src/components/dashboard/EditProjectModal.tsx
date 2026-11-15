@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Settings2, Check, Loader2 } from 'lucide-react';
 import { api } from '../../api/client';
+import { toast } from '../../stores/toastStore';
 
 interface EditProjectModalProps {
   project: {
@@ -47,6 +48,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
     e.preventDefault();
     if (!title.trim()) {
       setErrorMsg('Project title cannot be empty');
+      toast.warning('Project title cannot be empty', 'Validation Warning');
       return;
     }
 
@@ -66,38 +68,40 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
         },
       });
 
+      toast.success(`Project settings saved: ${title.trim()}`, 'Project Updated');
       onUpdated();
       onClose();
     } catch (err: any) {
       console.error('Failed to update project:', err);
       setErrorMsg(err.message || 'Failed to update project settings');
+      toast.error(err.message || 'Failed to update project settings', 'Update Failed');
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-surface border border-surfaceBorder rounded-2xl max-w-lg w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto font-sans">
+      <div className="bg-[#222326] border border-[#393B3F] rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative my-auto animate-in fade-in zoom-in-95 duration-150 text-[#FFF5F5]">
         <button
           onClick={onClose}
           disabled={isSaving}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors p-1"
+          className="absolute top-4 right-4 text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors p-1"
         >
           <X className="w-5 h-5" />
         </button>
 
         <div className="flex items-center space-x-3 mb-2">
-          <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-[#2A2C2F] border border-[#E3B5BE]/30 text-[#E3B5BE] flex items-center justify-center">
             <Settings2 className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-100">Project Settings & Rename</h3>
-            <p className="text-xs text-slate-400 font-mono">{project.publicId}</p>
+            <h3 className="text-base font-bold text-[#FFF5F5]">Project Settings & Sequence</h3>
+            <p className="text-xs text-[#FFF5F5]/50 font-mono">{project.publicId}</p>
           </div>
         </div>
 
         {errorMsg && (
-          <div className="my-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+          <div className="my-3 p-3 rounded-lg bg-red-950/40 border border-red-800/50 text-red-300 text-xs">
             {errorMsg}
           </div>
         )}
@@ -105,7 +109,7 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
         <form onSubmit={handleSave} className="space-y-5 mt-4">
           {/* Project Title */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+            <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
               Project Title
             </label>
             <input
@@ -114,14 +118,14 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
               onChange={(e) => setTitle(e.target.value)}
               disabled={isSaving}
               placeholder="e.g. Vacation Highlights 2026"
-              className="w-full bg-slate-900 border border-surfaceBorder rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-[#18191B] border border-[#393B3F] rounded-xl px-3.5 py-2.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE] transition-colors"
               autoFocus
             />
           </div>
 
           {/* Aspect Ratio */}
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+            <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
               Aspect Ratio & Resolution
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -133,17 +137,17 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
                     onClick={() => setAspect(asp)}
                     className={`text-left p-2.5 rounded-xl border text-xs transition-all flex items-center justify-between ${
                       aspect === asp
-                        ? 'bg-blue-600/15 border-blue-500 text-blue-300 shadow-sm shadow-blue-500/10'
-                        : 'bg-slate-900/60 border-surfaceBorder text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                        ? 'bg-[#E3B5BE]/15 border-[#E3B5BE] text-[#F7D7D1] shadow-sm'
+                        : 'bg-[#18191B] border-[#393B3F] text-[#FFF5F5]/70 hover:border-[#484949]'
                     }`}
                   >
                     <div>
                       <div className="font-semibold">{asp}</div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-[10px] text-[#FFF5F5]/50 font-mono">
                         {aspectResolutions[asp].label.split('(')[1]?.replace(')', '') || ''}
                       </div>
                     </div>
-                    {aspect === asp && <Check className="w-4 h-4 text-blue-400 shrink-0" />}
+                    {aspect === asp && <Check className="w-4 h-4 text-[#E3B5BE] shrink-0" />}
                   </button>
                 )
               )}
@@ -153,14 +157,14 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
           {/* Frame Rate & Language */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+              <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
                 Frame Rate (FPS)
               </label>
               <select
                 value={fps}
                 onChange={(e) => setFps(Number(e.target.value))}
                 disabled={isSaving}
-                className="w-full bg-slate-900 border border-surfaceBorder rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[#18191B] border border-[#393B3F] rounded-xl px-3 py-2 text-xs text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE] transition-colors"
               >
                 <option value={24}>24 fps (Cinematic)</option>
                 <option value={25}>25 fps (PAL / Broadcast)</option>
@@ -170,14 +174,14 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1.5">
+              <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
                 Primary Audio Language
               </label>
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
                 disabled={isSaving}
-                className="w-full bg-slate-900 border border-surfaceBorder rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                className="w-full bg-[#18191B] border border-[#393B3F] rounded-xl px-3 py-2 text-xs text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE] transition-colors"
               >
                 <option value="en">English (en)</option>
                 <option value="es">Spanish (es)</option>
@@ -190,23 +194,23 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({
           </div>
 
           {/* Modal Actions */}
-          <div className="pt-3 border-t border-surfaceBorder flex items-center justify-end space-x-3">
+          <div className="pt-3 border-t border-[#393B3F] flex items-center justify-end space-x-3">
             <button
               type="button"
               onClick={onClose}
               disabled={isSaving}
-              className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className="px-4 py-2 rounded-lg text-xs font-semibold text-[#FFF5F5]/60 hover:text-[#FFF5F5] hover:bg-[#2A2C2F] transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving || !title.trim()}
-              className="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-all flex items-center space-x-2 shadow-lg shadow-blue-600/20 disabled:opacity-50"
+              className="px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] transition-all flex items-center space-x-2 shadow-sm disabled:opacity-50"
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#18191B]" />
                   <span>Saving Changes...</span>
                 </>
               ) : (

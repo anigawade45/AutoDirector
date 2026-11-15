@@ -128,6 +128,21 @@ export function computeColorCssFilter(params: ColorParams = {}): ColorCssPreview
   const cssBrightness = Math.round((1 + resolved.brightness) * 100);
   filterParts.push(`brightness(${cssBrightness}%)`);
 
+  // Preset-specific color tonality / temperature styling:
+  if (resolved.preset === 'warm') {
+    filterParts.push('sepia(40%)');
+    filterParts.push('hue-rotate(-15deg)');
+  } else if (resolved.preset === 'cool') {
+    filterParts.push('hue-rotate(50deg)');
+    filterParts.push('saturate(110%)');
+  } else if (resolved.preset === 'cinematic') {
+    filterParts.push('sepia(25%)');
+    filterParts.push('hue-rotate(-10deg)');
+  } else if (resolved.preset === 'faded') {
+    filterParts.push('sepia(20%)');
+    filterParts.push('opacity(92%)');
+  }
+
   // CSS vignette overlay gradient
   const vignetteGradient = `radial-gradient(circle, transparent 50%, rgba(0,0,0,${resolved.vignette.toFixed(
     2

@@ -6,6 +6,7 @@ import { AssetModel } from '../models/Asset.js';
 import { EditPlanModel } from '../models/EditPlan.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { CaptionSetModel } from '../models/CaptionSet.js';
+import { CatalogModel } from '../models/Catalog.js';
 import { JobEventsPublisher, QUEUE_CONFIGS } from '../services/queue/queueService.js';
 import { RenderJobLifecycle } from '../services/jobs/renderJobLifecycle.js';
 import { FFmpegCompiler } from '../services/compiler/ffmpegCompiler.js';
@@ -14,6 +15,7 @@ import { S3Service } from '../services/storage/s3Service.js';
 import { StorageKeys } from '../config/s3.js';
 import { JobScratchDirectory } from '../services/storage/jobScratchDirectory.js';
 import { FFmpegProgressParser } from '../services/compiler/ffmpegProgressParser.js';
+import { MediaProbeService } from '../services/media/mediaProbeService.js';
 import { env } from '../config/env.js';
 import { spawn } from 'child_process';
 import fs from 'fs';
@@ -105,11 +107,61 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
           }
         }
 
+        // 2b. Prepare Music audio file if music layer enabled
+        const musicLayer = planDoc.plan.layers.find((l: any) => l.enabled && l.layer === 'music');
+        let musicSourcePath: string | undefined = undefined;
+
+        if (musicLayer) {
+          const trackId = (musicLayer.params as any)?.trackId || 'mus_calm_01';
+          const localMusicPath = scratch.resolve(`${trackId}.mp3`);
+
+          // Check if catalog has an S3 key for this music track
+          const catalogItem = await CatalogModel.findOne({ key: trackId, kind: 'music' });
+          if (catalogItem?.s3Key) {
+            try {
+              await S3Service.downloadFile(catalogItem.s3Key, localMusicPath);
+              if (fs.existsSync(localMusicPath)) {
+                musicSourcePath = localMusicPath;
+              }
+            } catch (dlErr: any) {
+              console.warn(
+                `[RenderWorker:${queueName}] Catalog music download deferred:`,
+                dlErr.message
+              );
+            }
+          }
+
+          // If no local/catalog file, synthesize a clean ambient audio track with FFmpeg
+          if (!musicSourcePath || !fs.existsSync(musicSourcePath)) {
+            const synthMusicPath = scratch.resolve('ambient_synth.mp3');
+            const audioDurSec = Math.ceil(expectedDurationMs / 1000) || 60;
+            try {
+              await MediaProbeService.execProcess(env.FFMPEG_PATH, [
+                '-y',
+                '-f',
+                'lavfi',
+                '-i',
+                `aevalsrc=0.04*sin(2*PI*220*t)+0.02*sin(2*PI*330*t)+0.015*sin(2*PI*440*t):s=44100:d=${audioDurSec}`,
+                '-c:a',
+                'libmp3lame',
+                '-b:a',
+                '128k',
+                synthMusicPath,
+              ]);
+              if (fs.existsSync(synthMusicPath)) {
+                musicSourcePath = synthMusicPath;
+              }
+            } catch (synthErr: any) {
+              console.warn(`[RenderWorker:${queueName}] Audio synthesis notice:`, synthErr.message);
+            }
+          }
+        }
+
         // 3. Compile deterministic FFmpeg arguments
         const compiled = FFmpegCompiler.compile(
           planDoc.plan,
           {
-            durationMs: 60000,
+            durationMs: expectedDurationMs,
             width: 1920,
             height: 1080,
             fps: planDoc.plan.global.fps || 30,
@@ -123,6 +175,7 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
           {
             inputSourcePath: localSourcePath,
             assSubtitlePath,
+            musicSourcePath,
             outputPath: localOutputPath,
           }
         );

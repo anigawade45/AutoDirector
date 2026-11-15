@@ -6,29 +6,47 @@
   color-scheme: dark;
 }
 
-body {
-  margin: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #0b0f17;
-  color: #f1f5f9;
+html {
+  scroll-behavior: smooth;
 }
 
-/* Custom dark scrollbar */
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #18191B;
+  color: #FFF5F5;
+}
+
+/* Custom editorial scrollbar with user palette */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #18191B;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: #484949;
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #E3B5BE;
+}
+
+/* Warm organic subtle glows & textures */
+.bg-warm-radial {
+  background: radial-gradient(circle at 50% 0%, rgba(247, 215, 209, 0.08) 0%, rgba(227, 181, 190, 0.04) 40%, transparent 70%);
+}
+
+.border-warm-subtle {
+  border-color: rgba(247, 215, 209, 0.12);
+}
+
+.border-warm-highlight {
+  border-color: rgba(227, 181, 190, 0.35);
 }
 

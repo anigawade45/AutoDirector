@@ -16,6 +16,7 @@ export interface PlannerProviderInput {
   outputSchema?: Record<string, unknown>;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  model?: string;
 }
 
 export interface PlannerProviderOutput {

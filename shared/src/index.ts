@@ -7,4 +7,5 @@ export * from './schemas/editPlan.schema.js';
 export * from './utils/timeMapping.js';
 export * from './utils/colorGrading.js';
 export * from './constants/presets.js';
+export * from './constants/models.js';
 export * from './utils/planValidation.js';

@@ -146,8 +146,8 @@ export function startAnalysisWorker() {
             await S3Service.uploadFile(audioKey, localAudioPath, 'audio/wav');
             asset.s3.audioKey = audioKey;
 
-            // Detect silences and loudness
-            silences = await MediaProbeService.detectSilences(localAudioPath);
+            // Detect true dead air silences and loudness (-38dB preserves gentle trailing words and festival greetings)
+            silences = await MediaProbeService.detectSilences(localAudioPath, -38, 0.6);
             loudness = await MediaProbeService.detectLoudness(localAudioPath);
           } catch (audioErr: any) {
             console.warn(`[AnalysisWorker] Audio extraction notice:`, audioErr.message);
@@ -183,7 +183,8 @@ export function startAnalysisWorker() {
             localAudioPath,
             metadata.durationMs,
             silences,
-            project.settings?.language || 'en'
+            project.settings?.language || 'en',
+            loudness.integratedLufs
           );
         }
 
@@ -262,6 +263,18 @@ export function startAnalysisWorker() {
             resolution: '1080p',
           },
           layers: [
+            {
+              id: 'lyr_c1',
+              layer: 'color',
+              enabled: true,
+              timebase: 'global',
+              params: {
+                preset: 'cinematic',
+                contrast: 1.0,
+                saturation: 1.0,
+                vignette: 0.0,
+              },
+            },
             {
               id: 'lyr_s1',
               layer: 'subtitle',

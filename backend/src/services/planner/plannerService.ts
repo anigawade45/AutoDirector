@@ -41,7 +41,8 @@ export class PlannerService {
     currentVersion: number,
     analysis: CompactAnalysisSummary,
     catalog: AllowedCatalog,
-    currentPlan?: EditPlan
+    currentPlan?: EditPlan,
+    modelName?: string
   ): Promise<PlanGenerationResult> {
     const systemInstructions = ContextBuilder.buildSystemInstructions();
     const userContext = ContextBuilder.buildUserContext(
@@ -70,6 +71,7 @@ export class PlannerService {
           currentPlan,
           analysisSummary: analysis,
           catalog,
+          model: modelName,
         });
 
         const rawOutput: any = result.structuredOutput;
@@ -111,6 +113,7 @@ export class PlannerService {
           catalog,
           prompt: userPrompt,
           beats: analysis.beats,
+          silences: analysis.silences,
         });
 
         // Validate strictly with Zod discriminated union

@@ -3,9 +3,10 @@ import { snapCutsToBeatGrid, snapToBeat } from '@ai-video/shared';
 
 export interface NormalizerOptions {
   assetDurationSec: number;
-  catalog: AllowedCatalog;
+  catalog?: AllowedCatalog;
   prompt?: string;
   beats?: any;
+  silences?: Array<{ startMs: number; endMs: number; avgDb?: number }>;
 }
 
 export class PlanNormalizer {
@@ -16,6 +17,15 @@ export class PlanNormalizer {
   static normalize(rawPlan: any, options: NormalizerOptions): any {
     if (!rawPlan || typeof rawPlan !== 'object') {
       throw new Error('Plan must be a non-null object');
+    }
+
+    if (!options.catalog) {
+      options.catalog = {
+        templates: [],
+        luts: [],
+        music: [],
+        fonts: ['Montserrat', 'Inter', 'Roboto'],
+      };
     }
 
     const maxDuration = Math.max(0.1, options.assetDurationSec || 60);
@@ -72,6 +82,49 @@ export class PlanNormalizer {
       'music',
       'audio',
     ];
+
+    // 1. Normalize layer types and synonyms BEFORE filtering
+    layers = layers.map((rawL: any) => {
+      if (!rawL || typeof rawL !== 'object') return rawL;
+      const l = { ...rawL };
+      let typeStr = String(l.layer || '').toLowerCase().trim();
+
+      if (['subtitles', 'subtitle', 'captions', 'caption', 'subs'].includes(typeStr)) {
+        l.layer = 'subtitle';
+      } else if (['color', 'color_grade', 'colorgrade', 'colorgrading', 'colour', 'lut', 'filter'].includes(typeStr)) {
+        l.layer = 'color';
+      } else if (['cut', 'cuts', 'trim', 'trims', 'source', 'clip', 'snip'].includes(typeStr)) {
+        l.layer = 'cut';
+      } else if (['music', 'bgm', 'soundtrack', 'song', 'audio_track'].includes(typeStr)) {
+        l.layer = 'music';
+      } else if (['speed', 'speed_ramp', 'ramp', 'slowmo', 'timelapse'].includes(typeStr)) {
+        l.layer = 'speed';
+      } else if (['text', 'title', 'titles', 'heading', 'lowerthird'].includes(typeStr)) {
+        l.layer = 'text';
+      } else if (['transition', 'transitions'].includes(typeStr)) {
+        l.layer = 'transition';
+      } else if (['intro', 'intros'].includes(typeStr)) {
+        l.layer = 'intro';
+      } else if (['outro', 'outros'].includes(typeStr)) {
+        l.layer = 'outro';
+      } else if (typeStr === 'global') {
+        if (l.params?.color || l.params?.lut || l.params?.contrast || l.params?.preset || l.id?.includes('col')) {
+          l.layer = 'color';
+        }
+      }
+
+      // Infer from ID if layer type still ambiguous
+      if (!allowedLayerTypes.includes(l.layer) && typeof l.id === 'string') {
+        const idLower = l.id.toLowerCase();
+        if (idLower.includes('sub') || idLower.includes('cap')) l.layer = 'subtitle';
+        else if (idLower.includes('col') || idLower.includes('lut') || idLower.includes('grade')) l.layer = 'color';
+        else if (idLower.includes('cut') || idLower.includes('trim')) l.layer = 'cut';
+        else if (idLower.includes('mus') || idLower.includes('bgm')) l.layer = 'music';
+      }
+
+      return l;
+    });
+
     layers = layers.filter(
       (l) => l && typeof l === 'object' && allowedLayerTypes.includes(l.layer)
     );
@@ -92,12 +145,10 @@ export class PlanNormalizer {
 
       switch (layerType) {
         case 'cut': {
-          let start = PlanNormalizer.clamp(Number(rawLayer.range?.start) || 0, 0, maxDuration);
-          let end = PlanNormalizer.clamp(
-            Number(rawLayer.range?.end) || maxDuration,
-            0,
-            maxDuration
-          );
+          let rawStart = rawLayer.range?.start ?? params.sourceIn ?? params.start ?? rawLayer.start ?? 0;
+          let rawEnd = rawLayer.range?.end ?? params.sourceOut ?? params.end ?? rawLayer.end ?? maxDuration;
+          let start = PlanNormalizer.clamp(Number(rawStart) || 0, 0, maxDuration);
+          let end = PlanNormalizer.clamp(Number(rawEnd) || maxDuration, 0, maxDuration);
 
           if (end <= start) {
             end = Math.min(maxDuration, start + 0.1);
@@ -159,41 +210,59 @@ export class PlanNormalizer {
         }
 
         case 'color': {
+          let cParams = { ...params };
+          if (cParams.color && typeof cParams.color === 'object') {
+            cParams = { ...cParams, ...cParams.color };
+          }
+
           const validPresets = ['cinematic', 'warm', 'cool', 'bw', 'vivid', 'faded'];
-          const preset = validPresets.includes(params.preset) ? params.preset : undefined;
+          let preset = validPresets.includes(cParams.preset) ? cParams.preset : undefined;
+          const pLower = (options.prompt || '').toLowerCase();
+          if (!preset) {
+            if (cParams.lut === 'teal_orange' || pLower.includes('cinematic') || pLower.includes('teal')) preset = 'cinematic';
+            else if (pLower.includes('warm')) preset = 'warm';
+            else if (pLower.includes('cool')) preset = 'cool';
+            else if (pLower.includes('bw') || pLower.includes('black and white')) preset = 'bw';
+            else if (pLower.includes('vivid')) preset = 'vivid';
+            else if (pLower.includes('faded')) preset = 'faded';
+            else if (cParams.contrast !== undefined || cParams.saturation !== undefined) preset = 'cinematic';
+          }
+
           const brightness = PlanNormalizer.clamp(
-            typeof params.brightness === 'number' ? params.brightness : 0,
+            typeof cParams.brightness === 'number' ? cParams.brightness : 0,
             -0.3,
             0.3
           );
           const contrast = PlanNormalizer.clamp(
-            typeof params.contrast === 'number' ? params.contrast : 1.0,
+            typeof cParams.contrast === 'number' ? cParams.contrast : 1.15,
             0.7,
             1.5
           );
           const saturation = PlanNormalizer.clamp(
-            typeof params.saturation === 'number' ? params.saturation : 1.0,
+            typeof cParams.saturation === 'number' ? cParams.saturation : 1.1,
             0,
             2.0
           );
           const vignette = PlanNormalizer.clamp(
-            typeof params.vignette === 'number' ? params.vignette : 0,
+            typeof cParams.vignette === 'number' ? cParams.vignette : 0,
             0,
             1.0
           );
           const grain = PlanNormalizer.clamp(
-            typeof params.grain === 'number' ? params.grain : 0,
+            typeof cParams.grain === 'number' ? cParams.grain : 0,
             0,
             0.5
           );
 
           // Reference resolution: LUT
           let lut: string | undefined = undefined;
-          if (params.lut) {
+          if (cParams.lut) {
             const lutMatch = options.catalog.luts.find(
-              (l) => l.id.toLowerCase() === String(params.lut).toLowerCase()
+              (l) => l.id.toLowerCase() === String(cParams.lut).toLowerCase()
             );
             lut = lutMatch ? lutMatch.id : options.catalog.luts[0]?.id;
+          } else if (preset === 'cinematic' || pLower.includes('teal')) {
+            lut = options.catalog.luts.find((l) => l.id.includes('teal'))?.id || options.catalog.luts[0]?.id || 'teal_orange';
           }
 
           normalizedLayers.push({
@@ -215,12 +284,15 @@ export class PlanNormalizer {
         }
 
         case 'subtitle': {
+          let sStyle = params.style || 'word_pop';
+          if (sStyle === 'word-pop') sStyle = 'word_pop';
           const validStyles = ['classic', 'word_pop', 'karaoke', 'minimal'];
-          const style = validStyles.includes(params.style) ? params.style : 'word_pop';
+          const style = validStyles.includes(sStyle) ? sStyle : 'word_pop';
           const validPositions = ['bottom', 'center', 'top'];
           const position = validPositions.includes(params.position) ? params.position : 'bottom';
+          const rawSize = params.size ?? params.fontSize ?? 56;
           const size = Math.round(
-            PlanNormalizer.clamp(typeof params.size === 'number' ? params.size : 56, 24, 96)
+            PlanNormalizer.clamp(Number(rawSize) || 56, 24, 96)
           );
           const maxWordsPerLine = Math.round(
             PlanNormalizer.clamp(
@@ -243,8 +315,11 @@ export class PlanNormalizer {
             font = options.catalog.fonts[0];
           }
 
-          const primaryColor = PlanNormalizer.normalizeHex(params.primaryColor, '#FFFFFF');
-          const highlightColor = PlanNormalizer.normalizeHex(params.highlightColor, '#FFD84D');
+          const primaryColor = PlanNormalizer.normalizeHex(params.primaryColor || params.color, '#FFFFFF');
+          const highlightColor = PlanNormalizer.normalizeHex(
+            params.highlightColor || params.highlight || ((options.prompt || '').toLowerCase().includes('yellow') ? '#FFD700' : '#FFD84D'),
+            '#FFD84D'
+          );
 
           normalizedLayers.push({
             id,
@@ -531,6 +606,138 @@ export class PlanNormalizer {
       maxDuration,
       allowedToCutAggressively
     );
+
+    // Synthesize missing layers if user prompt explicitly requested them but LLM produced none
+    const promptLower = (options.prompt || '').toLowerCase();
+
+    // 1. Silence cutting fallback:
+    if (
+      boundedCuts.length === 0 &&
+      (promptLower.includes('silence') || promptLower.includes('silent') || promptLower.includes('pause')) &&
+      options.silences &&
+      options.silences.length > 0
+    ) {
+      let thresholdSec = 0.6;
+      const matchThreshold = promptLower.match(/(?:longer than|over|>)\s*(\d+(?:\.\d+)?)\s*s/i);
+      if (matchThreshold && Number(matchThreshold[1])) {
+        thresholdSec = Number(matchThreshold[1]);
+      }
+
+      for (const s of options.silences) {
+        const sStart = Number((s.startMs / 1000).toFixed(3));
+        const sEnd = Number((s.endMs / 1000).toFixed(3));
+        if (sEnd - sStart >= thresholdSec && sStart < maxDuration) {
+          boundedCuts.push({
+            id: `lyr_cut_silence_${boundedCuts.length + 1}`,
+            layer: 'cut',
+            enabled: true,
+            timebase: 'source',
+            range: {
+              start: Math.max(0, sStart),
+              end: Math.min(maxDuration, sEnd),
+            },
+            params: { reason: 'silence', padding: 0.05 },
+          });
+        }
+      }
+    }
+
+    // 2. Color grading fallback:
+    if (
+      !normalizedLayers.some((l) => l.layer === 'color') &&
+      (promptLower.includes('cinematic') ||
+        promptLower.includes('teal') ||
+        promptLower.includes('orange') ||
+        promptLower.includes('color grade') ||
+        promptLower.includes('warm') ||
+        promptLower.includes('cool') ||
+        promptLower.includes('lut') ||
+        (plan.global as any)?.colorGrading ||
+        (plan.global as any)?.preset)
+    ) {
+      let preset = 'cinematic';
+      let lut = options.catalog?.luts?.[0]?.id || 'teal_orange';
+      if (promptLower.includes('warm')) {
+        preset = 'warm';
+        lut = undefined as any;
+      } else if (promptLower.includes('cool')) {
+        preset = 'cool';
+        lut = undefined as any;
+      } else if (promptLower.includes('bw') || promptLower.includes('black and white')) {
+        preset = 'bw';
+        lut = undefined as any;
+      } else if (promptLower.includes('vivid')) {
+        preset = 'vivid';
+        lut = undefined as any;
+      } else if (promptLower.includes('faded')) {
+        preset = 'faded';
+        lut = undefined as any;
+      }
+
+      normalizedLayers.push({
+        id: 'lyr_color_1',
+        layer: 'color',
+        enabled: true,
+        timebase: 'global',
+        params: {
+          preset,
+          lut,
+          contrast: 1.15,
+          saturation: 1.2,
+          brightness: 0,
+          vignette: 0,
+          grain: 0,
+        },
+      });
+    }
+
+    // 3. Subtitles fallback:
+    if (
+      !normalizedLayers.some((l) => l.layer === 'subtitle') &&
+      (promptLower.includes('subtitle') ||
+        promptLower.includes('subtitles') ||
+        promptLower.includes('caption') ||
+        promptLower.includes('word-pop'))
+    ) {
+      normalizedLayers.push({
+        id: 'lyr_sub_1',
+        layer: 'subtitle',
+        enabled: true,
+        timebase: 'source',
+        params: {
+          style: 'word_pop',
+          font: 'Montserrat',
+          size: 56,
+          position: 'bottom',
+          primaryColor: '#FFFFFF',
+          highlightColor: promptLower.includes('yellow') ? '#FFD700' : '#FFD84D',
+          maxWordsPerLine: 4,
+        },
+      });
+    }
+
+    // 4. Music fallback:
+    if (
+      !normalizedLayers.some((l) => l.layer === 'music') &&
+      (promptLower.includes('music') ||
+        promptLower.includes('soundtrack') ||
+        promptLower.includes('bgm'))
+    ) {
+      normalizedLayers.push({
+        id: 'lyr_mus_1',
+        layer: 'music',
+        enabled: true,
+        timebase: 'output',
+        params: {
+          trackId: options.catalog?.music?.[0]?.id || 'tpl_lofi_beat',
+          volume: 0.35,
+          duckUnderSpeech: true,
+          fadeIn: 1.5,
+          fadeOut: 2.5,
+          beatSync: promptLower.includes('beat'),
+        },
+      });
+    }
 
     // Combine cut layers with other normalized layers
     plan.layers = [...boundedCuts, ...normalizedLayers];

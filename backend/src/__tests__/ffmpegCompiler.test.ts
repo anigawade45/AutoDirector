@@ -211,7 +211,7 @@ describe('Phase 3 Task 2: Pure FFmpeg Compiler compile(plan, analysis, profile)'
       // Expect sidechain compression ducking & amix
       const filterStr = result.args.join(' ');
       expect(filterStr).toContain('sidechaincompress=threshold=0.05:ratio=8:attack=20:release=400');
-      expect(filterStr).toContain('amix=inputs=2:normalize=0');
+      expect(filterStr).toContain('amix=inputs=2:dropout_transition=0');
       expect(filterStr).toContain('loudnorm=I=-16:TP=-1.5:LRA=11');
     });
   });
