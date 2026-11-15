@@ -17,7 +17,22 @@ import {
   LoginRequest,
 } from '@ai-video/shared';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+function getBaseUrl(): string {
+  const raw = (import.meta.env.VITE_API_BASE_URL || '/api').trim();
+  if (raw === '/api' || raw.startsWith('/')) {
+    return raw.replace(/\/+$/, '');
+  }
+  let url = raw;
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = `https://${url}`;
+  }
+  if (!url.endsWith('/api')) {
+    url = `${url.replace(/\/+$/, '')}/api`;
+  }
+  return url;
+}
+
+const BASE_URL = getBaseUrl();
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
