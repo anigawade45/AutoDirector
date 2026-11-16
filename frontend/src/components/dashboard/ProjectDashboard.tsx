@@ -26,6 +26,7 @@ import { toast } from '../../stores/toastStore';
 import { AuthModal } from '../auth/AuthModal';
 import { UploadModal } from './UploadModal';
 import { EditProjectModal } from './EditProjectModal';
+import { ConfirmModal } from '../common/ConfirmModal';
 
 interface ProjectDashboardProps {
   onSelectProject: (projectId: string) => void;
@@ -39,6 +40,9 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<any | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<{ id: string; title: string } | null>(
+    null
+  );
   const [filterTab, setFilterTab] = useState<'active' | 'archived'>('active');
   const queryClient = useQueryClient();
   const { user, isAuthenticated, logout } = useAuthStore();
@@ -63,6 +67,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   const deleteMutation = useMutation({
     mutationFn: (projectId: string) => api.deleteProject(projectId),
     onSuccess: () => {
+      setProjectToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       toast.success('Project permanently deleted.', 'Project Removed');
     },
@@ -93,11 +98,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     },
   });
 
-  const handleDelete = (e: React.MouseEvent, projectId: string) => {
+  const handleDelete = (e: React.MouseEvent, project: any) => {
     e.stopPropagation();
-    if (window.confirm('Are you sure you want to delete this project?')) {
-      deleteMutation.mutate(projectId);
-    }
+    setProjectToDelete({
+      id: project.publicId,
+      title: project.title || 'Untitled Project',
+    });
   };
 
   const handleArchive = (e: React.MouseEvent, projectId: string) => {
@@ -378,9 +384,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
                         {/* Delete Button */}
                         <button
-                          onClick={(e) => handleDelete(e, project.publicId)}
+                          onClick={(e) => handleDelete(e, project)}
                           className="p-1.5 rounded-lg bg-[#18191B]/90 hover:bg-rose-700 text-[#FFF5F5] hover:text-white transition-colors border border-[#393B3F]"
                           title="Permanently Delete Project"
+                          aria-label={`Delete project ${project.title}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -485,6 +492,24 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         defaultMode="login"
+      />
+
+      {/* Accessible Non-Blocking Delete Confirmation Dialog */}
+      <ConfirmModal
+        isOpen={!!projectToDelete}
+        title="Delete Project"
+        description="Are you sure you want to permanently delete this project? All associated video edits, AI timelines, and exported assets will be removed."
+        itemName={projectToDelete?.title}
+        confirmLabel="Permanently Delete"
+        cancelLabel="Keep Project"
+        isDestructive={true}
+        isLoading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (projectToDelete) {
+            deleteMutation.mutate(projectToDelete.id);
+          }
+        }}
+        onClose={() => setProjectToDelete(null)}
       />
     </div>
   );
