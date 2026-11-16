@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthStorage, isJwtExpired } from '../utils/authStorage';
 import { useAuthStore } from '../stores/authStore';
+import { api } from '../api/client';
+
+vi.mock('../api/client', () => ({
+  api: {
+    getMe: vi.fn(),
+    login: vi.fn(),
+    register: vi.fn(),
+  },
+}));
 
 describe('AuthStorage & Safe Hydration Suite', () => {
   const localStorageMap = new Map<string, string>();
@@ -151,6 +160,83 @@ describe('AuthStorage & Safe Hydration Suite', () => {
       AuthStorage.clear();
       expect(AuthStorage.getToken()).toBeNull();
       expect(AuthStorage.getUser()).toBeNull();
+      expect(AuthStorage.hasToken()).toBe(false);
+    });
+  });
+
+  describe('4. Asynchronous Session Validation & Zero Privileged-View Flash', () => {
+    it('completes initialization as unauthenticated when no token is in storage', async () => {
+      AuthStorage.clear();
+      await useAuthStore.getState().checkSession();
+
+      const state = useAuthStore.getState();
+      expect(state.isInitialized).toBe(true);
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.user).toBeNull();
+      expect(state.token).toBeNull();
+    });
+
+    it('verifies session with backend and transitions to authenticated when valid', async () => {
+      const futureSec = Math.floor(Date.now() / 1000) + 3600;
+      const payload = Buffer.from(
+        JSON.stringify({ sub: 'usr_valid_02', email: 'valid@studio.ai', exp: futureSec })
+      ).toString('base64url');
+      const token = `eyJhbGciOiJIUzI1NiJ9.${payload}.sig`;
+
+      AuthStorage.setSession(token, {
+        id: 'usr_valid_02',
+        name: 'Valid User',
+        email: 'valid@studio.ai',
+        tier: 'pro',
+        createdAt: '2026-11-16T12:00:00Z',
+      });
+
+      (api.getMe as any).mockResolvedValueOnce({
+        user: {
+          id: 'usr_valid_02',
+          name: 'Valid User Server',
+          email: 'valid@studio.ai',
+          tier: 'pro',
+          createdAt: '2026-11-16T12:00:00Z',
+        },
+      });
+
+      await useAuthStore.getState().checkSession();
+
+      const state = useAuthStore.getState();
+      expect(state.isInitialized).toBe(true);
+      expect(state.isAuthenticated).toBe(true);
+      expect(state.user?.name).toBe('Valid User Server');
+    });
+
+    it('transitions to unauthenticated without grant when backend rejects token with 401', async () => {
+      const futureSec = Math.floor(Date.now() / 1000) + 3600;
+      const payload = Buffer.from(
+        JSON.stringify({ sub: 'usr_revoked_01', email: 'revoked@studio.ai', exp: futureSec })
+      ).toString('base64url');
+      const token = `eyJhbGciOiJIUzI1NiJ9.${payload}.sig`;
+
+      AuthStorage.setSession(token, {
+        id: 'usr_revoked_01',
+        name: 'Revoked User',
+        email: 'revoked@studio.ai',
+        tier: 'free',
+        createdAt: '2026-11-16T12:00:00Z',
+      });
+
+      (api.getMe as any).mockRejectedValueOnce({
+        status: 401,
+        code: 'UNAUTHENTICATED',
+        message: 'Token revoked or user deleted',
+      });
+
+      await useAuthStore.getState().checkSession();
+
+      const state = useAuthStore.getState();
+      expect(state.isInitialized).toBe(true);
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.user).toBeNull();
+      expect(state.token).toBeNull();
       expect(AuthStorage.hasToken()).toBe(false);
     });
   });

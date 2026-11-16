@@ -8,6 +8,7 @@ interface AuthState {
   user: UserProfile | null;
   token: string | null;
   isAuthenticated: boolean;
+  isInitialized: boolean;
   isLoading: boolean;
   error: string | null;
 
@@ -20,11 +21,18 @@ interface AuthState {
   setUser: (user: UserProfile | null) => void;
 }
 
+const initialToken = AuthStorage.getToken();
+const initialUser = initialToken ? AuthStorage.getUser() : null;
+
 export const useAuthStore = create<AuthState>((set) => ({
   // Safe hydration: AuthStorage validates expiry, catches malformed JSON, and prevents app crash
-  user: AuthStorage.getUser(),
-  token: AuthStorage.getToken(),
-  isAuthenticated: AuthStorage.hasToken(),
+  user: initialUser,
+  token: initialToken,
+  // If no token exists in storage, initialization is immediately complete (unauthenticated).
+  // If a token exists in storage, authentication is deferred until checkSession verifies with the server,
+  // preventing any privileged-view flash or race conditions.
+  isAuthenticated: false,
+  isInitialized: !initialToken,
   isLoading: false,
   error: null,
 
@@ -44,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: response.user,
         token: response.token,
         isAuthenticated: true,
+        isInitialized: true,
         isLoading: false,
         error: null,
       });
@@ -54,7 +63,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         err?.status === 401 || err?.code === 'INVALID_CREDENTIALS'
           ? 'Invalid email or password. Please verify your credentials.'
           : err?.message || 'Login failed. Please check your credentials.';
-      set({ error: message, isLoading: false });
+      set({ error: message, isLoading: false, isInitialized: true });
       toast.error(message, 'Authentication Error');
       return false;
     }
@@ -69,6 +78,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: response.user,
         token: response.token,
         isAuthenticated: true,
+        isInitialized: true,
         isLoading: false,
         error: null,
       });
@@ -82,7 +92,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         err?.status === 409 || err?.code === 'USER_EXISTS'
           ? `An account with this email already exists. Please sign in instead.`
           : err?.message || 'Registration failed. Please check your inputs.';
-      set({ error: message, isLoading: false });
+      set({ error: message, isLoading: false, isInitialized: true });
       toast.error(message, 'Registration Error');
       return false;
     }
@@ -94,6 +104,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       user: null,
       token: null,
       isAuthenticated: false,
+      isInitialized: true,
       error: null,
     });
     toast.info('You have safely signed out of AutoDirector Studio.', 'Logged Out');
@@ -102,7 +113,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkSession: async () => {
     const token = AuthStorage.getToken();
     if (!token) {
-      set({ isAuthenticated: false, user: null, token: null });
+      set({ isAuthenticated: false, user: null, token: null, isInitialized: true });
       return;
     }
 
@@ -114,14 +125,16 @@ export const useAuthStore = create<AuthState>((set) => ({
           user: response.user,
           token,
           isAuthenticated: true,
+          isInitialized: true,
         });
+      } else {
+        AuthStorage.clear();
+        set({ user: null, token: null, isAuthenticated: false, isInitialized: true });
       }
     } catch (err: any) {
-      // If 401 Unauthorized, token is expired or invalid
-      if (err?.status === 401) {
-        AuthStorage.clear();
-        set({ user: null, token: null, isAuthenticated: false });
-      }
+      // If 401 Unauthorized or verification error, token is invalid/revoked
+      AuthStorage.clear();
+      set({ user: null, token: null, isAuthenticated: false, isInitialized: true });
     }
   },
 }));

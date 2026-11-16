@@ -18,15 +18,9 @@ import { ToastContainer } from './components/common/ToastContainer';
 import { AuthStorage } from './utils/authStorage';
 
 export const App: React.FC = () => {
-  const { isAuthenticated, checkSession } = useAuthStore();
+  const { isAuthenticated, isInitialized, checkSession } = useAuthStore();
   const [mobileTab, setMobileTab] = useState<'chat' | 'timeline' | 'inspector' | 'project'>('chat');
-  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'editor'>(() => {
-    // If valid auth token exists in storage, default to dashboard, otherwise landing
-    if (AuthStorage.hasToken()) {
-      return 'dashboard';
-    }
-    return 'landing';
-  });
+  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'editor'>('landing');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const { setProject, setPlan, setPreviewUrl } = useEditorStore();
 
@@ -36,9 +30,11 @@ export const App: React.FC = () => {
   }, [checkSession]);
 
   // Strict Authentication Guard & Navigation Sync:
-  // 1. If not authenticated, user cannot access dashboard or video editor.
-  // 2. If authenticated, user is automatically directed to Studio Dashboard instead of marketing landing page.
+  // Only synchronizes view AFTER initial session verification has resolved (isInitialized === true)
+  // Guarantees zero privileged-view flash or race condition if stored credentials are invalid or expired.
   useEffect(() => {
+    if (!isInitialized) return;
+
     if (!isAuthenticated) {
       if (currentView !== 'landing') {
         setCurrentView('landing');
@@ -49,7 +45,7 @@ export const App: React.FC = () => {
         setCurrentView('dashboard');
       }
     }
-  }, [isAuthenticated, currentView]);
+  }, [isInitialized, isAuthenticated, currentView]);
 
   // Query server project data with TanStack Query
   const { data: projectResponse, isLoading: isProjectLoading } = useQuery({
@@ -110,6 +106,24 @@ export const App: React.FC = () => {
       setPlan(initialPlan);
     }
   }, [projectResponse, setProject, setPlan, setPreviewUrl]);
+
+  // Initial Session Verification Gate:
+  // While actively validating a stored session with the backend, render an unprivileged dark luxury splash.
+  // This guarantees zero privileged-view flash or race conditions if the stored token is invalid.
+  if (!isInitialized) {
+    return (
+      <div className="flex flex-col h-screen w-screen bg-[#18191B] items-center justify-center text-[#FFF5F5] font-sans">
+        <ToastContainer />
+        <div className="relative w-12 h-12 flex items-center justify-center mb-4">
+          <div className="absolute inset-0 rounded-full border-2 border-[#E3B5BE]/20 animate-ping" />
+          <Loader2 className="w-8 h-8 text-[#E3B5BE] animate-spin" />
+        </div>
+        <p className="text-sm font-medium text-[#FFF5F5]/70 tracking-wide">
+          Verifying AutoDirector Studio session...
+        </p>
+      </div>
+    );
+  }
 
   // Landing Page View
   if (currentView === 'landing') {
