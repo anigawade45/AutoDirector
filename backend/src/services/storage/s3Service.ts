@@ -305,13 +305,52 @@ export class S3Service {
 
   /**
    * Cleans up preview videos older than specified retention (default 7 days) per Specification §4.7.
+   * Programmatic sweep for maintenance routines and local/testing environments without S3 Lifecycle.
    */
   static async cleanupStalePreviews(
     olderThanMs: number = 7 * 24 * 60 * 60 * 1000
   ): Promise<number> {
-    // In production, S3 Lifecycle rules purge previews/ prefix automatically.
-    // This programmatic sweep ensures compliance in local/testing environments.
-    return 0;
+    let deletedCount = 0;
+    const cutoffTime = Date.now() - olderThanMs;
+
+    try {
+      let continuationToken: string | undefined = undefined;
+      do {
+        const listCmd: ListObjectsV2Command = new ListObjectsV2Command({
+          Bucket: env.S3_BUCKET_NAME,
+          Prefix: 'previews/',
+          ContinuationToken: continuationToken,
+        });
+        const resp = await s3Client.send(listCmd);
+
+        if (resp.Contents && resp.Contents.length > 0) {
+          const staleObjects = resp.Contents.filter(
+            (c) => c.Key && c.LastModified && c.LastModified.getTime() < cutoffTime
+          ).map((c) => ({ Key: c.Key! }));
+
+          if (staleObjects.length > 0) {
+            await s3Client.send(
+              new DeleteObjectsCommand({
+                Bucket: env.S3_BUCKET_NAME,
+                Delete: { Objects: staleObjects },
+              })
+            );
+            deletedCount += staleObjects.length;
+          }
+        }
+        continuationToken = resp.NextContinuationToken;
+      } while (continuationToken);
+
+      if (deletedCount > 0) {
+        console.log(
+          `[S3] Programmatically purged ${deletedCount} stale preview(s) older than ${Math.round(olderThanMs / 86400000)}d.`
+        );
+      }
+      return deletedCount;
+    } catch (err: any) {
+      console.warn('[S3] Note on cleaning up stale previews:', err.message || err);
+      return deletedCount;
+    }
   }
 
   /**
