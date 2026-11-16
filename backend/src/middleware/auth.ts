@@ -28,6 +28,16 @@ export async function authMiddleware(
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
+  } else if (req.headers.cookie && (req.headers.cookie.includes('auth_token=') || req.headers.cookie.includes('token='))) {
+    // Cookie-authenticated session support (e.g. browser EventSource or credentialed requests)
+    // Eliminates token transmission in URL query strings and proxy access logs
+    const cookiePairs = req.headers.cookie.split(';').map((c) => c.trim().split('='));
+    for (const [k, ...v] of cookiePairs) {
+      if ((k === 'auth_token' || k === 'token') && v.length > 0) {
+        token = decodeURIComponent(v.join('='));
+        break;
+      }
+    }
   } else if (req.query.ticket && typeof req.query.ticket === 'string') {
     // Ephemeral single-use SSE ticket authentication (valid for 30s, immediately consumed)
     // Prevents persistent auth token leakage in proxy logs, referrer headers, and browser history

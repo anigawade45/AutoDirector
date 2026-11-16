@@ -315,6 +315,7 @@ export const api = {
             Accept: 'text/event-stream',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
+          credentials: 'same-origin',
           signal: abortController?.signal,
         });
 

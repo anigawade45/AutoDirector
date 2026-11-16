@@ -6,6 +6,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { JobsController } from '../controllers/jobsController.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { UserModel } from '../models/User.js';
+import { StructuredLogger } from '../services/observability/logger.js';
 
 vi.mock('../models/User.js', () => ({
   UserModel: {
@@ -256,6 +257,128 @@ describe('SSE Ticket & Streaming Authentication Hardening Suite', () => {
       expect(nextFn).toHaveBeenCalled();
       expect(req.user).toBeDefined();
       expect(req.user?.email).toBe('creator@studio.ai');
+    });
+  });
+
+  describe('4. AuthMiddleware Cookie Authentication (POT-001 Verification)', () => {
+    it('authenticates SSE connection via auth_token cookie without URL query parameters', async () => {
+      const req = {
+        headers: {
+          accept: 'text/event-stream',
+          cookie: `theme=dark; auth_token=${validJwt}; session_id=xyz`,
+        },
+        query: {},
+        path: '/job_123/events',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+
+      expect(nextFn).toHaveBeenCalled();
+      expect(req.user).toBeDefined();
+      expect(req.user?.email).toBe('creator@studio.ai');
+    });
+
+    it('authenticates REST request via auth_token cookie', async () => {
+      const req = {
+        headers: {
+          cookie: `auth_token=${validJwt}`,
+        },
+        query: {},
+        path: '/api/projects',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+
+      expect(nextFn).toHaveBeenCalled();
+      expect(req.user).toBeDefined();
+      expect(req.user?.email).toBe('creator@studio.ai');
+    });
+
+    it('rejects malformed JWT token passed in cookie with HTTP 401 UNAUTHENTICATED', async () => {
+      const req = {
+        headers: {
+          cookie: 'auth_token=malformed.fake.jwt',
+        },
+        query: {},
+        path: '/api/projects',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 401,
+          code: 'UNAUTHENTICATED',
+        })
+      );
+    });
+  });
+
+  describe('5. StructuredLogger Redaction Policy (POT-001 Verification)', () => {
+    it('redacts query parameter tokens (?token=...) from URLs and logged strings', () => {
+      const rawUrl = 'https://api.studio.ai/api/jobs/job_123/events?token=eyJhbGciOiJIUzI1NiJ9.secret.sig&debug=true';
+      const redacted = StructuredLogger.redact(rawUrl) as string;
+
+      expect(redacted).not.toContain('eyJhbGciOiJIUzI1NiJ9.secret.sig');
+      expect(redacted).toBe('https://api.studio.ai/api/jobs/job_123/events?token=[REDACTED]&debug=true');
+    });
+
+    it('redacts ephemeral ticket parameters (?ticket=...) from URLs and logged strings', () => {
+      const rawUrl = 'https://api.studio.ai/api/jobs/job_123/events?ticket=ticket_0123456789abcdef0123456789abcdef';
+      const redacted = StructuredLogger.redact(rawUrl) as string;
+
+      expect(redacted).not.toContain('ticket_0123456789abcdef0123456789abcdef');
+      expect(redacted).toBe('https://api.studio.ai/api/jobs/job_123/events?ticket=[REDACTED]');
+    });
+
+    it('redacts Bearer JWT tokens from logged authorization strings', () => {
+      const rawAuth = `Bearer ${validJwt}`;
+      const redacted = StructuredLogger.redact(rawAuth) as string;
+
+      expect(redacted).not.toContain(validJwt);
+      expect(redacted).toBe('Bearer [REDACTED]');
+    });
+
+    it('redacts sensitive cookie values from raw cookie header strings', () => {
+      const rawCookie = `theme=dark; auth_token=${validJwt}; session=active_xyz`;
+      const redacted = StructuredLogger.redact(rawCookie) as string;
+
+      expect(redacted).not.toContain(validJwt);
+      expect(redacted).toContain('auth_token=[REDACTED]');
+      expect(redacted).toContain('session=[REDACTED]');
+      expect(redacted).toContain('theme=dark');
+    });
+
+    it('redacts sensitive object keys including cookie, set-cookie, authorization, token, and ticket', () => {
+      const sensitiveContext = {
+        requestId: 'req_123',
+        authorization: `Bearer ${validJwt}`,
+        cookie: `auth_token=${validJwt}`,
+        'set-cookie': 'auth_token=secret; HttpOnly',
+        token: validJwt,
+        ticket: 'ticket_abc123',
+        user: { email: 'creator@studio.ai' },
+      };
+
+      const redacted = StructuredLogger.redact(sensitiveContext) as any;
+
+      expect(redacted.requestId).toBe('req_123');
+      expect(redacted.authorization).toBe('[REDACTED]');
+      expect(redacted.cookie).toBe('[REDACTED]');
+      expect(redacted['set-cookie']).toBe('[REDACTED]');
+      expect(redacted.token).toBe('[REDACTED]');
+      expect(redacted.ticket).toBe('[REDACTED]');
+      expect(redacted.user.email).toBe('creator@studio.ai');
+    });
+
+    it('redacts S3 pre-signed URL signatures (X-Amz-Signature and Signature)', () => {
+      const rawS3Url = 'https://s3.amazonaws.com/bucket/video.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abcdef123456&Signature=xyz789';
+      const redacted = StructuredLogger.redact(rawS3Url) as string;
+
+      expect(redacted).not.toContain('abcdef123456');
+      expect(redacted).not.toContain('xyz789');
+      expect(redacted).toContain('X-Amz-Signature=[REDACTED]');
+      expect(redacted).toContain('Signature=[REDACTED]');
     });
   });
 });

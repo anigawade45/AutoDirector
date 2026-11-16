@@ -321,9 +321,7 @@ describe('Phase 9 — Release and Handover Acceptance Suite', () => {
       expect(unverifiedResult.specificationValid).toBe(true);
       expect(unverifiedResult.isSimulated).toBe(true);
       expect(unverifiedResult.allPassed).toBe(false);
-      expect(unverifiedResult.checks.every((c) => c.verificationStatus === 'UNVERIFIED')).toBe(
-        true
-      );
+      expect(unverifiedResult.checks.every((c) => c.verificationStatus === 'UNVERIFIED')).toBe(true);
 
       // Injected verification evidence marks checks as VERIFIED
       const backupResult = BackupRestoreService.verifyBackupProcedures({

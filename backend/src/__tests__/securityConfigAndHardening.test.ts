@@ -173,9 +173,7 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
       if (!parseResult.success) {
         const corsIssue = parseResult.error.issues.find((i) => i.path.includes('CORS_ORIGIN'));
         expect(corsIssue).toBeDefined();
-        expect(corsIssue?.message).toContain(
-          'Wildcard CORS_ORIGIN ("*") is prohibited in production'
-        );
+        expect(corsIssue?.message).toContain('Wildcard CORS_ORIGIN ("*") is prohibited in production');
       }
 
       // Valid production origin passes schema validation
