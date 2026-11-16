@@ -165,6 +165,98 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
         })
       );
     });
+
+    it('enforces cross-instance replay deduplication across separate process contexts via shared Redis', async () => {
+      // Simulate shared Redis database across multiple API server instances
+      const sharedRedisStore = new Map<string, string>();
+
+      const mockRedisSet = vi.fn(
+        async (key: string, val: string, exFlag: string, ttl: number, nxFlag: string) => {
+          if (nxFlag === 'NX' && sharedRedisStore.has(key)) {
+            return null; // Key exists, NX check fails (duplicate)
+          }
+          sharedRedisStore.set(key, val);
+          return 'OK';
+        }
+      );
+
+      const redisModule = await import('../config/redis.js');
+      const originalSet = (redisModule.redisConnection as any).set;
+      (redisModule.redisConnection as any).set = mockRedisSet;
+
+      try {
+        const now = Math.floor(Date.now() / 1000);
+        const eventId = 'evt_multi_instance_' + Date.now();
+        const body = { status: 'completed', jobId: 'job_render_456' };
+        const rawBody = JSON.stringify(body);
+        const signature = crypto
+          .createHmac('sha256', env.INTERNAL_WORKER_SECRET)
+          .update(rawBody)
+          .digest('hex');
+
+        const reqInstance1 = {
+          headers: {
+            'x-worker-id': 'worker-gpu-node-01',
+            'x-event-id': eventId,
+            'x-event-timestamp': String(now),
+            'x-event-signature': `sha256=${signature}`,
+          },
+          body,
+          id: 'req_inst_1',
+        } as unknown as Request;
+
+        let instance1Next = false;
+        const resInstance1 = {
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as unknown as Response;
+
+        // Instance 1 processes the event for the first time
+        await verifyWorkerSignature(reqInstance1, resInstance1, () => {
+          instance1Next = true;
+        });
+
+        expect(instance1Next).toBe(true);
+        expect(sharedRedisStore.has(`worker:event:${eventId}`)).toBe(true);
+
+        // Simulate Instance 2 (or process restart where local in-memory cache is empty)
+        resetWorkerAuthReplayCache();
+
+        const reqInstance2 = {
+          headers: {
+            'x-worker-id': 'worker-gpu-node-02',
+            'x-event-id': eventId,
+            'x-event-timestamp': String(now),
+            'x-event-signature': `sha256=${signature}`,
+          },
+          body,
+          id: 'req_inst_2',
+        } as unknown as Request;
+
+        let instance2Next = false;
+        const resInstance2 = {
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as unknown as Response;
+
+        // Instance 2 receives replayed event
+        await verifyWorkerSignature(reqInstance2, resInstance2, () => {
+          instance2Next = true;
+        });
+
+        // Instance 2 intercepts replay via shared Redis even though local memory was cleared
+        expect(instance2Next).toBe(false);
+        expect(resInstance2.status).toHaveBeenCalledWith(200);
+        expect(resInstance2.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            success: true,
+            data: { accepted: true, duplicate: true },
+          })
+        );
+      } finally {
+        (redisModule.redisConnection as any).set = originalSet;
+      }
+    });
   });
 
   // =========================================================================
