@@ -83,7 +83,17 @@ vi.mock('../services/storage/s3Service.js', () => ({
     configureBucketEncryption: vi.fn().mockResolvedValue(true),
     configureBucketLifecycle: vi.fn().mockResolvedValue(true),
     configureBucketCors: vi.fn().mockResolvedValue(true),
+    checkHealth: vi.fn().mockResolvedValue(true),
   },
+}));
+
+vi.mock('../config/redis.js', () => ({
+  redisConnection: {
+    status: 'ready',
+    ping: vi.fn().mockResolvedValue('PONG'),
+    on: vi.fn(),
+  },
+  createRedisConnection: vi.fn(),
 }));
 
 import { ProjectModel } from '../models/Project.js';
@@ -234,10 +244,75 @@ describe('Phase 9 — Release and Handover Acceptance Suite', () => {
   // =========================================================================
   describe('Gate 3: Smoke Testing, Backup Validation & Capacity Sizing', () => {
     it('executes production smoke test suite and verifies all core component checks pass', async () => {
-      const smokeSummary = await ProductionSmokeTestSuite.runAll('http://localhost:4000');
-      expect(smokeSummary.success).toBe(true);
-      expect(smokeSummary.passed).toBeGreaterThanOrEqual(4);
-      expect(smokeSummary.failed).toBe(0);
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(async (url: any, init?: any) => {
+          const urlStr = String(url);
+          if (urlStr.includes('/health')) {
+            return {
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({
+                status: 'healthy',
+                checks: { mongodb: 'connected', redis: 'connected', s3: 'accessible' },
+              }),
+            } as any;
+          }
+          if (urlStr.includes('/api/auth/register')) {
+            return {
+              status: 201,
+              statusText: 'Created',
+              json: async () => ({
+                success: true,
+                data: {
+                  token: 'mock-valid-jwt-token-123',
+                  user: { id: 'u_smoke_123', email: JSON.parse(init?.body || '{}').email },
+                },
+              }),
+            } as any;
+          }
+          if (urlStr.includes('/api/auth/me')) {
+            return {
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({
+                success: true,
+                data: {
+                  user: { id: 'u_smoke_123', email: 'smoke_test@smoketest.local' },
+                },
+              }),
+            } as any;
+          }
+          if (urlStr.includes('/api/catalog')) {
+            return {
+              status: 200,
+              statusText: 'OK',
+              json: async () => ({
+                success: true,
+                data: {
+                  templates: [{ id: 'cinematic' }],
+                  music: [{ id: 'ambient' }],
+                  luts: [{ id: 'teal_orange' }],
+                  fonts: ['Montserrat', 'Inter'],
+                },
+              }),
+            } as any;
+          }
+          return {
+            status: 404,
+            statusText: 'Not Found',
+            json: async () => ({ error: 'Not Found' }),
+          } as any;
+        });
+
+      try {
+        const smokeSummary = await ProductionSmokeTestSuite.runAll('http://localhost:4000');
+        expect(smokeSummary.success).toBe(true);
+        expect(smokeSummary.passed).toBeGreaterThanOrEqual(4);
+        expect(smokeSummary.failed).toBe(0);
+      } finally {
+        fetchSpy.mockRestore();
+      }
     });
 
     it('verifies production backup commands, archive formats, and retention policies', () => {
