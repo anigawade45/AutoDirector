@@ -1,9 +1,39 @@
 import express from 'express';
 import cors from 'cors';
+import mongoose from 'mongoose';
 import { env } from './config/env.js';
+import { redisConnection } from './config/redis.js';
+import { S3Service } from './services/storage/s3Service.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { apiRouter } from './routes/index.js';
+
+export async function getHealthStatus() {
+  const isMongoOk = mongoose.connection.readyState === 1;
+  const isRedisOk = redisConnection.status === 'ready' || redisConnection.status === 'connect';
+  let isS3Ok = false;
+  try {
+    isS3Ok = await S3Service.checkHealth();
+  } catch {
+    isS3Ok = false;
+  }
+
+  const isHealthy = isMongoOk && isRedisOk && isS3Ok;
+  return {
+    isHealthy,
+    statusCode: isHealthy ? 200 : 503,
+    payload: {
+      status: isHealthy ? 'healthy' : 'degraded',
+      timestamp: new Date().toISOString(),
+      service: 'ai-video-editing-platform-api',
+      checks: {
+        mongodb: isMongoOk ? 'connected' : 'disconnected',
+        redis: isRedisOk ? 'connected' : 'disconnected',
+        s3: isS3Ok ? 'accessible' : 'inaccessible',
+      },
+    },
+  };
+}
 
 export function createApp() {
   const app = express();
@@ -30,10 +60,16 @@ export function createApp() {
   // Attach request ID for traceability
   app.use(requestIdMiddleware);
 
-  // Health check endpoint
-  app.get('/health', (req, res) => {
+  // Health & Readiness check endpoint
+  app.get(['/health', '/health/ready'], async (req, res) => {
+    const health = await getHealthStatus();
+    res.status(health.statusCode).json(health.payload);
+  });
+
+  // Fast Liveness check endpoint
+  app.get('/health/live', (req, res) => {
     res.status(200).json({
-      status: 'healthy',
+      status: 'alive',
       timestamp: new Date().toISOString(),
       service: 'ai-video-editing-platform-api',
     });

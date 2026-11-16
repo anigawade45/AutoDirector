@@ -10,26 +10,53 @@ import { startRenderWorker } from './workers/renderWorker.js';
 async function bootstrap() {
   console.log('--- Starting AI-Native Video Creation Platform API ---');
 
-  // 1. Connect to MongoDB
+  // 1. Connect to MongoDB (Fail-fast in production mode unless degraded boot is explicitly allowed)
   try {
     await connectDatabase();
-  } catch (err) {
-    console.warn('[Warning] MongoDB connection deferred or failed. Ensure local Mongo is running.');
+  } catch (err: any) {
+    if (env.NODE_ENV === 'production' && !env.ALLOW_DEGRADED_BOOT) {
+      console.error(
+        '[Fatal Error] MongoDB connection failed in production mode:',
+        err.message || err
+      );
+      throw err;
+    }
+    console.warn(
+      '[Warning] MongoDB connection deferred or failed. Degraded boot permitted by configuration.'
+    );
   }
 
-  // 2. Verify Redis connection
+  // 2. Verify Redis connection (Required for BullMQ, SSE, replay deduplication, and upload sessions)
   try {
     await redisConnection.ping();
     console.log('[Redis] Connected successfully');
-  } catch (err) {
-    console.warn('[Warning] Redis connection deferred or failed. Ensure local Redis is running.');
+  } catch (err: any) {
+    if (env.NODE_ENV === 'production' && !env.ALLOW_DEGRADED_BOOT) {
+      console.error(
+        '[Fatal Error] Redis connection failed in production mode:',
+        err.message || err
+      );
+      throw err;
+    }
+    console.warn(
+      '[Warning] Redis connection deferred or failed. Degraded boot permitted by configuration.'
+    );
   }
 
-  // 3. Ensure S3 Bucket exists and configure CORS
+  // 3. Ensure S3 Bucket exists and configure CORS/encryption/lifecycle
   try {
     await S3Service.ensureBucketExists();
   } catch (err: any) {
-    console.warn('[Warning] S3 connection deferred or failed. Ensure MinIO/S3 is running.');
+    if (env.NODE_ENV === 'production' && !env.ALLOW_DEGRADED_BOOT) {
+      console.error(
+        '[Fatal Error] S3 bucket initialization failed in production mode:',
+        err.message || err
+      );
+      throw err;
+    }
+    console.warn(
+      '[Warning] S3 connection deferred or failed. Degraded boot permitted by configuration.'
+    );
   }
 
   // 4. Initialize Express application

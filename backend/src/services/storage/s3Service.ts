@@ -78,6 +78,18 @@ export class S3Service {
   }
 
   /**
+   * Probes S3 bucket connectivity for readiness health checks.
+   */
+  static async checkHealth(bucketName: string = env.S3_BUCKET_NAME): Promise<boolean> {
+    try {
+      await s3Client.send(new HeadBucketCommand({ Bucket: bucketName }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Resolves the list of allowed CORS origins for S3 direct browser interactions.
    * Prioritizes explicit customOrigins parameter, then env.S3_ALLOWED_ORIGINS,
    * then env.CORS_ORIGIN, falling back safely to production frontend domains or localhost in dev.

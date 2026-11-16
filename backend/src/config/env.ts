@@ -26,6 +26,11 @@ const envSchema = z.object({
   API_BASE_URL: z.string().optional().default('http://localhost:4000/api'),
   CORS_ORIGIN: z.string().optional().default('*'),
   S3_ALLOWED_ORIGINS: z.string().optional().default(''),
+  ALLOW_DEGRADED_BOOT: z
+    .string()
+    .optional()
+    .default('false')
+    .transform((val) => val === 'true'),
 
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   INTERNAL_WORKER_SECRET: z.string().min(1, 'INTERNAL_WORKER_SECRET is required'),
