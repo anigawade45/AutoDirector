@@ -8,10 +8,17 @@ import { apiRouter } from './routes/index.js';
 export function createApp() {
   const app = express();
 
-  // Basic CORS configuration
+  // Support comma-separated origins or wildcard
+  const allowedOrigins =
+    !env.CORS_ORIGIN || env.CORS_ORIGIN === '*'
+      ? '*'
+      : env.CORS_ORIGIN.split(',')
+          .map((o) => o.trim())
+          .filter(Boolean);
+
   app.use(
     cors({
-      origin: env.CORS_ORIGIN,
+      origin: allowedOrigins,
       credentials: true,
     })
   );

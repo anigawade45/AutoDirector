@@ -78,29 +78,104 @@ export class S3Service {
   }
 
   /**
-   * Configures permissive CORS rules on the S3 bucket for browser multipart direct PUT uploads.
+   * Resolves the list of allowed CORS origins for S3 direct browser interactions.
+   * Prioritizes explicit customOrigins parameter, then env.S3_ALLOWED_ORIGINS,
+   * then env.CORS_ORIGIN, falling back safely to production frontend domains or localhost in dev.
    */
-  static async configureBucketCors(): Promise<void> {
+  static resolveAllowedOrigins(customOrigins?: string[]): string[] {
+    if (customOrigins && customOrigins.length > 0) {
+      return customOrigins;
+    }
+
+    if (env.S3_ALLOWED_ORIGINS && env.S3_ALLOWED_ORIGINS.trim()) {
+      return env.S3_ALLOWED_ORIGINS.split(',')
+        .map((o) => o.trim())
+        .filter(Boolean);
+    }
+
+    if (env.CORS_ORIGIN && env.CORS_ORIGIN.trim() && env.CORS_ORIGIN !== '*') {
+      return env.CORS_ORIGIN.split(',')
+        .map((o) => o.trim())
+        .filter(Boolean);
+    }
+
+    // In production, avoid blanket '*' wildcard unless explicitly overridden
+    if (env.NODE_ENV === 'production' && env.CORS_ORIGIN === '*') {
+      return [
+        'https://ai-video-frontend-57bk.onrender.com',
+        'http://localhost:5173',
+        'http://localhost:3000',
+      ];
+    }
+
+    // In local development / test, allow wildcard if CORS_ORIGIN is '*'
+    if (env.CORS_ORIGIN === '*') {
+      return ['*'];
+    }
+
+    return ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'];
+  }
+
+  /**
+   * Configures least-privilege CORS rules on the S3 bucket for browser multipart direct PUT uploads
+   * and partial-content range streaming.
+   *
+   * Security Hardening:
+   * 1. AllowedMethods: Restricted strictly to ['GET', 'PUT', 'HEAD']. (DELETE and POST are rejected;
+   *    uploads are completed and assets purged solely through authenticated backend API routes).
+   * 2. AllowedOrigins: Scoped to configured application origins (rejecting unconstrained wildcard * in prod).
+   * 3. AllowedHeaders: Explicitly whitelisted for multipart upload & range queries (Content-Type, Content-MD5, x-amz-*, Range, etc.).
+   * 4. ExposeHeaders: Exposes ETag, request IDs, and video range metadata for media playback.
+   */
+  static async configureBucketCors(
+    bucketName: string = env.S3_BUCKET_NAME,
+    customOrigins?: string[]
+  ): Promise<boolean> {
     try {
+      const allowedOrigins = this.resolveAllowedOrigins(customOrigins);
+
       await s3Client.send(
         new PutBucketCorsCommand({
-          Bucket: env.S3_BUCKET_NAME,
+          Bucket: bucketName,
           CORSConfiguration: {
             CORSRules: [
               {
-                AllowedHeaders: ['*'],
-                AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
-                AllowedOrigins: ['*'],
-                ExposeHeaders: ['ETag', 'x-amz-request-id', 'x-amz-id-2'],
-                MaxAgeSeconds: 3000,
+                AllowedOrigins: allowedOrigins,
+                AllowedMethods: ['GET', 'PUT', 'HEAD'],
+                AllowedHeaders: [
+                  'Content-Type',
+                  'Content-MD5',
+                  'Content-Length',
+                  'x-amz-*',
+                  'Range',
+                  'Authorization',
+                  'Origin',
+                  'If-Match',
+                  'If-None-Match',
+                  'If-Modified-Since',
+                  'If-Unmodified-Since',
+                ],
+                ExposeHeaders: [
+                  'ETag',
+                  'x-amz-request-id',
+                  'x-amz-id-2',
+                  'Accept-Ranges',
+                  'Content-Range',
+                  'Content-Length',
+                ],
+                MaxAgeSeconds: 3600,
               },
             ],
           },
         })
       );
-      console.log(`[S3] Configured bucket CORS for browser direct uploads.`);
+      console.log(
+        `[S3] Configured hardened bucket CORS for '${bucketName}' (Origins: [${allowedOrigins.join(', ')}], Methods: [GET, PUT, HEAD]).`
+      );
+      return true;
     } catch (corsErr: any) {
       console.warn(`[S3] Note on bucket CORS configuration:`, corsErr.message || corsErr);
+      return false;
     }
   }
 

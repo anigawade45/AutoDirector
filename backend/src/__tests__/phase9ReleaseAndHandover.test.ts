@@ -80,6 +80,7 @@ vi.mock('../services/storage/s3Service.js', () => ({
     purgeUserStorage: vi.fn().mockResolvedValue(45),
     configureBucketEncryption: vi.fn().mockResolvedValue(true),
     configureBucketLifecycle: vi.fn().mockResolvedValue(true),
+    configureBucketCors: vi.fn().mockResolvedValue(true),
   },
 }));
 
@@ -168,7 +169,7 @@ describe('Phase 9 — Release and Handover Acceptance Suite', () => {
       );
     });
 
-    it('configures AES256 server-side encryption and 7-day preview retention on S3 buckets', async () => {
+    it('configures AES256 server-side encryption, 7-day preview retention and hardened CORS on S3 buckets', async () => {
       const encSuccess = await S3Service.configureBucketEncryption('test-bucket');
       expect(encSuccess).toBe(true);
       expect(S3Service.configureBucketEncryption).toHaveBeenCalledWith('test-bucket');
@@ -176,6 +177,10 @@ describe('Phase 9 — Release and Handover Acceptance Suite', () => {
       const lifeSuccess = await S3Service.configureBucketLifecycle('test-bucket');
       expect(lifeSuccess).toBe(true);
       expect(S3Service.configureBucketLifecycle).toHaveBeenCalledWith('test-bucket');
+
+      const corsSuccess = await S3Service.configureBucketCors('test-bucket');
+      expect(corsSuccess).toBe(true);
+      expect(S3Service.configureBucketCors).toHaveBeenCalledWith('test-bucket');
     });
 
     it('executes delete-on-request project hard purge across S3 objects and database collections', async () => {

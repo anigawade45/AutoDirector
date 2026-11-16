@@ -25,6 +25,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
   API_BASE_URL: z.string().optional().default('http://localhost:4000/api'),
   CORS_ORIGIN: z.string().optional().default('*'),
+  S3_ALLOWED_ORIGINS: z.string().optional().default(''),
 
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   INTERNAL_WORKER_SECRET: z.string().min(1, 'INTERNAL_WORKER_SECRET is required'),
