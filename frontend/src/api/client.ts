@@ -18,34 +18,56 @@ import {
 } from '@ai-video/shared';
 import { AuthStorage } from '../utils/authStorage';
 
-function getBaseUrl(): string {
-  let raw = (import.meta.env.VITE_API_BASE_URL || '').trim();
+/**
+ * Resolves the API base URL based strictly on standard environment configuration.
+ *
+ * Rules:
+ * 1. If VITE_API_BASE_URL is provided:
+ *    - If relative (starts with '/'): normalizes trailing slashes (e.g. '/api').
+ *    - If absolute (http:// or https://): normalizes and ensures '/api' path suffix.
+ * 2. If VITE_API_BASE_URL is missing or empty:
+ *    - Defaults cleanly to relative path '/api'.
+ * 3. Zero hardcoded hosts: No deployment-specific URLs or platform domain heuristics
+ *    are embedded in source code, eliminating silent misconfigurations and cross-environment coupling.
+ */
+export function resolveApiBaseUrl(rawEnv?: string): string {
+  const raw = (rawEnv !== undefined ? rawEnv : import.meta.env.VITE_API_BASE_URL || '').trim();
 
-  // Automatic production resolution when hosted on Render
-  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
-    if (!raw || raw === '/api' || !raw.includes('.')) {
-      return 'https://ai-video-api-eaui.onrender.com/api';
-    }
+  // 1. Missing or empty: default to standard relative endpoint '/api'
+  if (!raw) {
+    return '/api';
   }
 
-  if (!raw || raw === '/api' || raw.startsWith('/')) {
-    return raw ? raw.replace(/\/+$/, '') : '/api';
+  // 2. Relative path (e.g. '/api' or '/v1')
+  if (raw.startsWith('/')) {
+    return raw.replace(/\/+$/, '') || '/api';
   }
 
+  // 3. Absolute URL
   let url = raw;
-  if (!url.includes('.')) {
-    url = `${url}.onrender.com`;
-  }
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = `https://${url}`;
   }
-  if (!url.endsWith('/api')) {
-    url = `${url.replace(/\/+$/, '')}/api`;
+
+  // Strip trailing slashes
+  url = url.replace(/\/+$/, '');
+
+  // Ensure /api path suffix if no subpath was provided
+  try {
+    const parsed = new URL(url);
+    if (!parsed.pathname || parsed.pathname === '/') {
+      return `${url}/api`;
+    }
+  } catch {
+    if (!url.endsWith('/api')) {
+      return `${url}/api`;
+    }
   }
+
   return url;
 }
 
-const BASE_URL = getBaseUrl();
+export const BASE_URL = resolveApiBaseUrl();
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = AuthStorage.getToken();
