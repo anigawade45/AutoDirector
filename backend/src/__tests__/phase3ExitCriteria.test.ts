@@ -225,7 +225,7 @@ progress=continue
     expect(downloadUrl).toContain('https://s3.example.com/previews/1.mp4');
 
     // 10. Scratch directory cleaned up
-    scratch.cleanup();
+    await scratch.cleanup();
     expect(fs.existsSync(scratch.dirPath)).toBe(false);
   });
 

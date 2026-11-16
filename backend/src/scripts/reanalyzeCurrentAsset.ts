@@ -104,7 +104,7 @@ async function main() {
     { upsert: true, new: true }
   );
 
-  scratch.cleanup();
+  await scratch.cleanup();
   console.log('✓ Successfully updated database with real speech cues & calibrated loudness!');
   await disconnectDatabase();
   process.exit(0);

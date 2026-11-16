@@ -7,9 +7,9 @@ describe('Phase 3 Task 3: Isolated Per-Job Temporary Directories & Guaranteed Cl
   const testJobId = 'test_job_12345';
   let scratch: JobScratchDirectory;
 
-  afterEach(() => {
+  afterEach(async () => {
     if (scratch && fs.existsSync(scratch.dirPath)) {
-      scratch.cleanup();
+      await scratch.cleanup();
     }
   });
 
@@ -36,7 +36,7 @@ describe('Phase 3 Task 3: Isolated Per-Job Temporary Directories & Guaranteed Cl
     expect(() => scratch.resolve('../secret.env')).toThrow('Path traversal violation');
   });
 
-  it('completely cleans up the isolated directory and all contents', () => {
+  it('completely cleans up the isolated directory and all contents', async () => {
     scratch = new JobScratchDirectory(testJobId);
     const tempFile1 = path.join(scratch.dirPath, 'test1.txt');
     const tempFile2 = path.join(scratch.dirPath, 'test2.mp4');
@@ -47,7 +47,7 @@ describe('Phase 3 Task 3: Isolated Per-Job Temporary Directories & Guaranteed Cl
     expect(fs.existsSync(tempFile1)).toBe(true);
     expect(fs.existsSync(tempFile2)).toBe(true);
 
-    scratch.cleanup();
+    await scratch.cleanup();
 
     expect(fs.existsSync(scratch.dirPath)).toBe(false);
     expect(fs.existsSync(tempFile1)).toBe(false);
@@ -83,5 +83,52 @@ describe('Phase 3 Task 3: Isolated Per-Job Temporary Directories & Guaranteed Cl
     const purged = JobScratchDirectory.cleanupStaleDirectories(1 * 60 * 60 * 1000);
     expect(purged).toBeGreaterThanOrEqual(1);
     expect(fs.existsSync(staleDir.dirPath)).toBe(false);
+  });
+
+  it('cleanupSync removes directory synchronously using native retry options without busy waiting', () => {
+    const syncJobId = 'test_sync_cleanup_job';
+    const syncScratch = new JobScratchDirectory(syncJobId);
+    fs.writeFileSync(syncScratch.resolve('sync_test.txt'), 'synchronous cleanup');
+    expect(fs.existsSync(syncScratch.dirPath)).toBe(true);
+
+    syncScratch.cleanupSync(2, 50);
+    expect(fs.existsSync(syncScratch.dirPath)).toBe(false);
+  });
+
+  it('async cleanup does not block event loop during retry backoff', async () => {
+    const retryJobId = 'test_async_retry_eventloop';
+    const retryScratch = new JobScratchDirectory(retryJobId);
+    fs.writeFileSync(retryScratch.resolve('data.bin'), 'retry test');
+
+    // Track event loop ticks while retry backoff is awaited
+    let eventLoopTicks = 0;
+    const interval = setInterval(() => {
+      eventLoopTicks++;
+    }, 10);
+
+    // Mock fs.promises.rm to fail once then succeed
+    const originalRm = fs.promises.rm;
+    let callCount = 0;
+    fs.promises.rm = (async (targetPath: any, opts: any) => {
+      callCount++;
+      if (callCount === 1) {
+        const err: any = new Error('EBUSY: resource busy or locked');
+        err.code = 'EBUSY';
+        throw err;
+      }
+      return originalRm(targetPath, opts);
+    }) as any;
+
+    try {
+      await retryScratch.cleanup(3, 50);
+      clearInterval(interval);
+
+      expect(callCount).toBe(2);
+      expect(eventLoopTicks).toBeGreaterThanOrEqual(2); // Event loop ticked during backoff!
+      expect(fs.existsSync(retryScratch.dirPath)).toBe(false);
+    } finally {
+      clearInterval(interval);
+      fs.promises.rm = originalRm;
+    }
   });
 });

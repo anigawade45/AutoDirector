@@ -443,7 +443,7 @@ export function startAnalysisWorker() {
         }
       } finally {
         // Guaranteed cleanup of per-job isolated scratch directory
-        scratch.cleanup();
+        await scratch.cleanup();
       }
     },
     {

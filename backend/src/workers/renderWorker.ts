@@ -273,7 +273,7 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
         throw err;
       } finally {
         // Guaranteed cleanup of per-job temporary scratch directory
-        scratch.cleanup();
+        await scratch.cleanup();
       }
     },
     {

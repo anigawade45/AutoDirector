@@ -54,17 +54,25 @@ export class JobScratchDirectory {
   }
 
   /**
-   * Guaranteed cleanup: removes the entire isolated per-job directory and all its contents.
-   * On Windows, applies retries with backoff if a process briefly holds a file descriptor.
+   * Guaranteed non-blocking cleanup: asynchronously removes the entire isolated
+   * per-job directory and all its contents without blocking the Node.js event loop.
+   * On Windows, applies retries with asynchronous backoff (`setTimeout`) if a
+   * media process (ffmpeg/ffprobe) briefly retains an open file descriptor,
+   * completely eliminating busy-wait spin loops on the Node.js event loop thread.
    */
-  cleanup(maxRetries: number = 3, retryDelayMs: number = 200): void {
+  async cleanup(maxRetries: number = 3, retryDelayMs: number = 200): Promise<void> {
     if (!fs.existsSync(this.dirPath)) {
       return;
     }
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        fs.rmSync(this.dirPath, { recursive: true, force: true });
+        await fs.promises.rm(this.dirPath, {
+          recursive: true,
+          force: true,
+          maxRetries: 1,
+          retryDelay: 50,
+        });
         return;
       } catch (err: any) {
         if (attempt === maxRetries) {
@@ -73,11 +81,31 @@ export class JobScratchDirectory {
             err.message
           );
         } else {
-          // Synchronous spin-wait before retry
-          const start = Date.now();
-          while (Date.now() - start < retryDelayMs) {}
+          // Asynchronous, non-blocking delay yielding control to the event loop
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
         }
       }
+    }
+  }
+
+  /**
+   * Synchronous fallback cleanup using Node.js native retry options
+   * without busy-waiting or thread spinning.
+   */
+  cleanupSync(maxRetries: number = 3, retryDelayMs: number = 200): void {
+    if (!fs.existsSync(this.dirPath)) {
+      return;
+    }
+
+    try {
+      fs.rmSync(this.dirPath, {
+        recursive: true,
+        force: true,
+        maxRetries,
+        retryDelay: retryDelayMs,
+      });
+    } catch (err: any) {
+      console.warn(`[JobScratchDirectory] Could not fully remove ${this.dirPath}:`, err.message);
     }
   }
 
@@ -92,7 +120,7 @@ export class JobScratchDirectory {
     try {
       return await action(scratch);
     } finally {
-      scratch.cleanup();
+      await scratch.cleanup();
     }
   }
 
