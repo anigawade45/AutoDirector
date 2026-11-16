@@ -4,6 +4,13 @@ import path from 'path';
 import { createApp } from '../app.js';
 import { TokenService } from '../services/auth/tokenService.js';
 import { verifyWorkerSignature, resetWorkerAuthReplayCache } from '../middleware/workerAuth.js';
+import { securityHeadersMiddleware } from '../middleware/securityHeaders.js';
+import {
+  createRateLimiter,
+  authRateLimiter,
+  generalApiRateLimiter,
+  resetRateLimiterCache,
+} from '../middleware/rateLimiter.js';
 import { env } from '../config/env.js';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
@@ -13,6 +20,7 @@ const rootDir = path.resolve(__dirname, '../../..');
 describe('Security & Configuration Hardening Suite (Section 5)', () => {
   beforeEach(() => {
     resetWorkerAuthReplayCache();
+    resetRateLimiterCache();
   });
 
   // =========================================================================
@@ -221,6 +229,192 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
 
       expect(content).toContain('MONGO_ROOT_USER=admin');
       expect(content).toContain('MONGO_ROOT_PASSWORD=__INJECT_MONGO_ROOT_PASSWORD__');
+    });
+  });
+
+  // =========================================================================
+  // 6. Security Headers Middleware (OWASP / Helmet Equivalent)
+  // =========================================================================
+  describe('6. Security Headers Middleware (OWASP Standards)', () => {
+    it('sets essential security headers and strips technology fingerprinting', () => {
+      const headers: Record<string, string> = { 'x-powered-by': 'Express' };
+
+      const mockReq = {
+        headers: {},
+        secure: true,
+      } as unknown as Request;
+
+      const mockRes = {
+        removeHeader: vi.fn((k: string) => {
+          delete headers[k.toLowerCase()];
+        }),
+        setHeader: vi.fn((k: string, v: string) => {
+          headers[k.toLowerCase()] = v;
+        }),
+      } as unknown as Response;
+
+      let nextCalled = false;
+      securityHeadersMiddleware(mockReq, mockRes, () => {
+        nextCalled = true;
+      });
+
+      expect(nextCalled).toBe(true);
+      expect(headers['x-powered-by']).toBeUndefined();
+      expect(headers['x-content-type-options']).toBe('nosniff');
+      expect(headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(headers['x-xss-protection']).toBe('0');
+      expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+      expect(headers['content-security-policy']).toContain("default-src 'self'");
+      expect(headers['origin-agent-cluster']).toBe('?1');
+    });
+  });
+
+  // =========================================================================
+  // 7. Rate Limiting Middleware & Abuse Gating
+  // =========================================================================
+  describe('7. Rate Limiting Middleware & Abuse Gating', () => {
+    it('allows requests within window and returns rate limit headers', async () => {
+      const limiter = createRateLimiter({
+        prefix: 'test_limit',
+        windowMs: 60000,
+        max: 5,
+      });
+
+      const headers: Record<string, any> = {};
+      const mockReq = {
+        headers: { 'x-forwarded-for': '198.51.100.1' },
+      } as unknown as Request;
+
+      const mockRes = {
+        setHeader: vi.fn((k: string, v: any) => {
+          headers[k] = v;
+        }),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      let nextCalled = false;
+      await limiter(mockReq, mockRes, () => {
+        nextCalled = true;
+      });
+
+      expect(nextCalled).toBe(true);
+      expect(headers['X-RateLimit-Limit']).toBe(5);
+      expect(headers['X-RateLimit-Remaining']).toBe(4);
+      expect(headers['X-RateLimit-Reset']).toBeDefined();
+    });
+
+    it('rejects requests with HTTP 429 when max limit is exceeded', async () => {
+      const limiter = createRateLimiter({
+        prefix: 'test_burst',
+        windowMs: 60000,
+        max: 2,
+      });
+
+      const mockReq = {
+        headers: { 'x-forwarded-for': '203.0.113.42' },
+      } as unknown as Request;
+
+      const createMockRes = () => {
+        const h: Record<string, any> = {};
+        return {
+          headers: h,
+          setHeader: vi.fn((k: string, v: any) => {
+            h[k] = v;
+          }),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as unknown as Response & { headers: Record<string, any> };
+      };
+
+      // 1st request -> ok
+      let res1 = createMockRes();
+      await limiter(mockReq, res1, () => {});
+      expect(res1.status).not.toHaveBeenCalled();
+
+      // 2nd request -> ok
+      let res2 = createMockRes();
+      await limiter(mockReq, res2, () => {});
+      expect(res2.status).not.toHaveBeenCalled();
+
+      // 3rd request -> exceeds max of 2 -> HTTP 429
+      let res3 = createMockRes();
+      let nextCalled3 = false;
+      await limiter(mockReq, res3, () => {
+        nextCalled3 = true;
+      });
+
+      expect(nextCalled3).toBe(false);
+      expect(res3.status).toHaveBeenCalledWith(429);
+      expect(res3.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'RATE_LIMIT_EXCEEDED',
+          }),
+        })
+      );
+      expect(res3.headers['Retry-After']).toBeDefined();
+    });
+
+    it('skips rate limiting on health check probe paths', async () => {
+      const mockReq = {
+        path: '/health/live',
+        headers: {},
+      } as unknown as Request;
+
+      const mockRes = {
+        setHeader: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+
+      let nextCalled = false;
+      await generalApiRateLimiter(mockReq, mockRes, () => {
+        nextCalled = true;
+      });
+
+      expect(nextCalled).toBe(true);
+      expect(mockRes.setHeader).not.toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // 8. Reverse Proxy Trust Chain, Dev S3 CORS & Manifest Externalization
+  // =========================================================================
+  describe('8. Reverse Proxy Trust Chain, S3 Dev CORS & Manifest Hygiene', () => {
+    it('verifies app configures trust proxy for Nginx / Render ingress headers', () => {
+      const app = createApp();
+      expect(app.get('trust proxy')).toBeTruthy();
+    });
+
+    it('verifies docker-compose.yml does not set wildcard EXTRA_CORS_ALLOWED_ORIGINS on S3', () => {
+      const composePath = path.join(rootDir, 'docker-compose.yml');
+      const content = fs.readFileSync(composePath, 'utf8');
+
+      expect(content).not.toMatch(/EXTRA_CORS_ALLOWED_ORIGINS=\*/);
+      expect(content).toContain('EXTRA_CORS_ALLOWED_ORIGINS=http://localhost:5173');
+    });
+
+    it('verifies frontend/nginx.conf includes server_tokens off and OWASP headers', () => {
+      const nginxPath = path.join(rootDir, 'frontend/nginx.conf');
+      expect(fs.existsSync(nginxPath)).toBe(true);
+
+      const content = fs.readFileSync(nginxPath, 'utf8');
+      expect(content).toContain('server_tokens off;');
+      expect(content).toContain('add_header X-Frame-Options "SAMEORIGIN" always;');
+      expect(content).toContain('add_header X-Content-Type-Options "nosniff" always;');
+      expect(content).toContain('client_max_body_size 50M;');
+      expect(content).toContain('proxy_set_header X-Forwarded-Host $host;');
+    });
+
+    it('verifies render.yaml externalizes S3_BUCKET_NAME and AWS_REGION via sync: false', () => {
+      const renderPath = path.join(rootDir, 'render.yaml');
+      const content = fs.readFileSync(renderPath, 'utf8');
+
+      expect(content).not.toContain('ai-video-studio-prod-aniket');
+      expect(content).toContain('key: S3_BUCKET_NAME');
+      expect(content).toContain('sync: false');
     });
   });
 });

@@ -5,6 +5,7 @@ import { PlansController } from '../controllers/plansController.js';
 import { RendersController } from '../controllers/rendersController.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireProjectOwner } from '../middleware/tenant.js';
+import { aiPlannerRateLimiter, renderRateLimiter } from '../middleware/rateLimiter.js';
 
 export const projectsRouter = Router();
 
@@ -25,16 +26,31 @@ projectsRouter.delete('/:id/purge', requireProjectOwner, ProjectsController.purg
 // AI Prompt & Chat History
 projectsRouter.get('/:id/chat', requireProjectOwner, PromptsController.getChatHistory);
 projectsRouter.post('/:id/chat', requireProjectOwner, PromptsController.postChatMessage);
-projectsRouter.post('/:id/prompt', requireProjectOwner, PromptsController.submitPrompt);
+projectsRouter.post(
+  '/:id/prompt',
+  aiPlannerRateLimiter,
+  requireProjectOwner,
+  PromptsController.submitPrompt
+);
 
 // Immutable Plan Versioning & Patches
 projectsRouter.get('/:id/plans/:v', requireProjectOwner, PlansController.getPlanVersion);
 projectsRouter.patch('/:id/plans/:v', requireProjectOwner, PlansController.patchPlan);
 projectsRouter.post('/:id/plans/:v/revert', requireProjectOwner, PlansController.revertPlan);
 
-// Previews & Exports
-projectsRouter.post('/:id/preview', requireProjectOwner, RendersController.enqueuePreview);
-projectsRouter.post('/:id/export', requireProjectOwner, RendersController.enqueueExport);
+// Previews & Exports (Rate limited to protect GPU/CPU rendering resources)
+projectsRouter.post(
+  '/:id/preview',
+  renderRateLimiter,
+  requireProjectOwner,
+  RendersController.enqueuePreview
+);
+projectsRouter.post(
+  '/:id/export',
+  renderRateLimiter,
+  requireProjectOwner,
+  RendersController.enqueueExport
+);
 
 // Captions & Subtitles
 projectsRouter.patch('/:id/captions', requireProjectOwner, ProjectsController.updateCaptions);

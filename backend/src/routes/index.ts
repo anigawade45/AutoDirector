@@ -5,10 +5,11 @@ import { jobsRouter } from './jobs.routes.js';
 import { internalRouter } from './internal.routes.js';
 import { catalogRouter } from './catalog.routes.js';
 import { authRouter } from './auth.routes.js';
+import { authRateLimiter } from '../middleware/rateLimiter.js';
 
 export const apiRouter = Router();
 
-apiRouter.use('/auth', authRouter);
+apiRouter.use('/auth', authRateLimiter, authRouter);
 apiRouter.use('/uploads', uploadsRouter);
 apiRouter.use('/projects', projectsRouter);
 apiRouter.use('/jobs', jobsRouter);

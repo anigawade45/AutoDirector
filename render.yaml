@@ -19,10 +19,11 @@ services:
         value: 'true'
       - key: CORS_ORIGIN
         value: https://ai-video-frontend-57bk.onrender.com
+      # S3 Infrastructure: Configure via Render Dashboard Environment Group (sync: false prevents exposing private buckets in VCS)
       - key: AWS_REGION
-        value: ap-southeast-2
+        sync: false
       - key: S3_BUCKET_NAME
-        value: ai-video-studio-prod-aniket
+        sync: false
       - key: S3_ENDPOINT
         value: ''
       - key: S3_FORCE_PATH_STYLE

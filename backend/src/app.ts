@@ -6,6 +6,8 @@ import { redisConnection } from './config/redis.js';
 import { S3Service } from './services/storage/s3Service.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { securityHeadersMiddleware } from './middleware/securityHeaders.js';
+import { generalApiRateLimiter } from './middleware/rateLimiter.js';
 import { apiRouter } from './routes/index.js';
 
 export async function getHealthStatus() {
@@ -37,6 +39,13 @@ export async function getHealthStatus() {
 
 export function createApp() {
   const app = express();
+
+  // Trust first proxy hop (Nginx reverse proxy, Render / Cloudflare ingress)
+  // Ensures req.ip, req.protocol, and rate-limiting headers accurately reflect the client
+  app.set('trust proxy', 1);
+
+  // OWASP Security Headers (Clickjacking, MIME sniffing, HSTS, CSP, and tech stack hiding)
+  app.use(securityHeadersMiddleware);
 
   // Resolve allowed origins for CORS (supports comma-separated list and dev fallbacks)
   const configuredOrigins = env.CORS_ORIGIN
@@ -133,7 +142,8 @@ export function createApp() {
     });
   });
 
-  // Mount API routers
+  // Rate Limiting & Mount API routers
+  app.use('/api', generalApiRateLimiter);
   app.use('/api', apiRouter);
 
   // Centralized Error Handling
