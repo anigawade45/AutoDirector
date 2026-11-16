@@ -51,5 +51,6 @@ jobs:
 
       - name: Run Backend Tests
         run: npm --workspace=backend run test
-        continue-on-error: true
 
+      - name: Run Frontend Tests
+        run: npm --workspace=frontend run test
