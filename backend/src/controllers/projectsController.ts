@@ -372,6 +372,10 @@ export class ProjectsController {
     try {
       const { id } = req.params;
 
+      if (req.query?.purge === 'true' || req.query?.permanent === 'true') {
+        return ProjectsController.purgeProject(req, res, next);
+      }
+
       const project = await ProjectModel.findOne({
         publicId: id,
         userId: req.user!._id,

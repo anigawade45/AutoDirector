@@ -147,7 +147,7 @@ export class RenderJobLifecycle {
       }
 
       // Quota Accounting: Atomically increment renderMinutesUsed when export finishes
-      if (job.type === 'export' && job.userId) {
+      if ((job.type === 'export' || job.type === 'render') && job.userId) {
         const durationMs =
           updates?.output?.durationMs || job.output?.durationMs || job.timings.durationMs || 60000;
         const minutesRendered = Math.max(1, Math.ceil(durationMs / 60000));

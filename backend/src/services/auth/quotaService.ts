@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { UserModel } from '../../models/User.js';
+import { AssetModel } from '../../models/Asset.js';
 import { AppError } from '../../middleware/errorHandler.js';
 
 /**
@@ -204,5 +205,61 @@ export class QuotaService {
         $set: { 'usage.lastPromptDate': todayDate },
       }
     );
+  }
+
+  /**
+   * Reconciles a user's storageBytesUsed against the actual sum of their active S3 assets.
+   * Eliminates quota drift from interrupted uploads, orphaned multipart sweeps, or manual purges.
+   */
+  static async reconcileUserStorageQuota(
+    userId: string | mongoose.Types.ObjectId | undefined
+  ): Promise<number> {
+    const rawUserId = userId?.toString();
+    if (
+      !rawUserId ||
+      !mongoose.isValidObjectId(rawUserId) ||
+      typeof AssetModel?.find !== 'function' ||
+      typeof UserModel?.updateOne !== 'function'
+    ) {
+      return 0;
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(rawUserId);
+    const assets = await AssetModel.find({
+      userId: userObjectId,
+      status: { $ne: 'deleted' },
+    });
+
+    const actualBytesUsed = assets.reduce((sum, a) => sum + (a.media?.sizeBytes || 0), 0);
+
+    await UserModel.updateOne(
+      { _id: userObjectId },
+      { $set: { 'usage.storageBytesUsed': actualBytesUsed } }
+    );
+
+    return actualBytesUsed;
+  }
+
+  /**
+   * Returns current quota and usage snapshot for a user.
+   */
+  static async getUserUsage(userId: string | mongoose.Types.ObjectId | undefined) {
+    const rawUserId = userId?.toString();
+    if (
+      !rawUserId ||
+      !mongoose.isValidObjectId(rawUserId) ||
+      typeof UserModel.findById !== 'function'
+    ) {
+      return null;
+    }
+
+    const user = await UserModel.findById(rawUserId);
+    if (!user) return null;
+
+    return {
+      tier: user.tier,
+      quota: user.quota,
+      usage: user.usage,
+    };
   }
 }
