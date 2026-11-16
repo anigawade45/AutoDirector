@@ -1,14 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { ProjectModel } from '../models/Project.js';
-import { JobEventsPublisher } from '../services/queue/queueService.js';
+import { RenderJobLifecycle } from '../services/jobs/renderJobLifecycle.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export class WorkerEventsController {
   static async handleWorkerEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const payload = req.body;
-      const { eventType, jobId, projectId } = payload;
+      const { eventType, jobId } = payload;
 
       const cleanJobId = jobId.replace(/^job_/, '');
       const job = await RenderJobModel.findById(cleanJobId);
@@ -18,7 +18,7 @@ export class WorkerEventsController {
       }
 
       // Replay / terminal guard: a late progress event must not move a completed/failed job
-      if (job.state === 'completed' || job.state === 'failed') {
+      if (job.state === 'completed' || job.state === 'failed' || job.state === 'canceled') {
         res.status(200).json({
           success: true,
           data: { accepted: true, duplicate: true, state: job.state },
@@ -29,31 +29,25 @@ export class WorkerEventsController {
 
       switch (eventType) {
         case 'render.progress': {
-          job.state = 'processing';
-          job.percent = payload.progress?.percent || job.percent;
-          await job.save();
-
-          await JobEventsPublisher.publishProgress(cleanJobId, {
-            jobId,
-            state: 'processing',
-            percent: job.percent,
+          await RenderJobLifecycle.transition(cleanJobId, 'processing', {
+            percent: payload.progress?.percent || job.percent,
             outTimeMs: payload.progress?.outTimeMs,
+            workerId: req.headers['x-worker-id'] as string,
           });
           break;
         }
 
         case 'render.completed': {
           const outKey = payload.result?.outputKey || payload.result?.key;
-          job.state = 'completed';
-          job.percent = 100;
-          job.output = {
-            key: outKey,
-            sizeBytes: payload.result?.sizeBytes || 0,
-            durationMs: payload.result?.durationMs || 0,
-            checksum: payload.result?.checksum,
-          };
-          job.timings.finishedAt = new Date();
-          await job.save();
+          await RenderJobLifecycle.transition(cleanJobId, 'completed', {
+            percent: 100,
+            output: {
+              key: outKey,
+              sizeBytes: payload.result?.sizeBytes || 0,
+              durationMs: payload.result?.durationMs || 0,
+              checksum: payload.result?.checksum,
+            },
+          });
 
           // If final export, update project's publishedVersion
           if (job.type === 'export' || job.type === 'render') {
@@ -64,48 +58,24 @@ export class WorkerEventsController {
           } else if (job.type === 'preview') {
             await ProjectModel.updateOne({ _id: job.projectId }, { $set: { status: 'ready' } });
           }
-
-          await JobEventsPublisher.publishProgress(cleanJobId, {
-            jobId,
-            state: 'done',
-            percent: 100,
-            outputKey: outKey,
-          });
           break;
         }
 
         case 'render.failed': {
-          job.state = 'failed';
-          job.error = payload.error;
-          job.timings.finishedAt = new Date();
-          await job.save();
+          await RenderJobLifecycle.transition(cleanJobId, 'failed', {
+            error: payload.error,
+          });
 
           await ProjectModel.updateOne({ _id: job.projectId }, { $set: { status: 'error' } });
-
-          await JobEventsPublisher.publishProgress(cleanJobId, {
-            jobId,
-            state: 'failed',
-            code: payload.error?.code,
-            message: payload.error?.message,
-          });
           break;
         }
 
         case 'analysis.completed': {
-          job.state = 'completed';
-          job.percent = 100;
-          job.timings.finishedAt = new Date();
-          await job.save();
+          await RenderJobLifecycle.transition(cleanJobId, 'completed', {
+            percent: 100,
+          });
 
           await ProjectModel.updateOne({ _id: job.projectId }, { $set: { status: 'ready' } });
-
-          await JobEventsPublisher.publishProgress(cleanJobId, {
-            jobId,
-            state: 'done',
-            percent: 100,
-            assetId: payload.assetId,
-            analysisResultId: payload.analysisResultId,
-          });
           break;
         }
 
