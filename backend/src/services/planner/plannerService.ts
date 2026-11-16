@@ -3,6 +3,7 @@ import {
   EditPlanSchema,
   CompactAnalysisSummary,
   validateEditPlan,
+  PlannerExecutionMode,
 } from '@ai-video/shared';
 import { PlannerProvider, AllowedCatalog } from './plannerProvider.interface.js';
 import { GeminiPlannerAdapter } from './geminiAdapter.js';
@@ -13,12 +14,20 @@ import { PatchEngine, PatchOperation } from './patchEngine.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { env } from '../../config/env.js';
 
+export interface PlanOptions {
+  strictLlm?: boolean;
+}
+
 export interface PlanGenerationResult {
   plan: EditPlan;
   tokensIn?: number;
   tokensOut?: number;
   repairAttempts: number;
   patch?: PatchOperation[];
+  executionMode: PlannerExecutionMode;
+  isFallback: boolean;
+  requestedModel: string;
+  fallbackReason?: string;
 }
 
 export class PlannerService {
@@ -42,7 +51,8 @@ export class PlannerService {
     analysis: CompactAnalysisSummary,
     catalog: AllowedCatalog,
     currentPlan?: EditPlan,
-    modelName?: string
+    modelName?: string,
+    options?: PlanOptions
   ): Promise<PlanGenerationResult> {
     const systemInstructions = ContextBuilder.buildSystemInstructions();
     const userContext = ContextBuilder.buildUserContext(
@@ -72,7 +82,13 @@ export class PlannerService {
           analysisSummary: analysis,
           catalog,
           model: modelName,
+          strictLlm: options?.strictLlm,
         });
+
+        const executionMode: PlannerExecutionMode = result.executionMode || 'primary_llm';
+        const isFallback = Boolean(result.isFallback);
+        const requestedModel = result.requestedModel || modelName || 'default';
+        const fallbackReason = result.fallbackReason;
 
         const rawOutput: any = result.structuredOutput;
         let candidatePlan: any;
@@ -89,6 +105,10 @@ export class PlannerService {
             prompt: userPrompt,
             model: result.model,
             createdAt: new Date().toISOString(),
+            executionMode,
+            isFallback,
+            requestedModel,
+            fallbackReason,
           };
           appliedPatch = patchResult.normalizedPatches;
         } else {
@@ -103,6 +123,10 @@ export class PlannerService {
               prompt: userPrompt,
               model: result.model,
               createdAt: new Date().toISOString(),
+              executionMode,
+              isFallback,
+              requestedModel,
+              fallbackReason,
             };
           }
         }
@@ -133,6 +157,10 @@ export class PlannerService {
               tokensOut: result.usage?.outputTokens,
               repairAttempts,
               patch: appliedPatch,
+              executionMode,
+              isFallback,
+              requestedModel,
+              fallbackReason,
             };
           }
 

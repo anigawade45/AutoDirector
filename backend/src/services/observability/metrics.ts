@@ -2,7 +2,7 @@ import { analysisQueue, previewQueue, renderQueue } from '../queue/queueService.
 import { StructuredLogger } from './logger.js';
 
 export interface AlertNotification {
-  alertType: 'QUEUE_BACKLOG' | 'REPEATED_FAILURES' | 'JOB_TIMEOUT';
+  alertType: 'QUEUE_BACKLOG' | 'REPEATED_FAILURES' | 'JOB_TIMEOUT' | 'UPSTREAM_LLM_DEGRADED';
   severity: 'warning' | 'critical';
   message: string;
   timestamp: string;
@@ -19,6 +19,13 @@ export interface MetricSummary {
     render: number;
   };
   recentAlerts: AlertNotification[];
+  planner?: {
+    total: number;
+    primary: number;
+    fallbackModel: number;
+    heuristic: number;
+    consecutiveHeuristic: number;
+  };
 }
 
 export class MetricsService {
@@ -27,8 +34,53 @@ export class MetricsService {
   private static consecutiveFailures = 0;
   private static alertHistory: AlertNotification[] = [];
 
+  // Planner execution observability counters
+  private static plannerTotal = 0;
+  private static plannerPrimary = 0;
+  private static plannerFallbackModel = 0;
+  private static plannerHeuristic = 0;
+  private static consecutiveHeuristicFallbacks = 0;
+
   // Latency samples in milliseconds for p50/p95/p99 calculation
   private static latencySamples: number[] = [];
+
+  /**
+   * Records an AI planner execution, tracking model fallback and heuristic degradation.
+   */
+  static recordPlannerExecution(details: {
+    provider: string;
+    requestedModel: string;
+    actualModel: string;
+    executionMode: 'primary_llm' | 'fallback_llm' | 'heuristic_fallback';
+    isFallback: boolean;
+    fallbackReason?: string;
+  }): void {
+    this.plannerTotal++;
+    if (details.executionMode === 'primary_llm') {
+      this.plannerPrimary++;
+      this.consecutiveHeuristicFallbacks = 0;
+    } else if (details.executionMode === 'fallback_llm') {
+      this.plannerFallbackModel++;
+      this.consecutiveHeuristicFallbacks = 0;
+    } else {
+      this.plannerHeuristic++;
+      this.consecutiveHeuristicFallbacks++;
+      if (this.consecutiveHeuristicFallbacks >= 3) {
+        this.triggerAlert({
+          alertType: 'UPSTREAM_LLM_DEGRADED',
+          severity: 'warning',
+          message: `Detected ${this.consecutiveHeuristicFallbacks} consecutive heuristic fallbacks: Upstream LLM unavailable or failing`,
+          timestamp: new Date().toISOString(),
+          details: {
+            requestedModel: details.requestedModel,
+            actualModel: details.actualModel,
+            fallbackReason: details.fallbackReason,
+            consecutiveCount: this.consecutiveHeuristicFallbacks,
+          },
+        });
+      }
+    }
+  }
 
   /**
    * Records an API request and its response status code.
@@ -111,6 +163,26 @@ export class MetricsService {
   }
 
   /**
+   * Fast synchronous accessor for planner telemetry without probing external queues.
+   */
+  static getPlannerSummary() {
+    return {
+      total: this.plannerTotal,
+      primary: this.plannerPrimary,
+      fallbackModel: this.plannerFallbackModel,
+      heuristic: this.plannerHeuristic,
+      consecutiveHeuristic: this.consecutiveHeuristicFallbacks,
+    };
+  }
+
+  /**
+   * Fast synchronous accessor for recent alert notifications.
+   */
+  static getRecentAlerts(): AlertNotification[] {
+    return [...this.alertHistory];
+  }
+
+  /**
    * Computes p95 latency in milliseconds.
    */
   static calculateP95Latency(): number {
@@ -145,6 +217,13 @@ export class MetricsService {
       totalErrors: this.totalErrors,
       queueDepths,
       recentAlerts: [...this.alertHistory],
+      planner: {
+        total: this.plannerTotal,
+        primary: this.plannerPrimary,
+        fallbackModel: this.plannerFallbackModel,
+        heuristic: this.plannerHeuristic,
+        consecutiveHeuristic: this.consecutiveHeuristicFallbacks,
+      },
     };
   }
 
@@ -155,6 +234,11 @@ export class MetricsService {
     this.totalRequests = 0;
     this.totalErrors = 0;
     this.consecutiveFailures = 0;
+    this.plannerTotal = 0;
+    this.plannerPrimary = 0;
+    this.plannerFallbackModel = 0;
+    this.plannerHeuristic = 0;
+    this.consecutiveHeuristicFallbacks = 0;
     this.latencySamples = [];
     this.alertHistory = [];
   }

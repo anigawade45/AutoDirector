@@ -62,6 +62,11 @@ const envSchema = z.object({
   AI_MODEL: z.string().default('gemini-1.5-flash'),
   GEMINI_API_KEY: z.string().optional().default(''),
   OPENAI_API_KEY: z.string().optional().default(''),
+  ALLOW_HEURISTIC_FALLBACK: z
+    .string()
+    .optional()
+    .default('true')
+    .transform((val) => val === 'true'),
 
   WHISPER_PATH: z.string().optional().default(''),
   WHISPER_MODEL: z.string().optional().default('base'),

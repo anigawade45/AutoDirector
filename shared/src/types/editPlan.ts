@@ -207,10 +207,16 @@ export type EditLayer =
   | MusicLayer
   | AudioLayer;
 
+export type PlannerExecutionMode = 'primary_llm' | 'fallback_llm' | 'heuristic_fallback';
+
 export interface EditPlanMeta {
   prompt: string;
   model: string;
   createdAt: string;
+  executionMode?: PlannerExecutionMode;
+  isFallback?: boolean;
+  requestedModel?: string;
+  fallbackReason?: string;
   assumptions?: Record<string, unknown>;
 }
 

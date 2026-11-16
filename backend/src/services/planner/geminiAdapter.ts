@@ -5,6 +5,9 @@ import {
   PlannerProviderInput,
   PlannerProviderOutput,
 } from './plannerProvider.interface.js';
+import { AppError } from '../../middleware/errorHandler.js';
+import { MetricsService } from '../observability/metrics.js';
+import { PlannerExecutionMode } from '@ai-video/shared';
 
 export class GeminiPlannerAdapter implements PlannerProvider {
   private client: GoogleGenerativeAI | null = null;
@@ -16,11 +19,28 @@ export class GeminiPlannerAdapter implements PlannerProvider {
   }
 
   async generateEditPlan(input: PlannerProviderInput): Promise<PlannerProviderOutput> {
+    const targetModel = input.model || env.AI_MODEL || 'gemini-3.5-flash-lite';
+    const isStrict = input.strictLlm ?? !env.ALLOW_HEURISTIC_FALLBACK;
+
     if (!this.client) {
-      return this.generateHeuristicPlan(input);
+      if (isStrict) {
+        MetricsService.recordPlannerExecution({
+          provider: 'gemini',
+          requestedModel: targetModel,
+          actualModel: 'none',
+          executionMode: 'heuristic_fallback',
+          isFallback: true,
+          fallbackReason: 'Gemini API client not initialized (missing GEMINI_API_KEY)',
+        });
+        throw new AppError(
+          502,
+          'UPSTREAM_LLM_UNAVAILABLE',
+          `Gemini API client not initialized (missing GEMINI_API_KEY). Heuristic fallback prohibited in strict mode.`
+        );
+      }
+      return this.generateHeuristicPlan(input, targetModel, 'Missing GEMINI_API_KEY');
     }
 
-    const targetModel = input.model || env.AI_MODEL || 'gemini-3.5-flash-lite';
     const fallbackCandidates = [
       targetModel,
       'gemini-3.5-flash-lite',
@@ -35,6 +55,9 @@ export class GeminiPlannerAdapter implements PlannerProvider {
 
     let lastError: Error | null = null;
     for (const modelName of fallbackCandidates) {
+      if (isStrict && modelName !== targetModel) {
+        break;
+      }
       try {
         const model = this.client.getGenerativeModel({
           model: modelName,
@@ -70,16 +93,37 @@ export class GeminiPlannerAdapter implements PlannerProvider {
           throw new Error(`Failed to parse Gemini output as JSON: ${text.slice(0, 200)}`);
         }
 
-        if (modelName !== targetModel) {
+        const isModelFallback = modelName !== targetModel;
+        const executionMode: PlannerExecutionMode = isModelFallback
+          ? 'fallback_llm'
+          : 'primary_llm';
+        const fallbackReason = isModelFallback
+          ? `Primary model ${targetModel} unavailable: ${lastError?.message || 'switched to fallback model'}`
+          : undefined;
+
+        if (isModelFallback) {
           console.log(
             `[GeminiPlannerAdapter] ✓ Automatically switched to fallback model: ${modelName} (original ${targetModel} unavailable)`
           );
         }
 
+        MetricsService.recordPlannerExecution({
+          provider: 'gemini',
+          requestedModel: targetModel,
+          actualModel: modelName,
+          executionMode,
+          isFallback: isModelFallback,
+          fallbackReason,
+        });
+
         return {
           provider: 'gemini',
           model: modelName,
           structuredOutput,
+          executionMode,
+          isFallback: isModelFallback,
+          requestedModel: targetModel,
+          fallbackReason,
           usage: {
             inputTokens: response.usageMetadata?.promptTokenCount,
             outputTokens: response.usageMetadata?.candidatesTokenCount,
@@ -93,13 +137,33 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       }
     }
 
+    if (isStrict) {
+      MetricsService.recordPlannerExecution({
+        provider: 'gemini',
+        requestedModel: targetModel,
+        actualModel: 'none',
+        executionMode: 'heuristic_fallback',
+        isFallback: true,
+        fallbackReason: lastError?.message || 'All LLM models failed',
+      });
+      throw new AppError(
+        502,
+        'UPSTREAM_LLM_UNAVAILABLE',
+        `Upstream Gemini call failed (${lastError?.message || 'all candidate models exhausted'}). Heuristic fallback prohibited in strict mode.`
+      );
+    }
+
     console.warn(
       `[GeminiPlannerAdapter] Remote call failed (${lastError?.message}). Falling back to heuristic planner.`
     );
-    return this.generateHeuristicPlan(input);
+    return this.generateHeuristicPlan(input, targetModel, lastError?.message);
   }
 
-  private generateHeuristicPlan(input: PlannerProviderInput): PlannerProviderOutput {
+  private generateHeuristicPlan(
+    input: PlannerProviderInput,
+    targetModel?: string,
+    fallbackReason?: string
+  ): PlannerProviderOutput {
     let contextData: any = {};
     try {
       contextData = JSON.parse(input.userPrompt);
@@ -114,6 +178,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     const targetVersion = ctx.targetVersion || 1;
     const currentPlan = ctx.currentPlan;
     const totalDurationSec = (ctx.videoMeta?.durationMs || 60000) / 1000;
+
+    const resolvedTargetModel =
+      targetModel || input.model || env.AI_MODEL || 'gemini-3.5-flash-lite';
+    const reason =
+      fallbackReason || (this.client ? 'Upstream LLM unavailable' : 'No Gemini API key configured');
 
     // Check if this is a follow-up prompt on an existing plan and not a reset request
     const isReset =
@@ -373,6 +442,10 @@ export class GeminiPlannerAdapter implements PlannerProvider {
           provider: 'gemini',
           model: 'rule-engine-v1',
           structuredOutput: { patch: patches },
+          executionMode: 'heuristic_fallback',
+          isFallback: true,
+          requestedModel: resolvedTargetModel,
+          fallbackReason: reason,
           usage: { inputTokens: 40, outputTokens: 80 },
         };
       }
@@ -598,6 +671,15 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       },
     });
 
+    MetricsService.recordPlannerExecution({
+      provider: 'gemini',
+      requestedModel: resolvedTargetModel,
+      actualModel: 'rule-engine-v1',
+      executionMode: 'heuristic_fallback',
+      isFallback: true,
+      fallbackReason: reason,
+    });
+
     const structuredOutput: any = {
       schemaVersion: '1.0',
       projectId,
@@ -614,6 +696,10 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         prompt: contextData.instruction || 'Edit video',
         model: 'heuristic-rule-engine',
         createdAt: new Date().toISOString(),
+        executionMode: 'heuristic_fallback',
+        isFallback: true,
+        requestedModel: resolvedTargetModel,
+        fallbackReason: reason,
       },
     };
 
@@ -621,6 +707,10 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       provider: 'gemini',
       model: 'rule-engine-v1',
       structuredOutput,
+      executionMode: 'heuristic_fallback',
+      isFallback: true,
+      requestedModel: resolvedTargetModel,
+      fallbackReason: reason,
       usage: {
         inputTokens: 50,
         outputTokens: 150,

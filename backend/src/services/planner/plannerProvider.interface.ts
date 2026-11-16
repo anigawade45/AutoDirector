@@ -1,4 +1,4 @@
-import { EditPlan, CompactAnalysisSummary } from '@ai-video/shared';
+import { EditPlan, CompactAnalysisSummary, PlannerExecutionMode } from '@ai-video/shared';
 
 export interface AllowedCatalog {
   templates: Array<{ id: string; name: string }>;
@@ -17,12 +17,17 @@ export interface PlannerProviderInput {
   maxOutputTokens?: number;
   timeoutMs?: number;
   model?: string;
+  strictLlm?: boolean;
 }
 
 export interface PlannerProviderOutput {
   provider: 'gemini' | 'openai';
   model: string;
   structuredOutput: unknown;
+  executionMode?: PlannerExecutionMode;
+  isFallback?: boolean;
+  requestedModel?: string;
+  fallbackReason?: string;
   usage?: {
     inputTokens?: number;
     outputTokens?: number;

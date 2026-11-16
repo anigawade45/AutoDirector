@@ -184,11 +184,18 @@ export const ChatPanel: React.FC = () => {
       // 2. Update store with new plan version (single source of truth)
       setPlan(result.plan);
 
+      const executionMode =
+        result.executionMode || result.plan.meta?.executionMode || 'primary_llm';
+      const isFallback = Boolean(result.fallback?.isFallback || result.plan.meta?.isFallback);
+      const fallbackReason = result.fallback?.reason || result.plan.meta?.fallbackReason;
       const usedModel = result.plan.meta?.model;
-      const modelSwitched = Boolean(usedModel && usedModel !== selectedAiModel);
+      const isHeuristicFallback = executionMode === 'heuristic_fallback';
+      const modelSwitched = Boolean(
+        usedModel && usedModel !== selectedAiModel && !isHeuristicFallback
+      );
 
-      // Automatically update the UI model selector to match the model that succeeded
-      if (modelSwitched && usedModel) {
+      // Automatically update the UI model selector to match the model that succeeded (only if an actual LLM succeeded)
+      if (modelSwitched && usedModel && !isHeuristicFallback) {
         const matchedModel = AVAILABLE_GEMINI_MODELS.find((m) => m.id === usedModel);
         if (matchedModel) {
           setSelectedAiModel(usedModel);
@@ -200,11 +207,16 @@ export const ChatPanel: React.FC = () => {
       const modelDisplayName = activeModelObj?.name || usedModel || 'AI Planner';
       const prevDisplayName = prevModelObj?.name || selectedAiModel;
 
-      const assistantMsg =
-        (result as any).rationale ||
-        (modelSwitched
-          ? `Created EditPlan v${result.version} using ${modelDisplayName} (auto-switched from ${prevDisplayName} due to high Google API traffic). Configured ${result.plan.layers.length} active layers.`
-          : `Created EditPlan v${result.version}. Configured ${result.plan.layers.length} active layers.`);
+      let assistantMsg = (result as any).rationale;
+      if (!assistantMsg) {
+        if (isHeuristicFallback) {
+          assistantMsg = `⚠️ Notice: Upstream AI was unavailable (${fallbackReason || 'connection error'}). Applied a deterministic rule-based edit plan v${result.version}. Quota was not deducted. You can retry with an alternate model.`;
+        } else if (modelSwitched) {
+          assistantMsg = `Created EditPlan v${result.version} using ${modelDisplayName} (auto-switched from ${prevDisplayName} due to high Google API traffic). Configured ${result.plan.layers.length} active layers.`;
+        } else {
+          assistantMsg = `Created EditPlan v${result.version}. Configured ${result.plan.layers.length} active layers.`;
+        }
+      }
 
       addChatMessage({
         role: 'assistant',
@@ -212,12 +224,22 @@ export const ChatPanel: React.FC = () => {
         planVersion: result.version,
       });
 
-      toast.success(
-        `Applied Plan v${result.version}: ${result.plan.layers?.length || 0} active layers`,
-        'Director Cut Applied'
-      );
-      if (modelSwitched) {
-        toast.info(`Switched to ${modelDisplayName} for optimal response speed`, 'Model Adjusted');
+      if (isHeuristicFallback) {
+        toast.warning(
+          `AI service unavailable (${fallbackReason || 'Upstream error'}). Rule-based fallback edit applied (Quota waived).`,
+          'Heuristic Fallback Used'
+        );
+      } else {
+        toast.success(
+          `Applied Plan v${result.version}: ${result.plan.layers?.length || 0} active layers`,
+          'Director Cut Applied'
+        );
+        if (modelSwitched) {
+          toast.info(
+            `Switched to ${modelDisplayName} for optimal response speed`,
+            'Model Adjusted'
+          );
+        }
       }
 
       // 3. If preview job enqueued, listen to SSE progress
@@ -395,6 +417,12 @@ export const ChatPanel: React.FC = () => {
                 </div>
                 <span>{m.timestamp}</span>
               </div>
+
+              {m.text.includes('⚠️ Notice:') && (
+                <div className="mb-2 px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold flex items-center space-x-1">
+                  <span>⚠️ AI Model Unavailable — Rule-Based Fallback Applied</span>
+                </div>
+              )}
 
               <p className="whitespace-pre-wrap">{m.text}</p>
 

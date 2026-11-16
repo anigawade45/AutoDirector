@@ -24,7 +24,7 @@ export class PromptsController {
   static async submitPrompt(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id: projectId } = req.params;
-      const { prompt, baseVersion, requestPreview = true, model } = req.body;
+      const { prompt, baseVersion, requestPreview = true, model, strictLlm } = req.body;
 
       if (!prompt) {
         throw new AppError(400, 'BAD_REQUEST', 'Prompt string is required');
@@ -141,7 +141,17 @@ export class PromptsController {
 
       // Call AI planner
       const nextVersion = project.headVersion + 1;
-      const { plan, tokensIn, tokensOut, repairAttempts, patch } = await plannerService.plan(
+      const {
+        plan,
+        tokensIn,
+        tokensOut,
+        repairAttempts,
+        patch,
+        executionMode,
+        isFallback,
+        requestedModel,
+        fallbackReason,
+      } = await plannerService.plan(
         prompt,
         projectId,
         asset.publicId,
@@ -149,7 +159,8 @@ export class PromptsController {
         compactSummary,
         allowedCatalog,
         currentPlan,
-        model
+        model,
+        { strictLlm: Boolean(strictLlm) }
       );
 
       // Persist immutable EditPlan (with duplicate-key resilience for crashed/replayed transactions)
@@ -165,9 +176,15 @@ export class PromptsController {
           model: plan.meta.model,
           tokensIn,
           tokensOut,
+          assumptions: {
+            executionMode,
+            isFallback,
+            requestedModel,
+            fallbackReason,
+          },
           validation: {
             repairAttempts,
-            warnings: [],
+            warnings: isFallback && fallbackReason ? [fallbackReason] : [],
           },
         });
       } catch (err: any) {
@@ -183,9 +200,15 @@ export class PromptsController {
                 model: plan.meta.model,
                 tokensIn,
                 tokensOut,
+                assumptions: {
+                  executionMode,
+                  isFallback,
+                  requestedModel,
+                  fallbackReason,
+                },
                 validation: {
                   repairAttempts,
-                  warnings: [],
+                  warnings: isFallback && fallbackReason ? [fallbackReason] : [],
                 },
               },
             },
@@ -196,10 +219,17 @@ export class PromptsController {
         }
       }
 
-      // Record assistant chat message
-      const assistantText =
-        (plan.meta as any)?.rationale ||
-        `Created EditPlan v${nextVersion}. Configured ${plan.layers?.length || 0} active layers.`;
+      // Record assistant chat message with explicit fallback notices
+      let assistantText = (plan.meta as any)?.rationale;
+      if (!assistantText) {
+        if (executionMode === 'heuristic_fallback') {
+          assistantText = `⚠️ Notice: Upstream AI was unavailable (${fallbackReason || 'connection error'}). Applied a deterministic rule-based edit plan v${nextVersion}. Quota was not deducted. You can retry with an alternate model.`;
+        } else if (isFallback) {
+          assistantText = `Created EditPlan v${nextVersion} using fallback model ${plan.meta.model} (requested ${requestedModel}). Configured ${plan.layers?.length || 0} active layers.`;
+        } else {
+          assistantText = `Created EditPlan v${nextVersion}. Configured ${plan.layers?.length || 0} active layers.`;
+        }
+      }
 
       await ChatMessageModel.create({
         projectId: project._id,
@@ -315,8 +345,14 @@ export class PromptsController {
         previewJobId = `job_${previewJob._id.toString()}`;
       }
 
-      // Record prompt usage for tier quota tracking
-      await QuotaService.incrementPromptQuota(rawUserId);
+      // Record prompt usage for tier quota tracking ONLY if not a heuristic fallback
+      if (executionMode !== 'heuristic_fallback') {
+        await QuotaService.incrementPromptQuota(rawUserId);
+      } else {
+        console.info(
+          `[QuotaService] Waived prompt quota for user ${rawUserId} on project ${project.publicId} due to heuristic fallback`
+        );
+      }
 
       res.status(200).json({
         success: true,
@@ -325,6 +361,13 @@ export class PromptsController {
           version: nextVersion,
           parentVersion: project.headVersion > 1 ? project.headVersion - 1 : null,
           state: 'planned',
+          executionMode,
+          fallback: {
+            isFallback,
+            requestedModel,
+            usedModel: plan.meta.model,
+            reason: fallbackReason || null,
+          },
           plan,
           previewJobId,
         },

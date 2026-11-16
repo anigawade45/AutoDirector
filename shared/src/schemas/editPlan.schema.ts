@@ -243,6 +243,10 @@ export const EditPlanMetaSchema = z.object({
   prompt: z.string(),
   model: z.string(),
   createdAt: z.string(),
+  executionMode: z.enum(['primary_llm', 'fallback_llm', 'heuristic_fallback']).optional(),
+  isFallback: z.boolean().optional(),
+  requestedModel: z.string().optional(),
+  fallbackReason: z.string().optional(),
   assumptions: z.record(z.unknown()).optional(),
 });
 
