@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { EventEmitter } from 'events';
 import { createApp } from '../app.js';
 import { TokenService } from '../services/auth/tokenService.js';
 import { verifyWorkerSignature, resetWorkerAuthReplayCache } from '../middleware/workerAuth.js';
@@ -11,11 +12,85 @@ import {
   generalApiRateLimiter,
   resetRateLimiterCache,
 } from '../middleware/rateLimiter.js';
-import { env } from '../config/env.js';
+import { env, validateCorsOrigin, envSchema } from '../config/env.js';
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 
 const rootDir = path.resolve(__dirname, '../../..');
+
+function dispatchRequest(
+  app: any,
+  options: {
+    method: string;
+    url: string;
+    headers?: Record<string, string>;
+  }
+): Promise<{ statusCode: number; headers: Record<string, any>; body: string }> {
+  return new Promise((resolve) => {
+    const parsed = new URL(options.url, 'http://127.0.0.1');
+
+    const req = new EventEmitter() as any;
+    req.method = options.method;
+    req.url = parsed.pathname + parsed.search;
+    req.originalUrl = parsed.pathname + parsed.search;
+    req.path = parsed.pathname;
+    req.query = Object.fromEntries(parsed.searchParams.entries());
+    req.body = {};
+    req.headers = {};
+    if (options.headers) {
+      for (const [k, v] of Object.entries(options.headers)) {
+        req.headers[k.toLowerCase()] = v;
+      }
+    }
+    req.socket = { remoteAddress: '127.0.0.1' };
+    req.connection = req.socket;
+    req.ip = '127.0.0.1';
+
+    const res = new EventEmitter() as any;
+    res.statusCode = 200;
+    const responseHeaders: Record<string, any> = {};
+    let responseData = '';
+
+    res.setHeader = (name: string, value: any) => {
+      responseHeaders[name.toLowerCase()] = value;
+      return res;
+    };
+    res.getHeader = (name: string) => responseHeaders[name.toLowerCase()];
+    res.removeHeader = (name: string) => {
+      delete responseHeaders[name.toLowerCase()];
+    };
+    res.status = (code: number) => {
+      res.statusCode = code;
+      return res;
+    };
+    res.sendStatus = (code: number) => {
+      res.statusCode = code;
+      resolve({ statusCode: code, headers: responseHeaders, body: '' });
+      return res;
+    };
+    res.json = (data: any) => {
+      responseData = JSON.stringify(data);
+      resolve({ statusCode: res.statusCode, headers: responseHeaders, body: responseData });
+      return res;
+    };
+    res.send = (data: any) => {
+      responseData = typeof data === 'string' ? data : JSON.stringify(data);
+      resolve({ statusCode: res.statusCode, headers: responseHeaders, body: responseData });
+      return res;
+    };
+    res.end = (chunk?: any) => {
+      if (chunk) {
+        responseData += typeof chunk === 'string' ? chunk : chunk.toString();
+      }
+      resolve({ statusCode: res.statusCode, headers: responseHeaders, body: responseData });
+      return res;
+    };
+
+    app.handle(req, res, () => {
+      resolve({ statusCode: res.statusCode, headers: responseHeaders, body: responseData });
+    });
+  });
+}
 
 describe('Security & Configuration Hardening Suite (Section 5)', () => {
   beforeEach(() => {
@@ -24,7 +99,7 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
   });
 
   // =========================================================================
-  // 1. CORS Origin Configuration & Credential Safety
+  // 1. CORS Origin Configuration & Credential Safety (BUG-009)
   // =========================================================================
   describe('1. CORS Origin Configuration & Credential Safety', () => {
     it('verifies that render.yaml sets an explicit frontend origin instead of wildcard *', () => {
@@ -33,30 +108,151 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
 
       const renderContent = fs.readFileSync(renderPath, 'utf8');
       expect(renderContent).not.toMatch(/CORS_ORIGIN\s*\n\s*value:\s*"\*"/);
+      expect(renderContent).not.toMatch(/CORS_ORIGIN\s*\n\s*value:\s*'\*'/);
       expect(renderContent).toContain('value: https://ai-video-frontend-57bk.onrender.com');
     });
 
-    it('creates an app with hardened CORS policy and permits configured origins', async () => {
-      const app = createApp();
+    it('validates CORS_ORIGIN at startup via validateCorsOrigin, rejecting wildcards and malformed origins in production', () => {
+      // Rejects wildcard in production
+      const wild = validateCorsOrigin('*', 'production');
+      expect(wild.valid).toBe(false);
+      expect(wild.reason).toContain('Wildcard CORS_ORIGIN ("*") is prohibited in production');
 
-      // Test CORS preflight options or route handler
-      const mockReq = {
+      // Rejects comma-separated lists containing wildcard in production
+      const mixed = validateCorsOrigin('https://studio.ai, *', 'production');
+      expect(mixed.valid).toBe(false);
+      expect(mixed.reason).toContain('Wildcard CORS_ORIGIN ("*") is prohibited in production');
+
+      // Rejects empty / whitespace in production
+      const empty = validateCorsOrigin('   ', 'production');
+      expect(empty.valid).toBe(false);
+      expect(empty.reason).toContain('CORS_ORIGIN is required in production');
+
+      // Rejects origin missing protocol in production
+      const noProto = validateCorsOrigin('studio.ai', 'production');
+      expect(noProto.valid).toBe(false);
+      expect(noProto.reason).toContain('must start with http:// or https://');
+
+      // Accepts valid single HTTPS origin in production
+      const validSingle = validateCorsOrigin(
+        'https://ai-video-frontend-57bk.onrender.com',
+        'production'
+      );
+      expect(validSingle.valid).toBe(true);
+
+      // Accepts valid comma-separated HTTPS origins in production
+      const validMulti = validateCorsOrigin(
+        'https://ai-video-frontend-57bk.onrender.com, https://studio.ai, https://app.autodirector.com',
+        'production'
+      );
+      expect(validMulti.valid).toBe(true);
+
+      // Allows wildcard or dev origins in non-production environments
+      const devWild = validateCorsOrigin('*', 'development');
+      expect(devWild.valid).toBe(true);
+      const testWild = validateCorsOrigin('*', 'test');
+      expect(testWild.valid).toBe(true);
+    });
+
+    it('enforces schema-level startup rejection of wildcard CORS_ORIGIN in production', () => {
+      const baseValidEnv = {
+        PORT: '4000',
+        NODE_ENV: 'production',
+        API_BASE_URL: 'https://api.autodirector.com/api',
+        CORS_ORIGIN: '*',
+        JWT_SECRET: 'super-secure-production-jwt-secret-key-12345',
+        INTERNAL_WORKER_SECRET: 'super-secure-worker-secret-key-12345',
+        MONGODB_URI: 'mongodb://localhost:27017/prod',
+        AWS_ACCESS_KEY_ID: 'AKIA_PROD_12345',
+        AWS_SECRET_ACCESS_KEY: 'secret_key_prod_12345',
+        S3_BUCKET_NAME: 'prod-bucket',
+      };
+
+      const parseResult = envSchema.safeParse(baseValidEnv);
+      expect(parseResult.success).toBe(false);
+      if (!parseResult.success) {
+        const corsIssue = parseResult.error.issues.find((i) => i.path.includes('CORS_ORIGIN'));
+        expect(corsIssue).toBeDefined();
+        expect(corsIssue?.message).toContain(
+          'Wildcard CORS_ORIGIN ("*") is prohibited in production'
+        );
+      }
+
+      // Valid production origin passes schema validation
+      const validParseResult = envSchema.safeParse({
+        ...baseValidEnv,
+        CORS_ORIGIN: 'https://ai-video-frontend-57bk.onrender.com, https://studio.ai',
+      });
+      expect(validParseResult.success).toBe(true);
+    });
+
+    it('executes CORS integration dispatch allowing configured origins with credentials and rejecting unauthorized origins', async () => {
+      const allowedPrimary = 'https://ai-video-frontend-57bk.onrender.com';
+      const allowedSecondary = 'https://studio.ai';
+      const unauthorizedOrigin = 'https://malicious-attacker.com';
+
+      const app = createApp({ corsOrigins: [allowedPrimary, allowedSecondary] });
+
+      // 1. Primary configured origin receives matching Access-Control-Allow-Origin and credentials
+      const resPrimary = await dispatchRequest(app, {
         method: 'GET',
+        url: '/health/live',
+        headers: { origin: allowedPrimary },
+      });
+      expect(resPrimary.statusCode).toBe(200);
+      expect(resPrimary.headers['access-control-allow-origin']).toBe(allowedPrimary);
+      expect(resPrimary.headers['access-control-allow-credentials']).toBe('true');
+
+      // 2. Secondary comma-separated configured origin receives matching Allow-Origin
+      const resSecondary = await dispatchRequest(app, {
+        method: 'GET',
+        url: '/health/live',
+        headers: { origin: allowedSecondary },
+      });
+      expect(resSecondary.statusCode).toBe(200);
+      expect(resSecondary.headers['access-control-allow-origin']).toBe(allowedSecondary);
+      expect(resSecondary.headers['access-control-allow-credentials']).toBe('true');
+
+      // 3. Unauthorized origin does not receive Access-Control-Allow-Origin
+      const resUnauthorized = await dispatchRequest(app, {
+        method: 'GET',
+        url: '/health/live',
+        headers: { origin: unauthorizedOrigin },
+      });
+      expect(resUnauthorized.headers['access-control-allow-origin']).toBeUndefined();
+
+      // 4. Preflight OPTIONS request from configured origin returns 204 with methods and credentials
+      const resPreflight = await dispatchRequest(app, {
+        method: 'OPTIONS',
+        url: '/api/auth/me',
         headers: {
-          origin: 'http://localhost:5173',
+          origin: allowedPrimary,
+          'access-control-request-method': 'GET',
+          'access-control-request-headers': 'authorization,content-type',
         },
-      } as unknown as Request;
+      });
+      expect(resPreflight.statusCode).toBe(204);
+      expect(resPreflight.headers['access-control-allow-origin']).toBe(allowedPrimary);
+      expect(resPreflight.headers['access-control-allow-credentials']).toBe('true');
+      expect(resPreflight.headers['access-control-allow-methods']).toContain('GET');
 
-      let setHeaders: Record<string, string> = {};
-      const mockRes = {
-        setHeader: vi.fn((k: string, v: string) => {
-          setHeaders[k.toLowerCase()] = v;
-        }),
-        getHeader: vi.fn((k: string) => setHeaders[k.toLowerCase()]),
-      } as unknown as Response;
+      // 5. Preflight OPTIONS from unauthorized origin is rejected
+      const resPreflightUnauthorized = await dispatchRequest(app, {
+        method: 'OPTIONS',
+        url: '/api/auth/me',
+        headers: {
+          origin: unauthorizedOrigin,
+          'access-control-request-method': 'GET',
+        },
+      });
+      expect(resPreflightUnauthorized.headers['access-control-allow-origin']).toBeUndefined();
 
-      // Verify that the CORS middleware is registered
-      expect(app).toBeDefined();
+      // 6. Non-browser request without Origin header (e.g. server-to-server, curl) is accepted
+      const resNonBrowser = await dispatchRequest(app, {
+        method: 'GET',
+        url: '/health/live',
+      });
+      expect(resNonBrowser.statusCode).toBe(200);
     });
   });
 

@@ -37,7 +37,7 @@ export async function getHealthStatus() {
   };
 }
 
-export function createApp() {
+export function createApp(options?: { corsOrigins?: string[] }) {
   const app = express();
 
   // Trust first proxy hop (Nginx reverse proxy, Render / Cloudflare ingress)
@@ -47,12 +47,14 @@ export function createApp() {
   // OWASP Security Headers (Clickjacking, MIME sniffing, HSTS, CSP, and tech stack hiding)
   app.use(securityHeadersMiddleware);
 
-  // Resolve allowed origins for CORS (supports comma-separated list and dev fallbacks)
-  const configuredOrigins = env.CORS_ORIGIN
-    ? env.CORS_ORIGIN.split(',')
-        .map((o) => o.trim())
-        .filter(Boolean)
-    : [];
+  // Resolve allowed origins for CORS (supports comma-separated list, injected test options, and dev fallbacks)
+  const configuredOrigins =
+    options?.corsOrigins ??
+    (env.CORS_ORIGIN
+      ? env.CORS_ORIGIN.split(',')
+          .map((o) => o.trim())
+          .filter(Boolean)
+      : []);
 
   const isProduction = env.NODE_ENV === 'production';
   const defaultDevOrigins = [
