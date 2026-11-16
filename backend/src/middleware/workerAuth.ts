@@ -4,9 +4,25 @@ import { env } from '../config/env.js';
 import { AppError } from './errorHandler.js';
 import { redisConnection } from '../config/redis.js';
 
-// Local in-memory fallback for offline test environments or temporary Redis disconnects
-const inMemoryFallbackSet = new Set<string>();
+// Local in-memory sliding TTL map for test environments or temporary Redis disconnects
+const inMemoryFallbackMap = new Map<string, number>();
 const REPLAY_TTL_SECONDS = 600; // 10 minutes (clock skew is max 5 minutes)
+
+function cleanExpiredInMemoryEntries(): void {
+  const now = Date.now();
+  for (const [id, expiresAt] of inMemoryFallbackMap.entries()) {
+    if (expiresAt <= now) {
+      inMemoryFallbackMap.delete(id);
+    }
+  }
+}
+
+/**
+ * Resets local in-memory replay cache (primarily for automated test suite isolation).
+ */
+export function resetWorkerAuthReplayCache(): void {
+  inMemoryFallbackMap.clear();
+}
 
 /**
  * Atomically marks an event as processed in Redis with a 10-minute TTL.
@@ -14,12 +30,15 @@ const REPLAY_TTL_SECONDS = 600; // 10 minutes (clock skew is max 5 minutes)
  */
 async function checkAndMarkProcessed(eventId: string): Promise<boolean> {
   const redisKey = `worker:event:${eventId}`;
+  const isProd = env.NODE_ENV === 'production';
 
   try {
     const isMock =
       typeof (redisConnection as any)?.set?._isMockFunction === 'boolean' ||
       typeof (redisConnection as any)?.set?.mock === 'object';
-    const isReady = redisConnection && redisConnection.status === 'ready';
+    const isReady =
+      redisConnection &&
+      (redisConnection.status === 'ready' || redisConnection.status === 'connect');
 
     if (redisConnection && (isReady || isMock)) {
       // SET key '1' EX 600 NX returns 'OK' if the key was set (new event),
@@ -32,18 +51,35 @@ async function checkAndMarkProcessed(eventId: string): Promise<boolean> {
       ]);
       return result === null;
     }
+
+    if (isProd) {
+      console.error(
+        `[WorkerAuth] CRITICAL: Redis unavailable in production (status: ${redisConnection?.status || 'uninitialized'}). Distributed replay protection degraded.`
+      );
+    }
   } catch (err: any) {
-    console.warn('[WorkerAuth] Redis replay check error, falling back to local set:', err?.message);
+    if (isProd) {
+      console.error(
+        `[WorkerAuth] CRITICAL: Redis error during replay check in production: ${err?.message}`
+      );
+    } else {
+      console.warn(
+        '[WorkerAuth] Redis replay check error, falling back to local cache:',
+        err?.message
+      );
+    }
   }
 
-  // Graceful fallback to local in-memory set when Redis is not ready/mocked
-  if (inMemoryFallbackSet.has(eventId)) {
-    return true;
+  // Graceful fallback to local sliding TTL Map when Redis is not ready/mocked
+  cleanExpiredInMemoryEntries();
+  const now = Date.now();
+  const expiresAt = inMemoryFallbackMap.get(eventId);
+
+  if (expiresAt && expiresAt > now) {
+    return true; // Replay detected
   }
-  inMemoryFallbackSet.add(eventId);
-  if (inMemoryFallbackSet.size > 10000) {
-    inMemoryFallbackSet.clear();
-  }
+
+  inMemoryFallbackMap.set(eventId, now + REPLAY_TTL_SECONDS * 1000);
   return false;
 }
 

@@ -16,17 +16,17 @@ services:
       - key: API_BASE_URL
         value: https://ai-video-api-eaui.onrender.com/api
       - key: ENABLE_IN_PROCESS_WORKERS
-        value: "true"
+        value: 'true'
       - key: CORS_ORIGIN
-        value: "*"
+        value: https://ai-video-frontend-57bk.onrender.com
       - key: AWS_REGION
         value: ap-southeast-2
       - key: S3_BUCKET_NAME
         value: ai-video-studio-prod-aniket
       - key: S3_ENDPOINT
-        value: ""
+        value: ''
       - key: S3_FORCE_PATH_STYLE
-        value: "false"
+        value: 'false'
       - key: AI_PROVIDER
         value: gemini
       - key: AI_MODEL
@@ -52,7 +52,7 @@ services:
       - key: REDIS_PASSWORD
         sync: false
       - key: REDIS_TLS
-        value: "true"
+        value: 'true'
       - key: AWS_ACCESS_KEY_ID
         sync: false
       - key: AWS_SECRET_ACCESS_KEY

@@ -38,18 +38,76 @@ export async function getHealthStatus() {
 export function createApp() {
   const app = express();
 
-  // Support comma-separated origins or wildcard
-  const allowedOrigins =
-    !env.CORS_ORIGIN || env.CORS_ORIGIN === '*'
-      ? '*'
-      : env.CORS_ORIGIN.split(',')
-          .map((o) => o.trim())
-          .filter(Boolean);
+  // Resolve allowed origins for CORS (supports comma-separated list and dev fallbacks)
+  const configuredOrigins = env.CORS_ORIGIN
+    ? env.CORS_ORIGIN.split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
+    : [];
+
+  const isProduction = env.NODE_ENV === 'production';
+  const defaultDevOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000',
+  ];
+
+  const allowedOriginsSet = new Set<string>([
+    ...configuredOrigins,
+    ...(!isProduction ? defaultDevOrigins : []),
+  ]);
+
+  const isWildcardConfigured = configuredOrigins.includes('*');
 
   app.use(
     cors({
-      origin: allowedOrigins,
-      credentials: true,
+      origin: (requestOrigin, callback) => {
+        // 1. Allow non-browser requests (e.g. mobile apps, curl, server-to-server, health probes)
+        if (!requestOrigin) {
+          return callback(null, true);
+        }
+
+        // 2. Exact match against configured and default development origins
+        if (allowedOriginsSet.has(requestOrigin)) {
+          return callback(null, true);
+        }
+
+        // 3. Handle wildcard origin
+        if (isWildcardConfigured) {
+          if (isProduction) {
+            console.warn(
+              `[CORS] Warning: Wildcard CORS origin is configured in production. Rejecting credentialed origin: ${requestOrigin}`
+            );
+            return callback(
+              new Error(`Origin ${requestOrigin} not permitted by production CORS policy`)
+            );
+          }
+          // In development, reflect request origin for testing
+          return callback(null, true);
+        }
+
+        // 4. In development, allow localhost/127.0.0.1 on any port
+        if (!isProduction && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin)) {
+          return callback(null, true);
+        }
+
+        return callback(new Error(`Origin ${requestOrigin} not permitted by CORS policy`));
+      },
+      credentials: !isWildcardConfigured || !isProduction,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'X-Request-Id',
+        'X-Worker-Id',
+        'X-Event-Id',
+        'X-Event-Timestamp',
+        'X-Event-Signature',
+        'X-Internal-Secret',
+        'X-Worker-Secret',
+      ],
+      exposedHeaders: ['X-Request-Id'],
     })
   );
 

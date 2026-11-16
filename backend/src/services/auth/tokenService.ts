@@ -19,7 +19,24 @@ export interface SseTicketPayload {
 
 export class TokenService {
   private static getSecret(): string {
-    return env.JWT_SECRET || 'ai-video-studio-jwt-secret-key-2026';
+    const secret = env.JWT_SECRET;
+    if (!secret || typeof secret !== 'string' || secret.trim() === '') {
+      throw new Error(
+        'JWT_SECRET configuration is missing or empty. Refusing to sign or verify tokens with insecure fallback secret.'
+      );
+    }
+    if (
+      env.NODE_ENV === 'production' &&
+      (secret.length < 32 ||
+        secret.includes('secret-key') ||
+        secret.includes('change_me') ||
+        secret.includes('__INJECT_'))
+    ) {
+      throw new Error(
+        'JWT_SECRET is insecure for production. Must be at least 32 characters and cannot use default placeholders.'
+      );
+    }
+    return secret;
   }
 
   private static base64UrlEncode(str: string): string {
