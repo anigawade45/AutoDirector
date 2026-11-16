@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { UserProfile, RegisterRequest, LoginRequest } from '@ai-video/shared';
 import { api } from '../api/client';
 import { toast } from './toastStore';
+import { AuthStorage } from '../utils/authStorage';
 
 interface AuthState {
   user: UserProfile | null;
@@ -19,27 +20,18 @@ interface AuthState {
   setUser: (user: UserProfile | null) => void;
 }
 
-const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'auth_user';
-
 export const useAuthStore = create<AuthState>((set) => ({
-  user:
-    typeof window !== 'undefined' && localStorage.getItem(USER_KEY)
-      ? JSON.parse(localStorage.getItem(USER_KEY)!)
-      : null,
-  token: typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null,
-  isAuthenticated: typeof window !== 'undefined' ? !!localStorage.getItem(TOKEN_KEY) : false,
+  // Safe hydration: AuthStorage validates expiry, catches malformed JSON, and prevents app crash
+  user: AuthStorage.getUser(),
+  token: AuthStorage.getToken(),
+  isAuthenticated: AuthStorage.hasToken(),
   isLoading: false,
   error: null,
 
   clearError: () => set({ error: null }),
 
   setUser: (user) => {
-    if (user && typeof window !== 'undefined') {
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-    } else if (typeof window !== 'undefined') {
-      localStorage.removeItem(USER_KEY);
-    }
+    AuthStorage.setUser(user);
     set({ user, isAuthenticated: !!user });
   },
 
@@ -47,10 +39,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.login(credentials);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(TOKEN_KEY, response.token);
-        localStorage.setItem(USER_KEY, JSON.stringify(response.user));
-      }
+      AuthStorage.setSession(response.token, response.user);
       set({
         user: response.user,
         token: response.token,
@@ -75,10 +64,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await api.register(data);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(TOKEN_KEY, response.token);
-        localStorage.setItem(USER_KEY, JSON.stringify(response.user));
-      }
+      AuthStorage.setSession(response.token, response.user);
       set({
         user: response.user,
         token: response.token,
@@ -103,10 +89,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    }
+    AuthStorage.clear();
     set({
       user: null,
       token: null,
@@ -117,7 +100,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   checkSession: async () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+    const token = AuthStorage.getToken();
     if (!token) {
       set({ isAuthenticated: false, user: null, token: null });
       return;
@@ -126,9 +109,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const response = await api.getMe();
       if (response && response.user) {
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(USER_KEY, JSON.stringify(response.user));
-        }
+        AuthStorage.setUser(response.user);
         set({
           user: response.user,
           token,
@@ -138,10 +119,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (err: any) {
       // If 401 Unauthorized, token is expired or invalid
       if (err?.status === 401) {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(USER_KEY);
-        }
+        AuthStorage.clear();
         set({ user: null, token: null, isAuthenticated: false });
       }
     }

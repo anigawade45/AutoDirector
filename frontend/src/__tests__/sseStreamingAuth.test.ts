@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { api } from '../api/client';
+import { AuthStorage } from '../utils/authStorage';
 
 describe('Frontend SSE Streaming Authentication Suite', () => {
   const mockStorage = new Map<string, string>();
@@ -7,6 +8,7 @@ describe('Frontend SSE Streaming Authentication Suite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockStorage.clear();
+    AuthStorage.clear();
 
     const localStorageMock = {
       getItem: (k: string) => mockStorage.get(k) || null,
@@ -23,20 +25,35 @@ describe('Frontend SSE Streaming Authentication Suite', () => {
 
     (global as any).window = {
       localStorage: localStorageMock,
+      sessionStorage: localStorageMock,
       location: { hostname: 'localhost' },
     };
     (global as any).localStorage = localStorageMock;
+    (global as any).sessionStorage = localStorageMock;
   });
 
   afterEach(() => {
+    AuthStorage.clear();
     delete (global as any).window;
     delete (global as any).localStorage;
+    delete (global as any).sessionStorage;
     vi.restoreAllMocks();
   });
 
   it('streams job events using fetch with Authorization: Bearer header and zero query parameters', async () => {
-    const fakeToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.header-token-val';
-    window.localStorage.setItem('auth_token', fakeToken);
+    const futureSec = Math.floor(Date.now() / 1000) + 7200;
+    const payload = Buffer.from(
+      JSON.stringify({ sub: 'user_stream_test', exp: futureSec })
+    ).toString('base64url');
+    const validToken = `eyJhbGciOiJIUzI1NiJ9.${payload}.validStreamSig`;
+
+    AuthStorage.setSession(validToken, {
+      id: 'user_stream_test',
+      email: 'stream@studio.ai',
+      name: 'Stream Tester',
+      tier: 'pro',
+      createdAt: '2026-11-16T12:00:00Z',
+    });
 
     // Mock readable stream chunks
     const ssePayload =
@@ -90,10 +107,10 @@ describe('Frontend SSE Streaming Authentication Suite', () => {
     // Verify URL does NOT have ?token= query parameter
     expect(sseCall!.url).toMatch(/\/jobs\/test_stream\/events$/);
     expect(sseCall!.url).not.toContain('?token=');
-    expect(sseCall!.url).not.toContain(fakeToken);
+    expect(sseCall!.url).not.toContain(validToken);
 
     // Verify Authorization: Bearer header is sent
-    expect(sseCall!.headers['Authorization']).toBe(`Bearer ${fakeToken}`);
+    expect(sseCall!.headers['Authorization']).toBe(`Bearer ${validToken}`);
     expect(sseCall!.headers['Accept']).toBe('text/event-stream');
 
     // Verify SSE chunks are parsed properly

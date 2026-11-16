@@ -16,6 +16,7 @@ import {
   RegisterRequest,
   LoginRequest,
 } from '@ai-video/shared';
+import { AuthStorage } from '../utils/authStorage';
 
 function getBaseUrl(): string {
   let raw = (import.meta.env.VITE_API_BASE_URL || '').trim();
@@ -47,7 +48,7 @@ function getBaseUrl(): string {
 const BASE_URL = getBaseUrl();
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const token = AuthStorage.getToken();
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -62,6 +63,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   const payload = await response.json();
 
   if (!response.ok || !payload.success) {
+    if (response.status === 401) {
+      AuthStorage.clear();
+    }
     const error = new Error(payload?.error?.message || 'API request failed') as any;
     error.status = response.status;
     error.code = payload?.error?.code;
@@ -251,7 +255,7 @@ export const api = {
       if (typeof fetch === 'undefined') return false;
 
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        const token = AuthStorage.getToken();
         const response = await fetch(`${BASE_URL}/jobs/${cleanId}/events`, {
           headers: {
             Accept: 'text/event-stream',

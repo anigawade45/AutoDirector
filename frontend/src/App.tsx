@@ -15,13 +15,14 @@ import { api } from './api/client';
 import { EditPlan } from '@ai-video/shared';
 import { Loader2, Sparkles, Film, Sliders, FileText } from 'lucide-react';
 import { ToastContainer } from './components/common/ToastContainer';
+import { AuthStorage } from './utils/authStorage';
 
 export const App: React.FC = () => {
   const { isAuthenticated, checkSession } = useAuthStore();
   const [mobileTab, setMobileTab] = useState<'chat' | 'timeline' | 'inspector' | 'project'>('chat');
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'editor'>(() => {
-    // If auth token exists in localStorage, default to dashboard, otherwise landing
-    if (typeof window !== 'undefined' && localStorage.getItem('auth_token')) {
+    // If valid auth token exists in storage, default to dashboard, otherwise landing
+    if (AuthStorage.hasToken()) {
       return 'dashboard';
     }
     return 'landing';
