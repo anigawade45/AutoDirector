@@ -131,4 +131,14 @@ describe('Phase 3 Task 3: Isolated Per-Job Temporary Directories & Guaranteed Cl
       fs.promises.rm = originalRm;
     }
   });
+
+  it('cleanupAsync alias removes directory asynchronously without event loop spin', async () => {
+    const aliasJobId = 'test_async_alias_job';
+    const aliasScratch = new JobScratchDirectory(aliasJobId);
+    fs.writeFileSync(aliasScratch.resolve('alias_test.txt'), 'async alias cleanup');
+    expect(fs.existsSync(aliasScratch.dirPath)).toBe(true);
+
+    await aliasScratch.cleanupAsync(2, 50);
+    expect(fs.existsSync(aliasScratch.dirPath)).toBe(false);
+  });
 });

@@ -89,6 +89,14 @@ export class JobScratchDirectory {
   }
 
   /**
+   * Alias for cleanup(): guarantees non-blocking asynchronous removal
+   * using fs.promises.rm with event-loop yielding retry delays.
+   */
+  async cleanupAsync(maxRetries: number = 3, retryDelayMs: number = 200): Promise<void> {
+    return this.cleanup(maxRetries, retryDelayMs);
+  }
+
+  /**
    * Synchronous fallback cleanup using Node.js native retry options
    * without busy-waiting or thread spinning.
    */
