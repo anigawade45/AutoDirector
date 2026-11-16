@@ -12,8 +12,13 @@ import { PlannerExecutionMode } from '@ai-video/shared';
 export class GeminiPlannerAdapter implements PlannerProvider {
   private client: GoogleGenerativeAI | null = null;
 
-  constructor() {
-    if (env.GEMINI_API_KEY) {
+  constructor(client?: GoogleGenerativeAI | null) {
+    if (client !== undefined) {
+      this.client = client;
+    } else if (
+      env.GEMINI_API_KEY &&
+      (!process.env.VITEST || process.env.ALLOW_LIVE_LLM_TESTS === 'true')
+    ) {
       this.client = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     }
   }

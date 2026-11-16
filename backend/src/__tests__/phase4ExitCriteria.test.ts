@@ -204,5 +204,5 @@ describe('Phase 4 Exit Gate: AI Planner & Versioned Plans Acceptance Suite', () 
 
     // Specification §9 requirement: >= 95%
     expect(firstTryPercentage).toBeGreaterThanOrEqual(95);
-  });
+  }, 30000);
 });

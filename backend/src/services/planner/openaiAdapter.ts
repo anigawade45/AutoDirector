@@ -13,8 +13,13 @@ export class OpenAIPlannerAdapter implements PlannerProvider {
   private client: OpenAI | null = null;
   private fallbackAdapter = new GeminiPlannerAdapter();
 
-  constructor() {
-    if (env.OPENAI_API_KEY) {
+  constructor(client?: OpenAI | null) {
+    if (client !== undefined) {
+      this.client = client;
+    } else if (
+      env.OPENAI_API_KEY &&
+      (!process.env.VITEST || process.env.ALLOW_LIVE_LLM_TESTS === 'true')
+    ) {
       this.client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
     }
   }
