@@ -6,6 +6,7 @@ import { AssetModel } from '../models/Asset.js';
 import { ProjectModel } from '../models/Project.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { UserModel } from '../models/User.js';
+import { QuotaService } from '../services/auth/quotaService.js';
 import mongoose from 'mongoose';
 import { analysisQueue } from '../services/queue/queueService.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -73,27 +74,7 @@ export class UploadsController {
       }
 
       // Tier storage quota enforcement
-      const rawUserId = req.user?.id || req.user?._id;
-      if (
-        rawUserId &&
-        mongoose.isValidObjectId(rawUserId) &&
-        typeof UserModel.findById === 'function'
-      ) {
-        const user = await UserModel.findById(rawUserId);
-        if (user && user.quota && user.usage) {
-          if (user.usage.storageBytesUsed + sizeBytes > user.quota.storageBytes) {
-            const availableMb = Math.max(
-              0,
-              (user.quota.storageBytes - user.usage.storageBytesUsed) / (1024 * 1024)
-            ).toFixed(1);
-            throw new AppError(
-              403,
-              'QUOTA_EXCEEDED',
-              `Upload of ${(sizeBytes / (1024 * 1024)).toFixed(1)} MB exceeds remaining storage (${availableMb} MB available) for tier '${user.tier}'. Upgrade to expand storage.`
-            );
-          }
-        }
-      }
+      await QuotaService.checkStorageQuota(req.user?.id || req.user?._id, sizeBytes);
 
       // Check upload deduplication by checksumSha256
       if (checksumSha256) {
@@ -211,9 +192,14 @@ export class UploadsController {
       await S3Service.completeMultipartUpload(session.rawKey, uploadId, parts);
       await UploadSessionStore.deleteSession(uploadId);
 
+      // Quota Accounting: Atomically increment user's storageBytesUsed
+      if (session.sizeBytes > 0) {
+        await QuotaService.incrementStorageUsed(req.user!._id || req.user!.id, session.sizeBytes);
+      }
+
       const project = await ProjectModel.findOne({ publicId: session.projectId });
 
-      // Create Asset document with checksum
+      // Create Asset document with checksum and media size
       const asset = await AssetModel.create({
         publicId: session.assetId,
         projectId: project!._id,
@@ -224,6 +210,9 @@ export class UploadsController {
         s3: {
           bucket: env.S3_BUCKET_NAME,
           rawKey: session.rawKey,
+        },
+        media: {
+          sizeBytes: session.sizeBytes,
         },
         status: 'processing',
       });

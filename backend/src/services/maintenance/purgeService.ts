@@ -1,6 +1,7 @@
 import { S3Service } from '../storage/s3Service.js';
 import { StructuredLogger } from '../observability/logger.js';
 import { UserModel } from '../../models/User.js';
+import { QuotaService } from '../auth/quotaService.js';
 import { ProjectModel } from '../../models/Project.js';
 import { AssetModel } from '../../models/Asset.js';
 import { AnalysisResultModel } from '../../models/AnalysisResult.js';
@@ -58,11 +59,16 @@ export class PurgeService {
     // 2. Cascade delete database records
     const assets = await AssetModel.find({ projectId: project._id });
     const assetIds = assets.map((a) => a._id);
+    const freedBytes = assets.reduce((sum, a) => sum + (a.media?.sizeBytes || 0), 0);
 
     if (assetIds.length > 0) {
       await AnalysisResultModel.deleteMany({ assetId: { $in: assetIds } });
       await CaptionSetModel.deleteMany({ assetId: { $in: assetIds } });
       await AssetModel.deleteMany({ _id: { $in: assetIds } });
+    }
+
+    if (freedBytes > 0) {
+      await QuotaService.decrementStorageUsed(userObjectId, freedBytes);
     }
 
     await EditPlanModel.deleteMany({ projectId: project._id });

@@ -6,6 +6,7 @@ import {
   JobProfile,
 } from '../../models/RenderJob.js';
 import { JobEventsPublisher } from '../queue/queueService.js';
+import { QuotaService } from '../auth/quotaService.js';
 import { AppError } from '../../middleware/errorHandler.js';
 
 export const VALID_STATE_TRANSITIONS: Record<JobState, JobState[]> = {
@@ -143,6 +144,23 @@ export class RenderJobLifecycle {
       }
       if (updates?.output) {
         job.output = updates.output;
+      }
+
+      // Quota Accounting: Atomically increment renderMinutesUsed when export finishes
+      if (job.type === 'export' && job.userId) {
+        const durationMs =
+          updates?.output?.durationMs ||
+          job.output?.durationMs ||
+          job.timings.durationMs ||
+          60000;
+        const minutesRendered = Math.max(1, Math.ceil(durationMs / 60000));
+        await QuotaService.incrementRenderMinutes(job.userId.toString(), minutesRendered).catch(
+          (err) =>
+            console.warn(
+              '[RenderJobLifecycle] Failed to record render minutes quota:',
+              err.message || err
+            )
+        );
       }
     } else if (targetState === 'failed') {
       job.timings.finishedAt = now;

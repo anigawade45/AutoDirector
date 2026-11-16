@@ -16,6 +16,7 @@ export interface IUser extends Document {
     storageBytesUsed: number;
     renderMinutesUsed: number;
     promptsToday: number;
+    lastPromptDate?: string;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -38,6 +39,7 @@ const UserSchema = new Schema<IUser>(
       storageBytesUsed: { type: Number, default: 0 },
       renderMinutesUsed: { type: Number, default: 0 },
       promptsToday: { type: Number, default: 0 },
+      lastPromptDate: { type: String },
     },
   },
   { timestamps: true }

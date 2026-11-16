@@ -10,6 +10,7 @@ import { TimelineVersionModel } from '../models/TimelineVersion.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { CatalogModel } from '../models/Catalog.js';
 import { UserModel } from '../models/User.js';
+import { QuotaService } from '../services/auth/quotaService.js';
 import mongoose from 'mongoose';
 import { PlannerService } from '../services/planner/plannerService.js';
 import { PlanResolver } from '../services/resolver/planResolver.js';
@@ -31,22 +32,7 @@ export class PromptsController {
 
       // Tier prompt quota enforcement
       const rawUserId = req.user?.id || req.user?._id;
-      if (
-        rawUserId &&
-        mongoose.isValidObjectId(rawUserId) &&
-        typeof UserModel.findById === 'function'
-      ) {
-        const user = await UserModel.findById(rawUserId);
-        if (user && user.quota && user.usage) {
-          if (user.usage.promptsToday >= user.quota.promptsPerDay) {
-            throw new AppError(
-              429,
-              'QUOTA_EXCEEDED',
-              `Daily prompt limit of ${user.quota.promptsPerDay} prompts reached for tier '${user.tier}'. Upgrade to increase limits.`
-            );
-          }
-        }
-      }
+      await QuotaService.checkPromptQuota(rawUserId);
 
       const project =
         req.project ||
@@ -330,13 +316,7 @@ export class PromptsController {
       }
 
       // Record prompt usage for tier quota tracking
-      if (
-        rawUserId &&
-        mongoose.isValidObjectId(rawUserId) &&
-        typeof UserModel.updateOne === 'function'
-      ) {
-        await UserModel.updateOne({ _id: rawUserId }, { $inc: { 'usage.promptsToday': 1 } });
-      }
+      await QuotaService.incrementPromptQuota(rawUserId);
 
       res.status(200).json({
         success: true,

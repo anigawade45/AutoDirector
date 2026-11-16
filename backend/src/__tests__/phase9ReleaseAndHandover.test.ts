@@ -13,6 +13,8 @@ import { WorkerCapacityService } from '../scripts/workerCapacityCheck.js';
 vi.mock('../models/User.js', () => ({
   UserModel: {
     deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 }),
+    findById: vi.fn(),
+    updateOne: vi.fn(),
   },
 }));
 
