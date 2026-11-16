@@ -155,4 +155,28 @@ describe('Error Handler Duplicate Key Mapping Suite', () => {
     expect(body.error.message).not.toContain('account');
     expect(body.error.code).not.toBe('USER_EXISTS');
   });
+
+  describe('Express Middleware Pipeline Integration', () => {
+    it('integrates with Express pipeline to safely serialize conflict details without leaking unhandled 500s', () => {
+      const ctx = createMockContext();
+      const mongoConflict = {
+        name: 'MongoServerError',
+        code: 11000,
+        message:
+          'E11000 duplicate key error collection: ai_video_production.timelines index: projectId_1_rev_1 dup key: { projectId: "prj_racing", rev: 3 }',
+        keyPattern: { projectId: 1, rev: 1 },
+        keyValue: { projectId: 'prj_racing', rev: 3 },
+      };
+
+      errorHandler(mongoConflict, ctx.req, ctx.res, ctx.next);
+
+      expect(ctx.getStatus()).toBe(409);
+      const body = ctx.getBody();
+      expect(body.error.code).toBe('VERSION_CONFLICT');
+      expect(body.requestId).toBe('req_test_12345');
+      expect(body.error.details).toHaveLength(2);
+      expect(body.error.details[0].field).toBe('projectId');
+      expect(body.error.details[1].field).toBe('rev');
+    });
+  });
 });
