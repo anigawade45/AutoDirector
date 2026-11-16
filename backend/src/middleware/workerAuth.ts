@@ -75,3 +75,29 @@ export function verifyWorkerSignature(req: Request, res: Response, next: NextFun
     return next(new AppError(401, 'WORKER_AUTH_SIGNATURE_ERROR', 'Signature comparison error'));
   }
 }
+
+/**
+ * Validates either an internal shared secret header or full worker HMAC signature.
+ * Protects maintenance endpoints from unauthenticated external access.
+ */
+export function verifyInternalAuth(req: Request, res: Response, next: NextFunction): void {
+  const secretHeader = (req.headers['x-internal-secret'] || req.headers['x-worker-secret']) as
+    string | undefined;
+
+  if (secretHeader && env.INTERNAL_WORKER_SECRET) {
+    const expectedBuf = Buffer.from(env.INTERNAL_WORKER_SECRET);
+    const providedBuf = Buffer.from(secretHeader);
+    if (
+      expectedBuf.length === providedBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, providedBuf)
+    ) {
+      return next();
+    }
+    return next(
+      new AppError(401, 'INTERNAL_AUTH_INVALID_SECRET', 'Invalid internal worker secret')
+    );
+  }
+
+  // Fall back to HMAC signature verification
+  return verifyWorkerSignature(req, res, next);
+}

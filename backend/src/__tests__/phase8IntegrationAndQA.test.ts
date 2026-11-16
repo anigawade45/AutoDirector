@@ -6,7 +6,7 @@ import { PlanNormalizer } from '../services/planner/planNormalizer.js';
 import { StructuredLogger } from '../services/observability/logger.js';
 import { MetricsService } from '../services/observability/metrics.js';
 import { MaintenanceService } from '../services/maintenance/maintenanceService.js';
-import { verifyWorkerSignature } from '../middleware/workerAuth.js';
+import { verifyWorkerSignature, verifyInternalAuth } from '../middleware/workerAuth.js';
 import { env } from '../config/env.js';
 
 // Helper to return a thenable that also supports .populate()
@@ -856,6 +856,47 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
         })
       );
       expect(replayNext).not.toHaveBeenCalled();
+    });
+
+    it('verifyInternalAuth allows access with valid x-internal-secret header', () => {
+      const authReq = {
+        headers: {
+          'x-internal-secret': env.INTERNAL_WORKER_SECRET,
+        },
+      } as unknown as Request;
+
+      verifyInternalAuth(authReq, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalled();
+    });
+
+    it('verifyInternalAuth rejects access with invalid x-internal-secret header with HTTP 401', () => {
+      const badReq = {
+        headers: {
+          'x-internal-secret': 'completely_wrong_secret',
+        },
+      } as unknown as Request;
+
+      verifyInternalAuth(badReq, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 401,
+          code: 'INTERNAL_AUTH_INVALID_SECRET',
+        })
+      );
+    });
+
+    it('verifyInternalAuth rejects unauthenticated requests with no secret or signature with HTTP 401', () => {
+      const anonReq = {
+        headers: {},
+      } as unknown as Request;
+
+      verifyInternalAuth(anonReq, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 401,
+          code: 'WORKER_AUTH_MISSING_HEADERS',
+        })
+      );
     });
 
     it('monotonically protects terminal states: late progress callback does NOT revert completed job', async () => {
