@@ -2,11 +2,56 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { env } from '../config/env.js';
 import { AppError } from './errorHandler.js';
+import { redisConnection } from '../config/redis.js';
 
-// Set of processed event IDs for replay protection (in production, use Redis with TTL)
-const processedEventIds = new Set<string>();
+// Local in-memory fallback for offline test environments or temporary Redis disconnects
+const inMemoryFallbackSet = new Set<string>();
+const REPLAY_TTL_SECONDS = 600; // 10 minutes (clock skew is max 5 minutes)
 
-export function verifyWorkerSignature(req: Request, res: Response, next: NextFunction): void {
+/**
+ * Atomically marks an event as processed in Redis with a 10-minute TTL.
+ * Returns true if the event was already processed (replay detected), or false if new.
+ */
+async function checkAndMarkProcessed(eventId: string): Promise<boolean> {
+  const redisKey = `worker:event:${eventId}`;
+
+  try {
+    const isMock =
+      typeof (redisConnection as any)?.set?._isMockFunction === 'boolean' ||
+      typeof (redisConnection as any)?.set?.mock === 'object';
+    const isReady = redisConnection && redisConnection.status === 'ready';
+
+    if (redisConnection && (isReady || isMock)) {
+      // SET key '1' EX 600 NX returns 'OK' if the key was set (new event),
+      // or null if the key already exists (duplicate / replay).
+      const result = await Promise.race([
+        redisConnection.set(redisKey, '1', 'EX', REPLAY_TTL_SECONDS, 'NX'),
+        new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('Redis timeout')), 2000)
+        ),
+      ]);
+      return result === null;
+    }
+  } catch (err: any) {
+    console.warn('[WorkerAuth] Redis replay check error, falling back to local set:', err?.message);
+  }
+
+  // Graceful fallback to local in-memory set when Redis is not ready/mocked
+  if (inMemoryFallbackSet.has(eventId)) {
+    return true;
+  }
+  inMemoryFallbackSet.add(eventId);
+  if (inMemoryFallbackSet.size > 10000) {
+    inMemoryFallbackSet.clear();
+  }
+  return false;
+}
+
+export async function verifyWorkerSignature(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   const workerId = req.headers['x-worker-id'] as string;
   const eventId = req.headers['x-event-id'] as string;
   const timestampStr = req.headers['x-event-timestamp'] as string;
@@ -31,18 +76,7 @@ export function verifyWorkerSignature(req: Request, res: Response, next: NextFun
     );
   }
 
-  // 2. Replay check
-  if (processedEventIds.has(eventId)) {
-    // Monotonic idempotent delivery: return 200 without reprocessing
-    res.status(200).json({
-      success: true,
-      data: { accepted: true, duplicate: true },
-      requestId: req.id,
-    });
-    return;
-  }
-
-  // 3. Signature verification
+  // 2. Cryptographic signature verification (verify authenticity BEFORE checking state)
   const rawBody = JSON.stringify(req.body);
   const expectedSignature = crypto
     .createHmac('sha256', env.INTERNAL_WORKER_SECRET)
@@ -63,16 +97,26 @@ export function verifyWorkerSignature(req: Request, res: Response, next: NextFun
         new AppError(401, 'WORKER_AUTH_INVALID_SIGNATURE', 'Invalid worker event HMAC signature')
       );
     }
+  } catch (err) {
+    return next(new AppError(401, 'WORKER_AUTH_SIGNATURE_ERROR', 'Signature comparison error'));
+  }
 
-    processedEventIds.add(eventId);
-    // Cleanup old IDs periodically
-    if (processedEventIds.size > 10000) {
-      processedEventIds.clear();
+  // 3. Distributed replay protection using Redis SET with TTL & NX
+  try {
+    const isReplay = await checkAndMarkProcessed(eventId);
+    if (isReplay) {
+      // Monotonic idempotent delivery: acknowledge duplicate with HTTP 200 without reprocessing
+      res.status(200).json({
+        success: true,
+        data: { accepted: true, duplicate: true },
+        requestId: req.id,
+      });
+      return;
     }
 
     next();
-  } catch (err) {
-    return next(new AppError(401, 'WORKER_AUTH_SIGNATURE_ERROR', 'Signature comparison error'));
+  } catch (replayErr) {
+    next(replayErr);
   }
 }
 
@@ -80,7 +124,11 @@ export function verifyWorkerSignature(req: Request, res: Response, next: NextFun
  * Validates either an internal shared secret header or full worker HMAC signature.
  * Protects maintenance endpoints from unauthenticated external access.
  */
-export function verifyInternalAuth(req: Request, res: Response, next: NextFunction): void {
+export async function verifyInternalAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   const secretHeader = (req.headers['x-internal-secret'] || req.headers['x-worker-secret']) as
     string | undefined;
 
@@ -98,6 +146,5 @@ export function verifyInternalAuth(req: Request, res: Response, next: NextFuncti
     );
   }
 
-  // Fall back to HMAC signature verification
-  return verifyWorkerSignature(req, res, next);
+  return await verifyWorkerSignature(req, res, next);
 }

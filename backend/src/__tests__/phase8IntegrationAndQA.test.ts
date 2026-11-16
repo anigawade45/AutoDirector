@@ -7,6 +7,7 @@ import { StructuredLogger } from '../services/observability/logger.js';
 import { MetricsService } from '../services/observability/metrics.js';
 import { MaintenanceService } from '../services/maintenance/maintenanceService.js';
 import { verifyWorkerSignature, verifyInternalAuth } from '../middleware/workerAuth.js';
+import { redisConnection } from '../config/redis.js';
 import { env } from '../config/env.js';
 
 // Helper to return a thenable that also supports .populate()
@@ -822,7 +823,7 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
       );
     });
 
-    it('detects duplicate worker callbacks and returns HTTP 200 without duplicate execution (Replay Protection)', () => {
+    it('detects duplicate worker callbacks and returns HTTP 200 without duplicate execution (Replay Protection)', async () => {
       const nowSec = Math.floor(Date.now() / 1000);
       const body = { eventType: 'render.progress', jobId: 'job_123' };
       const rawBody = JSON.stringify(body);
@@ -842,12 +843,12 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
       } as unknown as Request;
 
       // First delivery: valid
-      verifyWorkerSignature(eventReq, mockRes as unknown as Response, nextFn);
+      await verifyWorkerSignature(eventReq, mockRes as unknown as Response, nextFn);
       expect(nextFn).toHaveBeenCalled();
 
       // Second delivery with identical x-event-id: detected as replay
       const replayNext = vi.fn();
-      verifyWorkerSignature(eventReq, mockRes as unknown as Response, replayNext);
+      await verifyWorkerSignature(eventReq, mockRes as unknown as Response, replayNext);
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(jsonMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -858,25 +859,25 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
       expect(replayNext).not.toHaveBeenCalled();
     });
 
-    it('verifyInternalAuth allows access with valid x-internal-secret header', () => {
+    it('verifyInternalAuth allows access with valid x-internal-secret header', async () => {
       const authReq = {
         headers: {
           'x-internal-secret': env.INTERNAL_WORKER_SECRET,
         },
       } as unknown as Request;
 
-      verifyInternalAuth(authReq, mockRes as unknown as Response, nextFn);
+      await verifyInternalAuth(authReq, mockRes as unknown as Response, nextFn);
       expect(nextFn).toHaveBeenCalled();
     });
 
-    it('verifyInternalAuth rejects access with invalid x-internal-secret header with HTTP 401', () => {
+    it('verifyInternalAuth rejects access with invalid x-internal-secret header with HTTP 401', async () => {
       const badReq = {
         headers: {
           'x-internal-secret': 'completely_wrong_secret',
         },
       } as unknown as Request;
 
-      verifyInternalAuth(badReq, mockRes as unknown as Response, nextFn);
+      await verifyInternalAuth(badReq, mockRes as unknown as Response, nextFn);
       expect(nextFn).toHaveBeenCalledWith(
         expect.objectContaining({
           statusCode: 401,
@@ -885,18 +886,69 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
       );
     });
 
-    it('verifyInternalAuth rejects unauthenticated requests with no secret or signature with HTTP 401', () => {
+    it('verifyInternalAuth rejects unauthenticated requests with no secret or signature with HTTP 401', async () => {
       const anonReq = {
         headers: {},
       } as unknown as Request;
 
-      verifyInternalAuth(anonReq, mockRes as unknown as Response, nextFn);
+      await verifyInternalAuth(anonReq, mockRes as unknown as Response, nextFn);
       expect(nextFn).toHaveBeenCalledWith(
         expect.objectContaining({
           statusCode: 401,
           code: 'WORKER_AUTH_MISSING_HEADERS',
         })
       );
+    });
+
+    it('uses Redis SET EX NX for atomic distributed replay deduplication across instances', async () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const body = { eventType: 'analysis.completed', jobId: 'job_456' };
+      const rawBody = JSON.stringify(body);
+      const validSig = crypto
+        .createHmac('sha256', env.INTERNAL_WORKER_SECRET)
+        .update(rawBody)
+        .digest('hex');
+
+      const eventReq = {
+        headers: {
+          'x-worker-id': 'render-worker-01',
+          'x-event-id': 'evt_distributed_redis_test',
+          'x-event-timestamp': nowSec.toString(),
+          'x-event-signature': `sha256=${validSig}`,
+        },
+        body,
+      } as unknown as Request;
+
+      // Mock redisConnection.set to simulate Redis SET ... EX 600 NX
+      const setSpy = vi
+        .spyOn(redisConnection, 'set')
+        .mockResolvedValueOnce('OK' as any)
+        .mockResolvedValueOnce(null as any);
+
+      // First call: succeeds and registers in Redis
+      await verifyWorkerSignature(eventReq, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalled();
+      expect(setSpy).toHaveBeenCalledWith(
+        'worker:event:evt_distributed_redis_test',
+        '1',
+        'EX',
+        600,
+        'NX'
+      );
+
+      // Second call from a concurrent instance: Redis returns null (key exists) -> duplicate rejected
+      const replayNext = vi.fn();
+      await verifyWorkerSignature(eventReq, mockRes as unknown as Response, replayNext);
+      expect(statusMock).toHaveBeenCalledWith(200);
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: { accepted: true, duplicate: true },
+        })
+      );
+      expect(replayNext).not.toHaveBeenCalled();
+
+      setSpy.mockRestore();
     });
 
     it('monotonically protects terminal states: late progress callback does NOT revert completed job', async () => {
