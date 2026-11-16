@@ -171,6 +171,19 @@ export const renderRateLimiter = createRateLimiter({
 });
 
 /**
+ * Internal Maintenance Operations Limiter (/api/internal/v1/maintenance/*).
+ * Protects storage and DB cleanup tasks from rapid invocation and resource churn.
+ * Limit: 10 maintenance invocations per 5 minutes per IP.
+ */
+export const maintenanceRateLimiter = createRateLimiter({
+  prefix: 'maintenance',
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 10,
+  message:
+    'Internal maintenance request limit reached. Please wait before triggering another cleanup.',
+});
+
+/**
  * Global API Limiter for standard REST endpoints.
  * Limit: 300 requests per 1 minute per IP.
  * Skips health check endpoints.
