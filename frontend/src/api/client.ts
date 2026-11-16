@@ -200,6 +200,11 @@ export const api = {
 
   getJobDownloadUrl: (jobId: string) => request<DownloadUrlResponseData>(`/jobs/${jobId}/download`),
 
+  getJobEventsTicket: (jobId: string) =>
+    request<{ ticket: string; expiresInSeconds: number }>(`/jobs/${jobId}/events-ticket`, {
+      method: 'POST',
+    }),
+
   subscribeToJobEvents: (
     jobId: string,
     onProgress: (data: any) => void,
@@ -207,8 +212,8 @@ export const api = {
   ): (() => void) => {
     const cleanId = jobId.replace(/^job_/, '');
     let isFinished = false;
-    let eventSource: EventSource | null = null;
     let pollTimer: any = null;
+    const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
 
     const handleTerminalOrProgress = (data: any) => {
       if (isFinished) return;
@@ -229,54 +234,86 @@ export const api = {
       }
     };
 
-    // 1. Live SSE Connection
-    try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-      const sseUrl = `${BASE_URL}/jobs/${cleanId}/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-      eventSource = new EventSource(sseUrl);
+    const cleanup = () => {
+      if (abortController) {
+        abortController.abort();
+      }
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
 
-      eventSource.addEventListener('progress', (e) => {
-        try {
-          handleTerminalOrProgress(JSON.parse(e.data));
-        } catch (err) {
-          console.error('Error parsing progress SSE event:', err);
+    // 1. Primary Secure Transport: Fetch streaming with Authorization: Bearer header
+    // Eliminates sending auth tokens in URL query strings to protect against exposure in proxy/access logs,
+    // browser history, and HTTP Referer headers.
+    const startFetchStream = async () => {
+      if (typeof fetch === 'undefined') return false;
+
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        const response = await fetch(`${BASE_URL}/jobs/${cleanId}/events`, {
+          headers: {
+            Accept: 'text/event-stream',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          signal: abortController?.signal,
+        });
+
+        if (!response.ok || !response.body) {
+          return false;
         }
-      });
 
-      eventSource.addEventListener('state', (e) => {
-        try {
-          handleTerminalOrProgress(JSON.parse(e.data));
-        } catch (err) {
-          console.error('Error parsing state SSE event:', err);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (!isFinished) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const messages = buffer.split('\n\n');
+          buffer = messages.pop() || '';
+
+          for (const msg of messages) {
+            const trimmed = msg.trim();
+            if (!trimmed) continue;
+
+            const lines = trimmed.split('\n');
+            let dataStr = '';
+
+            for (const rawLine of lines) {
+              const line = rawLine.trim();
+              if (line.startsWith('data:')) {
+                dataStr = line.slice(5).trim();
+              }
+            }
+
+            if (dataStr) {
+              try {
+                const parsed = JSON.parse(dataStr);
+                handleTerminalOrProgress(parsed);
+              } catch {
+                // Ignore parse errors on heartbeat comments or invalid chunks
+              }
+            }
+          }
         }
-      });
-
-      eventSource.addEventListener('done', (e) => {
-        try {
-          handleTerminalOrProgress(JSON.parse(e.data));
-        } catch (err) {
-          console.error('Error parsing done SSE event:', err);
+        return true;
+      } catch (err: any) {
+        if (err?.name !== 'AbortError' && !isFinished && onError) {
+          onError(err);
         }
-      });
+        return false;
+      }
+    };
 
-      eventSource.onmessage = (e) => {
-        try {
-          handleTerminalOrProgress(JSON.parse(e.data));
-        } catch {}
-      };
+    // Kick off secure fetch stream
+    startFetchStream().catch(() => {});
 
-      eventSource.addEventListener('error', (e) => {
-        // SSE error or early socket close - fallback poller will complete the job seamlessly
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
-      });
-    } catch (e) {
-      console.warn('Failed to initialize EventSource, using polling fallback:', e);
-    }
-
-    // 2. High-res polling fallback: guarantees job completion even if job finished before SSE attached
+    // 2. High-res polling fallback: guarantees job completion even if job finished before stream attached
+    // or if the stream disconnects unexpectedly
     const pollStatus = async () => {
       if (isFinished) return;
       try {
@@ -292,17 +329,6 @@ export const api = {
     // Immediate poll check (covers jobs finished in < 100ms)
     pollStatus();
     pollTimer = setInterval(pollStatus, 1500);
-
-    const cleanup = () => {
-      if (eventSource) {
-        eventSource.close();
-        eventSource = null;
-      }
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    };
 
     return cleanup;
   },

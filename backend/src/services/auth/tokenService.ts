@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { env } from '../../config/env.js';
+import { redisConnection } from '../../config/redis.js';
 
 export interface JwtPayload {
   sub: string;
@@ -8,6 +9,12 @@ export interface JwtPayload {
   name?: string;
   iat?: number;
   exp?: number;
+}
+
+export interface SseTicketPayload {
+  userId: string;
+  jobId?: string;
+  createdAt: number;
 }
 
 export class TokenService {
@@ -109,5 +116,107 @@ export class TokenService {
     } catch {
       return null;
     }
+  }
+
+  // In-memory fallback for SSE tickets when Redis is unavailable or in offline testing
+  private static localTicketStore = new Map<
+    string,
+    { payload: SseTicketPayload; expiresAt: number }
+  >();
+
+  /**
+   * Generates an ephemeral single-use SSE ticket (valid for 30 seconds by default)
+   * stored in Redis with atomic consumption semantics.
+   */
+  static async createSseTicket(
+    payload: { userId: string; jobId?: string },
+    expiresInSec = 30
+  ): Promise<string> {
+    const ticketId = `ticket_${crypto.randomBytes(24).toString('hex')}`;
+    const ticketData: SseTicketPayload = {
+      userId: payload.userId,
+      jobId: payload.jobId,
+      createdAt: Date.now(),
+    };
+
+    if (redisConnection && redisConnection.status === 'ready') {
+      try {
+        await redisConnection.set(
+          `sse:ticket:${ticketId}`,
+          JSON.stringify(ticketData),
+          'EX',
+          expiresInSec,
+          'NX'
+        );
+        return ticketId;
+      } catch (err: any) {
+        console.warn(
+          '[TokenService] Redis set failed for SSE ticket, falling back to local store:',
+          err.message
+        );
+      }
+    }
+
+    // In-memory fallback
+    this.localTicketStore.set(ticketId, {
+      payload: ticketData,
+      expiresAt: Date.now() + expiresInSec * 1000,
+    });
+
+    // Sweep expired tickets occasionally
+    if (this.localTicketStore.size > 200) {
+      const now = Date.now();
+      for (const [k, v] of this.localTicketStore.entries()) {
+        if (v.expiresAt <= now) {
+          this.localTicketStore.delete(k);
+        }
+      }
+    }
+
+    return ticketId;
+  }
+
+  /**
+   * Consumes an ephemeral SSE ticket.
+   * Atomic single-use: immediately deletes the ticket so it cannot be reused or replayed.
+   */
+  static async consumeSseTicket(ticketId: string): Promise<SseTicketPayload | null> {
+    if (!ticketId || typeof ticketId !== 'string') return null;
+
+    if (redisConnection && redisConnection.status === 'ready') {
+      try {
+        const key = `sse:ticket:${ticketId}`;
+        const results = await redisConnection.multi().get(key).del(key).exec();
+        const raw = results?.[0]?.[1] as string | null;
+        if (raw) {
+          return JSON.parse(raw) as SseTicketPayload;
+        }
+        return null;
+      } catch (err: any) {
+        console.warn(
+          '[TokenService] Redis consume failed for SSE ticket, checking local store:',
+          err.message
+        );
+      }
+    }
+
+    const localEntry = this.localTicketStore.get(ticketId);
+    if (!localEntry) return null;
+
+    // Immediately burn ticket (single use)
+    this.localTicketStore.delete(ticketId);
+
+    if (localEntry.expiresAt < Date.now()) {
+      return null; // Expired
+    }
+
+    return localEntry.payload;
+  }
+
+  /**
+   * Reset local ticket store (primarily for unit tests)
+   */
+  static resetLocalTicketStore(): void {
+    this.localTicketStore.clear();
   }
 }

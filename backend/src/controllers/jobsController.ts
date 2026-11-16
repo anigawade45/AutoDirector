@@ -3,6 +3,7 @@ import { RenderJobModel } from '../models/RenderJob.js';
 import { S3Service } from '../services/storage/s3Service.js';
 import { SSEManager } from '../services/events/sseManager.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { TokenService } from '../services/auth/tokenService.js';
 
 export class JobsController {
   static async getJob(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -53,6 +54,41 @@ export class JobsController {
       }
 
       SSEManager.subscribeToJob(cleanId, res, job);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async getJobEventsTicket(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const cleanId = id.replace(/^job_/, '');
+
+      const job = await RenderJobModel.findOne({
+        _id: cleanId,
+        userId: req.user!._id,
+      });
+
+      if (!job) {
+        throw new AppError(404, 'JOB_NOT_FOUND', 'Job not found');
+      }
+
+      const ticket = await TokenService.createSseTicket(
+        {
+          userId: req.user!._id.toString(),
+          jobId: cleanId,
+        },
+        30
+      );
+
+      res.status(200).json({
+        success: true,
+        data: {
+          ticket,
+          expiresInSeconds: 30,
+        },
+        requestId: req.id,
+      });
     } catch (err) {
       next(err);
     }
