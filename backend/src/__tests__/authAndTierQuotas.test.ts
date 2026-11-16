@@ -5,6 +5,7 @@ import { TokenService } from '../services/auth/tokenService.js';
 import { AuthController } from '../controllers/authController.js';
 import { ProjectsController } from '../controllers/projectsController.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { requireProjectOwner } from '../middleware/tenant.js';
 import { RendersController } from '../controllers/rendersController.js';
 import { PromptsController } from '../controllers/promptsController.js';
 import { UploadsController } from '../controllers/uploadsController.js';
@@ -316,6 +317,85 @@ describe('Authentication & Authorization Suite', () => {
       await authMiddleware(req, mockRes as unknown as Response, nextFn);
       expect(nextFn).toHaveBeenCalled();
       expect(req.user?.tier).toBe('enterprise');
+    });
+  });
+
+  describe('2c. Tenant Isolation Middleware (requireProjectOwner)', () => {
+    it('rejects request when project ID parameter is missing with HTTP 400', async () => {
+      const req = {
+        params: {},
+        body: {},
+        user: { _id: new mongoose.Types.ObjectId() },
+      } as unknown as Request;
+
+      await requireProjectOwner(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 400,
+          code: 'BAD_REQUEST',
+        })
+      );
+    });
+
+    it('rejects request when user is unauthenticated with HTTP 401', async () => {
+      const req = {
+        params: { id: 'prj_test_123' },
+        body: {},
+      } as unknown as Request;
+
+      await requireProjectOwner(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 401,
+          code: 'UNAUTHENTICATED',
+        })
+      );
+    });
+
+    it('returns 404 PROJECT_NOT_FOUND when project belongs to another tenant', async () => {
+      (ProjectModel.findOne as any).mockResolvedValue(null);
+
+      const req = {
+        params: { id: 'prj_other_user_project' },
+        body: {},
+        user: { _id: new mongoose.Types.ObjectId() },
+      } as unknown as Request;
+
+      await requireProjectOwner(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 404,
+          code: 'PROJECT_NOT_FOUND',
+        })
+      );
+      expect(ProjectModel.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          publicId: 'prj_other_user_project',
+          userId: req.user?._id,
+          deletedAt: null,
+        })
+      );
+    });
+
+    it('successfully authorizes and attaches req.project when owned by tenant', async () => {
+      const mockOwnerId = new mongoose.Types.ObjectId();
+      const mockProject = {
+        _id: new mongoose.Types.ObjectId(),
+        publicId: 'prj_my_valid_project',
+        userId: mockOwnerId,
+        status: 'ready',
+      };
+      (ProjectModel.findOne as any).mockResolvedValue(mockProject);
+
+      const req = {
+        params: { id: 'prj_my_valid_project' },
+        body: {},
+        user: { _id: mockOwnerId },
+      } as unknown as Request;
+
+      await requireProjectOwner(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalled();
+      expect(req.project).toBe(mockProject);
     });
   });
 

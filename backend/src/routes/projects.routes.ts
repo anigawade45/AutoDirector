@@ -4,34 +4,37 @@ import { PromptsController } from '../controllers/promptsController.js';
 import { PlansController } from '../controllers/plansController.js';
 import { RendersController } from '../controllers/rendersController.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { requireProjectOwner } from '../middleware/tenant.js';
 
 export const projectsRouter = Router();
 
 projectsRouter.use(authMiddleware);
 
-// Project management
+// Project management - collection level
 projectsRouter.get('/', ProjectsController.listProjects);
 projectsRouter.post('/', ProjectsController.createProject);
-projectsRouter.get('/:id', ProjectsController.getProject);
-projectsRouter.patch('/:id', ProjectsController.updateProject);
-projectsRouter.post('/:id/archive', ProjectsController.archiveProject);
-projectsRouter.post('/:id/unarchive', ProjectsController.unarchiveProject);
-projectsRouter.delete('/:id', ProjectsController.deleteProject);
-projectsRouter.delete('/:id/purge', ProjectsController.purgeProject);
+
+// Project management - item level (enforced via requireProjectOwner tenant isolation middleware)
+projectsRouter.get('/:id', requireProjectOwner, ProjectsController.getProject);
+projectsRouter.patch('/:id', requireProjectOwner, ProjectsController.updateProject);
+projectsRouter.post('/:id/archive', requireProjectOwner, ProjectsController.archiveProject);
+projectsRouter.post('/:id/unarchive', requireProjectOwner, ProjectsController.unarchiveProject);
+projectsRouter.delete('/:id', requireProjectOwner, ProjectsController.deleteProject);
+projectsRouter.delete('/:id/purge', requireProjectOwner, ProjectsController.purgeProject);
 
 // AI Prompt & Chat History
-projectsRouter.get('/:id/chat', PromptsController.getChatHistory);
-projectsRouter.post('/:id/chat', PromptsController.postChatMessage);
-projectsRouter.post('/:id/prompt', PromptsController.submitPrompt);
+projectsRouter.get('/:id/chat', requireProjectOwner, PromptsController.getChatHistory);
+projectsRouter.post('/:id/chat', requireProjectOwner, PromptsController.postChatMessage);
+projectsRouter.post('/:id/prompt', requireProjectOwner, PromptsController.submitPrompt);
 
 // Immutable Plan Versioning & Patches
-projectsRouter.get('/:id/plans/:v', PlansController.getPlanVersion);
-projectsRouter.patch('/:id/plans/:v', PlansController.patchPlan);
-projectsRouter.post('/:id/plans/:v/revert', PlansController.revertPlan);
+projectsRouter.get('/:id/plans/:v', requireProjectOwner, PlansController.getPlanVersion);
+projectsRouter.patch('/:id/plans/:v', requireProjectOwner, PlansController.patchPlan);
+projectsRouter.post('/:id/plans/:v/revert', requireProjectOwner, PlansController.revertPlan);
 
 // Previews & Exports
-projectsRouter.post('/:id/preview', RendersController.enqueuePreview);
-projectsRouter.post('/:id/export', RendersController.enqueueExport);
+projectsRouter.post('/:id/preview', requireProjectOwner, RendersController.enqueuePreview);
+projectsRouter.post('/:id/export', requireProjectOwner, RendersController.enqueueExport);
 
 // Captions & Subtitles
-projectsRouter.patch('/:id/captions', ProjectsController.updateCaptions);
+projectsRouter.patch('/:id/captions', requireProjectOwner, ProjectsController.updateCaptions);

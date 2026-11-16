@@ -61,7 +61,13 @@ export class UploadsController {
         );
       }
 
-      const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: projectId,
+          userId: req.user!._id,
+          deletedAt: null,
+        }));
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project does not exist or unauthorized');
       }

@@ -13,7 +13,13 @@ export class RendersController {
       const { id: projectId } = req.params;
       const { planVersion } = req.body;
 
-      const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: projectId,
+          userId: req.user!._id,
+          deletedAt: null,
+        }));
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found');
       }
@@ -94,7 +100,13 @@ export class RendersController {
       const { id: projectId } = req.params;
       const { planVersion, profile = 'final_1080p' } = req.body;
 
-      const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: projectId,
+          userId: req.user!._id,
+          deletedAt: null,
+        }));
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found');
       }

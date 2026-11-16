@@ -17,7 +17,13 @@ export class PlansController {
       const { id: projectId, v: versionStr } = req.params;
       const version = parseInt(versionStr, 10);
 
-      const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: projectId,
+          userId: req.user!._id,
+          deletedAt: null,
+        }));
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found');
       }
@@ -61,7 +67,13 @@ export class PlansController {
         );
       }
 
-      const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: projectId,
+          userId: req.user!._id,
+          deletedAt: null,
+        }));
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found');
       }
@@ -254,7 +266,13 @@ export class PlansController {
       const { id: projectId, v: targetVersionStr } = req.params;
       const targetVersion = parseInt(targetVersionStr, 10);
 
-      const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: projectId,
+          userId: req.user!._id,
+          deletedAt: null,
+        }));
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found');
       }

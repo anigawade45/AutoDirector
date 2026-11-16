@@ -48,7 +48,13 @@ export class PromptsController {
         }
       }
 
-      const project = await ProjectModel.findOne({ publicId: projectId, userId: req.user!._id });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: projectId,
+          userId: req.user!._id,
+          deletedAt: null,
+        }));
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found');
       }
@@ -354,11 +360,13 @@ export class PromptsController {
       const { id } = req.params;
       const rawUserId = req.user?._id;
 
-      const project = await ProjectModel.findOne({
-        publicId: id,
-        userId: rawUserId,
-        deletedAt: null,
-      });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: id,
+          userId: rawUserId,
+          deletedAt: null,
+        }));
 
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', `Project ${id} not found or unauthorized`);
@@ -404,11 +412,13 @@ export class PromptsController {
         throw new AppError(400, 'INVALID_MESSAGE', 'Message text must be a non-empty string');
       }
 
-      const project = await ProjectModel.findOne({
-        publicId: id,
-        userId: rawUserId,
-        deletedAt: null,
-      });
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: id,
+          userId: rawUserId,
+          deletedAt: null,
+        }));
 
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', `Project ${id} not found or unauthorized`);

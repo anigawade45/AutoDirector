@@ -141,6 +141,7 @@ export async function verifyInternalAuth(
     ) {
       return next();
     }
+
     return next(
       new AppError(401, 'INTERNAL_AUTH_INVALID_SECRET', 'Invalid internal worker secret')
     );
