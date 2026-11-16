@@ -15,15 +15,13 @@ import {
   Clapperboard,
   Sparkles,
   ChevronDown,
-  Mail,
-  Lock,
   LogIn,
   User,
-  Loader2,
   LogOut,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { AuthModal } from '../auth/AuthModal';
+import { AuthForm } from '../auth/AuthForm';
 import { toast } from '../../stores/toastStore';
 
 interface LandingPageProps {
@@ -37,14 +35,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
 
   // Inline auth section state
   const [inlineMode, setInlineMode] = useState<'login' | 'register'>('register');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [tier, setTier] = useState<'free' | 'pro' | 'enterprise'>('pro');
-  const [inlineError, setInlineError] = useState<string | null>(null);
+  const [inlineTier, setInlineTier] = useState<'free' | 'pro' | 'enterprise'>('pro');
+  const [authFormKey, setAuthFormKey] = useState(0);
 
-  const { isAuthenticated, user, login, register, logout, isLoading, error, clearError } =
-    useAuthStore();
+  const { isAuthenticated, user, logout } = useAuthStore();
 
   const handleOpenAuth = (
     mode: 'login' | 'register',
@@ -60,57 +54,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
     tierChoice: 'free' | 'pro' | 'enterprise' = 'pro'
   ) => {
     setInlineMode(mode);
-    setTier(tierChoice);
-    setInlineError(null);
-    clearError();
+    setInlineTier(tierChoice);
+    setAuthFormKey((k) => k + 1);
     const el = document.getElementById('access');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     } else {
       handleOpenAuth(mode, tierChoice);
-    }
-  };
-
-  const handleInlineAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setInlineError(null);
-    clearError();
-
-    if (!email.trim() || !password.trim()) {
-      setInlineError('Please provide both email and password.');
-      toast.warning('Please provide both email and password.', 'Required Fields');
-      return;
-    }
-
-    if (inlineMode === 'register') {
-      if (!name.trim()) {
-        setInlineError('Please enter your full name.');
-        toast.warning('Please enter your full name.', 'Name Required');
-        return;
-      }
-      if (password.length < 6) {
-        setInlineError('Password must be at least 6 characters.');
-        toast.warning('Password must be at least 6 characters.', 'Password Length');
-        return;
-      }
-
-      const ok = await register({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-        tier,
-      });
-      if (ok) {
-        onEnterStudio();
-      }
-    } else {
-      const ok = await login({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-      if (ok) {
-        onEnterStudio();
-      }
     }
   };
 
@@ -874,158 +824,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
               </div>
             </div>
           ) : (
-            /* Auth Form (Tabs: Sign In / Create Account) */
+            /* Unified Auth Form (Tabs: Sign In / Create Account) */
             <div className="p-6 sm:p-8 rounded-2xl bg-[#222326] border border-[#393B3F] shadow-2xl relative">
-              {/* Tab Switcher */}
-              <div className="grid grid-cols-2 p-1 bg-[#18191B] border border-[#393B3F] rounded-xl mb-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInlineMode('login');
-                    setInlineError(null);
-                    clearError();
-                  }}
-                  className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                    inlineMode === 'login'
-                      ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
-                      : 'text-[#FFF5F5]/70 hover:text-[#FFF5F5]'
-                  }`}
-                >
-                  Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInlineMode('register');
-                    setInlineError(null);
-                    clearError();
-                  }}
-                  className={`py-2 text-xs font-semibold rounded-lg transition-all ${
-                    inlineMode === 'register'
-                      ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm font-bold'
-                      : 'text-[#FFF5F5]/70 hover:text-[#FFF5F5]'
-                  }`}
-                >
-                  Create Account
-                </button>
-              </div>
-
-              {/* Error notification */}
-              {(inlineError || error) && (
-                <div className="mb-4 p-3 bg-red-950/40 border border-red-800/50 rounded-xl text-xs text-red-300 flex items-start space-x-2">
-                  <span className="font-bold">Error:</span>
-                  <span>{inlineError || error}</span>
-                </div>
-              )}
-
-              {/* Inline Form */}
-              <form onSubmit={handleInlineAuthSubmit} className="space-y-4">
-                {inlineMode === 'register' && (
-                  <div>
-                    <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
-                      Full Name
-                    </label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-[#FFF5F5]/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        required
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. Elena Rostova"
-                        className="w-full pl-10 pr-4 py-2.5 bg-[#18191B] border border-[#393B3F] rounded-xl text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE] transition-colors"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-[#FFF5F5]/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@domain.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-[#18191B] border border-[#393B3F] rounded-xl text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE] transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-[#FFF5F5]/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="password"
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="•••••••• (min. 6 characters)"
-                      className="w-full pl-10 pr-4 py-2.5 bg-[#18191B] border border-[#393B3F] rounded-xl text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE] transition-colors"
-                    />
-                  </div>
-                </div>
-
-                {inlineMode === 'register' && (
-                  <div>
-                    <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-1.5">
-                      Select Plan Edition
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(['free', 'pro', 'enterprise'] as const).map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setTier(t)}
-                          className={`py-2 px-2.5 rounded-xl border text-center transition-all ${
-                            tier === t
-                              ? 'border-[#E3B5BE] bg-[#E3B5BE]/10 text-[#F7D7D1] font-semibold'
-                              : 'border-[#393B3F] bg-[#18191B] text-[#FFF5F5]/60 hover:border-[#484949]'
-                          }`}
-                        >
-                          <div className="text-xs capitalize">{t}</div>
-                          <div className="text-[10px] text-[#FFF5F5]/50 font-mono">
-                            {t === 'free' ? '$0' : t === 'pro' ? '$29/mo' : '$99/mo'}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full mt-2 py-3 px-4 bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-[#18191B]" />
-                      <span>Authenticating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>
-                        {inlineMode === 'login' ? 'Sign In to Studio' : 'Create Studio Account'}
-                      </span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </form>
-
-              {/* Security info */}
-              <div className="mt-5 flex items-center justify-center space-x-2 text-[11px] font-mono text-[#FFF5F5]/50">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#E3B5BE]" />
-                <span>Encrypted Salted Scrypt + RFC 7519 JWT Auth</span>
-              </div>
+              <AuthForm
+                key={authFormKey}
+                initialMode={inlineMode}
+                initialTier={inlineTier}
+                onSuccess={onEnterStudio}
+                showSecurityBadge={true}
+              />
             </div>
           )}
         </div>

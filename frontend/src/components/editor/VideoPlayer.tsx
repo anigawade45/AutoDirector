@@ -29,6 +29,8 @@ export const VideoPlayer: React.FC = () => {
     stepFrame,
     preview,
     project,
+    registerVideoElement,
+    togglePlayback,
   } = useEditorStore();
 
   const effectivePlan = useEditorStore(selectEffectivePlan);
@@ -38,19 +40,18 @@ export const VideoPlayer: React.FC = () => {
 
   const fps = project?.fps || effectivePlan?.global?.fps || 30;
 
+  // Register video element in editor store for decoupled external controls (Timeline, Director, etc.)
+  useEffect(() => {
+    registerVideoElement(videoRef.current);
+    return () => {
+      registerVideoElement(null);
+    };
+  }, [registerVideoElement]);
+
   // Play / Pause toggle
   const togglePlay = useCallback(() => {
-    if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      videoRef.current.play();
-      setIsPlaying(true);
-      setPlaybackStatus('playing');
-    } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setPlaybackStatus('paused');
-    }
-  }, [setPlaybackStatus]);
+    togglePlayback();
+  }, [togglePlayback]);
 
   // Check if current preview is pre-baked by server preview worker with burned-in effects
   const isVideoBaked =
@@ -558,6 +559,14 @@ export const VideoPlayer: React.FC = () => {
               transition: 'filter 0.2s ease',
             }}
             className="w-full h-full object-contain"
+            onPlay={() => {
+              setIsPlaying(true);
+              setPlaybackStatus('playing');
+            }}
+            onPause={() => {
+              setIsPlaying(false);
+              setPlaybackStatus('paused');
+            }}
             onEnded={() => {
               setIsPlaying(false);
               setPlaybackStatus('ended');

@@ -29,6 +29,7 @@ export const TimelineView: React.FC = () => {
     playback,
     setCurrentTime,
     setPlaybackStatus,
+    togglePlayback,
     setZoom,
     setScrollX,
     fitTimelineToWidth,
@@ -39,17 +40,8 @@ export const TimelineView: React.FC = () => {
   } = useEditorStore();
 
   const togglePlay = useCallback(() => {
-    const video = document.querySelector('video');
-    if (video) {
-      if (video.paused) {
-        video.play();
-        setPlaybackStatus('playing');
-      } else {
-        video.pause();
-        setPlaybackStatus('paused');
-      }
-    }
-  }, [setPlaybackStatus]);
+    togglePlayback();
+  }, [togglePlayback]);
 
   const effectivePlan = useEditorStore(selectEffectivePlan);
   const derivedTracks = useEditorStore(selectDerivedTracks);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { LandingPage } from './components/landing/LandingPage';
 import { ProjectDashboard } from './components/dashboard/ProjectDashboard';
@@ -17,6 +17,31 @@ import { Loader2, Sparkles, Film, Sliders, FileText } from 'lucide-react';
 import { ToastContainer } from './components/common/ToastContainer';
 import { AuthStorage } from './utils/authStorage';
 
+export interface RouteState {
+  view: 'landing' | 'dashboard' | 'editor';
+  projectId: string | null;
+}
+
+/**
+ * Parses current window location pathname and hash to determine view and route parameters.
+ * Supports HTML5 pushState (/projects/:id, /dashboard, /) and hash-based fallback (#/projects/:id).
+ */
+export function parseRoute(pathname: string, hash: string = ''): RouteState {
+  const cleanHash = (hash || '').replace(/^#/, '');
+  const target = cleanHash.startsWith('/') ? cleanHash : pathname || '/';
+
+  const projectMatch = target.match(/^\/(?:projects|editor)\/([^/?#]+)/i);
+  if (projectMatch && projectMatch[1]) {
+    return { view: 'editor', projectId: decodeURIComponent(projectMatch[1]) };
+  }
+
+  if (target.startsWith('/dashboard')) {
+    return { view: 'dashboard', projectId: null };
+  }
+
+  return { view: 'landing', projectId: null };
+}
+
 export const App: React.FC = () => {
   const { isAuthenticated, isInitialized, checkSession } = useAuthStore();
   const [mobileTab, setMobileTab] = useState<'chat' | 'timeline' | 'inspector' | 'project'>('chat');
@@ -29,7 +54,66 @@ export const App: React.FC = () => {
     checkSession();
   }, [checkSession]);
 
-  // Strict Authentication Guard & Navigation Sync:
+  // Synchronized browser navigation helper (HTML5 History API)
+  const navigateTo = useCallback(
+    (
+      view: 'landing' | 'dashboard' | 'editor',
+      projectId: string | null = null,
+      replace = false
+    ) => {
+      setCurrentView(view);
+      setSelectedProjectId(projectId);
+
+      if (typeof window !== 'undefined' && window.history?.pushState) {
+        let targetUrl = '/';
+        if (view === 'editor' && projectId) {
+          targetUrl = `/projects/${encodeURIComponent(projectId)}`;
+        } else if (view === 'dashboard') {
+          targetUrl = '/dashboard';
+        }
+
+        if (window.location.pathname !== targetUrl) {
+          if (replace) {
+            window.history.replaceState({ view, projectId }, '', targetUrl);
+          } else {
+            window.history.pushState({ view, projectId }, '', targetUrl);
+          }
+        }
+      }
+    },
+    []
+  );
+
+  // Browser Back / Forward button navigation (popstate)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePopState = () => {
+      const route = parseRoute(window.location.pathname, window.location.hash);
+      const isAuthed = useAuthStore.getState().isAuthenticated;
+
+      if (!isAuthed) {
+        setCurrentView('landing');
+        setSelectedProjectId(null);
+      } else {
+        if (route.view === 'editor' && route.projectId) {
+          setCurrentView('editor');
+          setSelectedProjectId(route.projectId);
+        } else if (route.view === 'dashboard') {
+          setCurrentView('dashboard');
+          setSelectedProjectId(null);
+        } else {
+          setCurrentView('dashboard');
+          setSelectedProjectId(null);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Strict Authentication Guard & Initial Deep-Link Resolution:
   // Only synchronizes view AFTER initial session verification has resolved (isInitialized === true)
   // Guarantees zero privileged-view flash or race condition if stored credentials are invalid or expired.
   useEffect(() => {
@@ -37,15 +121,23 @@ export const App: React.FC = () => {
 
     if (!isAuthenticated) {
       if (currentView !== 'landing') {
-        setCurrentView('landing');
-        setSelectedProjectId(null);
+        navigateTo('landing', null, true);
       }
     } else {
-      if (currentView === 'landing') {
-        setCurrentView('dashboard');
+      // Direct deep link or refresh resolution
+      const initialRoute =
+        typeof window !== 'undefined'
+          ? parseRoute(window.location.pathname, window.location.hash)
+          : { view: 'dashboard', projectId: null };
+
+      if (initialRoute.view === 'editor' && initialRoute.projectId) {
+        setCurrentView('editor');
+        setSelectedProjectId(initialRoute.projectId);
+      } else if (initialRoute.view === 'dashboard' || currentView === 'landing') {
+        navigateTo('dashboard', null, true);
       }
     }
-  }, [isInitialized, isAuthenticated, currentView]);
+  }, [isInitialized, isAuthenticated, currentView, navigateTo]);
 
   // Query server project data with TanStack Query
   const { data: projectResponse, isLoading: isProjectLoading } = useQuery({
@@ -130,7 +222,7 @@ export const App: React.FC = () => {
     return (
       <>
         <ToastContainer />
-        <LandingPage onEnterStudio={() => setCurrentView('dashboard')} />
+        <LandingPage onEnterStudio={() => navigateTo('dashboard')} />
       </>
     );
   }
@@ -140,12 +232,7 @@ export const App: React.FC = () => {
     return (
       <>
         <ToastContainer />
-        <ProjectDashboard
-          onSelectProject={(pid) => {
-            setSelectedProjectId(pid);
-            setCurrentView('editor');
-          }}
-        />
+        <ProjectDashboard onSelectProject={(pid) => navigateTo('editor', pid)} />
       </>
     );
   }
@@ -169,12 +256,7 @@ export const App: React.FC = () => {
       <ToastContainer />
       <div className="flex flex-col h-screen w-screen bg-[#18191B] overflow-hidden text-[#FFF5F5] font-sans">
         {/* Editor Header */}
-        <EditorHeader
-          onBack={() => {
-            setSelectedProjectId(null);
-            setCurrentView('dashboard');
-          }}
-        />
+        <EditorHeader onBack={() => navigateTo('dashboard')} />
 
         {/* Main Responsive Workspace */}
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">

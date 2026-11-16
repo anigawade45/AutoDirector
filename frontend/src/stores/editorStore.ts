@@ -52,6 +52,7 @@ export interface AnalysisSummaryData {
 }
 
 export interface EditorStoreState {
+  activeVideoElement: HTMLVideoElement | null;
   project: {
     id: string;
     title: string;
@@ -138,6 +139,8 @@ export interface EditorStoreState {
   redo: () => void;
   setCurrentTime: (timeSec: number) => void;
   setPlaybackStatus: (status: EditorStoreState['playback']['status']) => void;
+  registerVideoElement: (el: HTMLVideoElement | null) => void;
+  togglePlayback: () => void;
   setPlaybackRate: (rate: number) => void;
   setVolume: (vol: number) => void;
   toggleMute: () => void;
@@ -162,7 +165,8 @@ export interface EditorStoreState {
 }
 
 export const useEditorStore = create<EditorStoreState>()(
-  immer((set) => ({
+  immer((set, get) => ({
+    activeVideoElement: null,
     project: null,
     activeTab: 'project',
 
@@ -394,6 +398,32 @@ export const useEditorStore = create<EditorStoreState>()(
       set((state) => {
         state.playback.status = status;
       }),
+
+    registerVideoElement: (el) =>
+      set((state) => {
+        state.activeVideoElement = el as any;
+      }),
+
+    togglePlayback: () => {
+      const el = get().activeVideoElement;
+      if (el) {
+        if (el.paused) {
+          el.play().catch(() => {});
+          set((state) => {
+            state.playback.status = 'playing';
+          });
+        } else {
+          el.pause();
+          set((state) => {
+            state.playback.status = 'paused';
+          });
+        }
+      } else {
+        set((state) => {
+          state.playback.status = state.playback.status === 'playing' ? 'paused' : 'playing';
+        });
+      }
+    },
 
     setPlaybackRate: (rate) =>
       set((state) => {

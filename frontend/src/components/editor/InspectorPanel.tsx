@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { compare, Operation, applyPatch } from 'fast-json-patch';
+import { rebasePlanPatch } from '../../utils/planRebase';
 import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
@@ -114,30 +115,31 @@ export const InspectorPanel: React.FC = () => {
           if (truePlan) {
             // Attempt smart optimistic rebase of user's local edits onto the newer head plan
             let rebaseSuccess = false;
-            try {
-              const localPatch = compare(plan.current, plan.draft);
-              if (localPatch.length > 0) {
-                const rebasedCandidate = JSON.parse(JSON.stringify(truePlan));
-                applyPatch(rebasedCandidate, localPatch, false, true);
-                const rebasedPatch = compare(truePlan, rebasedCandidate);
-                if (rebasedPatch.length > 0) {
-                  const rebaseRes = await api.patchPlan(project.id, headV, {
-                    patch: rebasedPatch as JsonPatchOperation[],
-                    baseVersion: headV,
-                  });
-                  commitDraft(rebaseRes.plan);
-                  setSaveStatus('saved');
-                  setStatusMessage(`Auto-synced to v${rebaseRes.plan.version}`);
-                  toast.success(`Auto-synced to v${rebaseRes.plan.version}`, 'Rebased');
-                  setTimeout(() => setStatusMessage('All changes saved'), 2500);
-                  rebaseSuccess = true;
-                }
+            const rebase = rebasePlanPatch(plan.current, plan.draft, truePlan);
+
+            if (rebase.success && rebase.rebasedPatch && rebase.rebasedPatch.length > 0) {
+              try {
+                const rebaseRes = await api.patchPlan(project.id, headV, {
+                  patch: rebase.rebasedPatch as JsonPatchOperation[],
+                  baseVersion: headV,
+                });
+                commitDraft(rebaseRes.plan);
+                setSaveStatus('saved');
+                setStatusMessage(`Auto-synced to v${rebaseRes.plan.version}`);
+                toast.success(`Auto-synced to v${rebaseRes.plan.version}`, 'Rebased');
+                setTimeout(() => setStatusMessage('All changes saved'), 2500);
+                rebaseSuccess = true;
+              } catch (rebaseErr) {
+                console.warn(
+                  'Could not cleanly apply rebased patch onto latest plan, falling back to server state:',
+                  rebaseErr
+                );
               }
-            } catch (rebaseErr) {
-              console.warn(
-                'Could not cleanly rebase patch onto latest plan, falling back to server state:',
-                rebaseErr
-              );
+            } else if (rebase.success && rebase.rebasedPatch?.length === 0) {
+              commitDraft(truePlan);
+              setSaveStatus('saved');
+              setStatusMessage('All changes saved');
+              rebaseSuccess = true;
             }
 
             if (!rebaseSuccess) {

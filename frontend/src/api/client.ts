@@ -82,15 +82,40 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers,
   });
 
-  const payload = await response.json();
+  // Guard against non-JSON or truncated responses (e.g. 502/504 HTML proxy errors, 204 No Content)
+  const contentType = response.headers.get('content-type') || '';
+  let payload: any = null;
+  let rawText = '';
 
-  if (!response.ok || !payload.success) {
+  if (contentType.includes('application/json')) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  } else {
+    try {
+      rawText = await response.text();
+    } catch {
+      rawText = '';
+    }
+  }
+
+  if (!response.ok || !payload || payload.success === false) {
     if (response.status === 401) {
       AuthStorage.clear();
     }
-    const error = new Error(payload?.error?.message || 'API request failed') as any;
+    const message =
+      payload?.error?.message ||
+      (rawText && rawText.length < 300 ? rawText.trim() : null) ||
+      `HTTP Error ${response.status} (${response.statusText || 'Unknown'})`;
+
+    const error = new Error(message) as any;
     error.status = response.status;
-    error.code = payload?.error?.code;
+    error.code = payload?.error?.code || `HTTP_${response.status}`;
+    if (payload?.error?.details) {
+      error.details = payload.error.details;
+    }
     throw error;
   }
 
@@ -254,6 +279,13 @@ export const api = {
       } else if (isFailed) {
         isFinished = true;
         onProgress({ ...data, state: 'failed' });
+        if (onError) {
+          const errMsg = data?.error?.message || data?.errorMessage || 'Job execution failed';
+          const err = new Error(errMsg) as any;
+          err.code = data?.error?.code || 'JOB_FAILED';
+          err.details = data?.error?.details;
+          onError(err);
+        }
         cleanup();
       } else {
         onProgress(data);
@@ -287,6 +319,9 @@ export const api = {
         });
 
         if (!response.ok || !response.body) {
+          if (!response.ok && !isFinished && onError) {
+            onError(new Error(`Failed to subscribe to job events (HTTP ${response.status})`));
+          }
           return false;
         }
 
