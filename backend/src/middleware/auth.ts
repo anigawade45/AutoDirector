@@ -28,7 +28,22 @@ export async function authMiddleware(
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
   } else if (req.query.token && typeof req.query.token === 'string') {
-    // Support EventSource (SSE) which cannot send custom Authorization headers
+    // Restrict query parameter tokens strictly to Server-Sent Events (SSE)
+    // to prevent token exposure in server logs, browser history, and proxy headers for REST routes
+    const isSseRequest =
+      req.path.endsWith('/events') ||
+      req.originalUrl?.includes('/events') ||
+      req.headers.accept?.includes('text/event-stream');
+
+    if (!isSseRequest) {
+      return next(
+        new AppError(
+          401,
+          'QUERY_TOKEN_FORBIDDEN',
+          'Authentication via query parameter is restricted strictly to Server-Sent Events (/events)'
+        )
+      );
+    }
     token = req.query.token;
   }
 
@@ -37,27 +52,19 @@ export async function authMiddleware(
   }
 
   try {
-    let user = null;
-
-    // 1. Try decoding RFC 7519 standard JWT token
+    // Strictly require RFC 7519 cryptographic JWT signature verification.
+    // Raw identifiers (ObjectId / email strings) are never accepted as tokens.
     const jwtPayload = TokenService.verifyToken(token);
-    if (jwtPayload) {
-      if (jwtPayload.sub && mongoose.isValidObjectId(jwtPayload.sub)) {
-        user = await UserModel.findById(jwtPayload.sub);
-      }
-      if (!user && jwtPayload.email && typeof UserModel.findOne === 'function') {
-        user = await UserModel.findOne({ email: jwtPayload.email });
-      }
+    if (!jwtPayload) {
+      return next(new AppError(401, 'UNAUTHENTICATED', 'Invalid, expired, or malformed JWT token'));
     }
 
-    // 2. Direct user ObjectId or registered email lookup
-    if (!user) {
-      const cleanToken = token.startsWith('user_') ? token.replace(/^user_/, '') : token;
-      if (mongoose.isValidObjectId(cleanToken)) {
-        user = await UserModel.findById(cleanToken);
-      } else if (token.includes('@') && typeof UserModel.findOne === 'function') {
-        user = await UserModel.findOne({ email: token.toLowerCase() });
-      }
+    let user = null;
+    if (jwtPayload.sub && mongoose.isValidObjectId(jwtPayload.sub)) {
+      user = await UserModel.findById(jwtPayload.sub);
+    }
+    if (!user && jwtPayload.email && typeof UserModel.findOne === 'function') {
+      user = await UserModel.findOne({ email: jwtPayload.email });
     }
 
     if (!user) {

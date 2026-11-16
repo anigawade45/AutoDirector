@@ -211,6 +211,114 @@ describe('Authentication & Authorization Suite', () => {
     });
   });
 
+  describe('2b. AuthMiddleware Security Hardening', () => {
+    it('rejects raw MongoDB ObjectId as Bearer token with HTTP 401', async () => {
+      const rawObjectId = '507f1f77bcf86cd799439011';
+      const req = {
+        headers: { authorization: `Bearer ${rawObjectId}` },
+        query: {},
+        path: '/api/projects',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 401,
+          code: 'UNAUTHENTICATED',
+        })
+      );
+    });
+
+    it('rejects raw email as Bearer token with HTTP 401', async () => {
+      const req = {
+        headers: { authorization: 'Bearer director@studio.ai' },
+        query: {},
+        path: '/api/projects',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 401,
+          code: 'UNAUTHENTICATED',
+        })
+      );
+    });
+
+    it('rejects ?token= query parameter on standard REST endpoints with 401 QUERY_TOKEN_FORBIDDEN', async () => {
+      const validToken = TokenService.generateToken({
+        id: '507f1f77bcf86cd799439011',
+        email: 'user@studio.ai',
+        tier: 'free',
+      });
+
+      const req = {
+        headers: {},
+        query: { token: validToken },
+        path: '/api/projects',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          statusCode: 401,
+          code: 'QUERY_TOKEN_FORBIDDEN',
+        })
+      );
+    });
+
+    it('accepts ?token= query parameter on SSE /events endpoints with valid JWT', async () => {
+      const mockUser = {
+        _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439011'),
+        email: 'sse_user@studio.ai',
+        tier: 'pro',
+      };
+      (UserModel.findById as any).mockResolvedValue(mockUser);
+
+      const validToken = TokenService.generateToken({
+        id: '507f1f77bcf86cd799439011',
+        email: 'sse_user@studio.ai',
+        tier: 'pro',
+      });
+
+      const req = {
+        headers: { accept: 'text/event-stream' },
+        query: { token: validToken },
+        path: '/api/jobs/job_123/events',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalled();
+      expect(req.user).toBeDefined();
+      expect(req.user?.email).toBe('sse_user@studio.ai');
+    });
+
+    it('accepts valid cryptographic JWT token in Authorization: Bearer header', async () => {
+      const mockUser = {
+        _id: new mongoose.Types.ObjectId('507f1f77bcf86cd799439011'),
+        email: 'valid_bearer@studio.ai',
+        tier: 'enterprise',
+      };
+      (UserModel.findById as any).mockResolvedValue(mockUser);
+
+      const validToken = TokenService.generateToken({
+        id: '507f1f77bcf86cd799439011',
+        email: 'valid_bearer@studio.ai',
+        tier: 'enterprise',
+      });
+
+      const req = {
+        headers: { authorization: `Bearer ${validToken}` },
+        query: {},
+        path: '/api/projects',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+      expect(nextFn).toHaveBeenCalled();
+      expect(req.user?.tier).toBe('enterprise');
+    });
+  });
+
   describe('3. AuthController - Registration & Tier Quotas', () => {
     it('registers a new Free tier user with default Free quotas', async () => {
       (UserModel.findOne as any).mockResolvedValue(null);

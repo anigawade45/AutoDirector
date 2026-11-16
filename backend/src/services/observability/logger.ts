@@ -17,6 +17,8 @@ export interface LogContext {
 export class StructuredLogger {
   private static redactSensitiveKeys = new Set([
     'authorization',
+    'token',
+    'jwt',
     'password',
     'secret',
     'apikey',
@@ -38,6 +40,8 @@ export class StructuredLogger {
     if (typeof obj === 'string') {
       // Redact authorization Bearer tokens
       let sanitized = obj.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [REDACTED]');
+      // Redact query parameter tokens
+      sanitized = sanitized.replace(/([?&]token=)[^&]+/gi, '$1[REDACTED]');
       // Redact S3 query signatures
       sanitized = sanitized.replace(/([?&]X-Amz-Signature=)[^&]+/gi, '$1[REDACTED]');
       sanitized = sanitized.replace(/([?&]Signature=)[^&]+/gi, '$1[REDACTED]');
