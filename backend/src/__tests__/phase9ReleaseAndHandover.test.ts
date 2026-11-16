@@ -316,7 +316,24 @@ describe('Phase 9 — Release and Handover Acceptance Suite', () => {
     });
 
     it('verifies production backup commands, archive formats, and retention policies', () => {
-      const backupResult = BackupRestoreService.verifyBackupProcedures();
+      // Default invocation without evidence correctly marks specification as UNVERIFIED/simulated
+      const unverifiedResult = BackupRestoreService.verifyBackupProcedures();
+      expect(unverifiedResult.specificationValid).toBe(true);
+      expect(unverifiedResult.isSimulated).toBe(true);
+      expect(unverifiedResult.allPassed).toBe(false);
+      expect(unverifiedResult.checks.every((c) => c.verificationStatus === 'UNVERIFIED')).toBe(
+        true
+      );
+
+      // Injected verification evidence marks checks as VERIFIED
+      const backupResult = BackupRestoreService.verifyBackupProcedures({
+        evidence: [
+          { service: 'mongodb', status: 'VERIFIED', details: 'mongodump verified' },
+          { service: 'mongodb', status: 'VERIFIED', details: 'mongorestore verified' },
+          { service: 'redis', status: 'VERIFIED', details: 'BGSAVE verified' },
+          { service: 's3', status: 'VERIFIED', details: 'S3 replication verified' },
+        ],
+      });
       expect(backupResult.allPassed).toBe(true);
       expect(backupResult.checks).toHaveLength(4);
 
@@ -330,6 +347,8 @@ describe('Phase 9 — Release and Handover Acceptance Suite', () => {
 
     it('calculates mathematically sound worker cluster sizing for 100, 1,000, and 10,000 daily renders', () => {
       const sizing100 = WorkerCapacityService.calculateClusterSizing(100);
+      expect(sizing100.isEstimated).toBe(true);
+      expect(sizing100.modelType).toBe('ESTIMATED_THEORETICAL_MODEL');
       expect(sizing100.recommendedRenderWorkers).toBeGreaterThanOrEqual(2);
       expect(sizing100.totalVcpuRequired).toBeGreaterThanOrEqual(4);
 

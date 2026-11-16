@@ -6,6 +6,17 @@ export interface CapacityProfile {
   jobsPerHourPerWorker: number;
 }
 
+export interface CapacitySizingOptions {
+  peakTrafficSharePercent?: number; // default: 20%
+  blendedJobsPerHourOverride?: number; // override weighted jobs/hr
+  targetPeakUtilization?: number; // default: 0.75 (75%)
+  measuredTelemetry?: {
+    avgRenderTimeSec?: number;
+    peakQueueDepth?: number;
+    measuredJobsPerHour?: number;
+  };
+}
+
 export interface ClusterSizing {
   dailyRendersTarget: number;
   peakHourRenders: number; // ~20% of daily renders occur during peak hour
@@ -14,6 +25,15 @@ export interface ClusterSizing {
   totalVcpuRequired: number;
   totalMemoryGbRequired: number;
   expectedMaxQueueWaitSec: number;
+  isEstimated: boolean;
+  modelType: 'ESTIMATED_THEORETICAL_MODEL' | 'EMPIRICAL_MEASURED_MODEL';
+  label: string;
+  assumptions: {
+    peakTrafficSharePercent: number;
+    targetPeakUtilization: number;
+    blendedJobsPerHourPerWorker: number;
+    benchmarkSource: 'static_profile_defaults' | 'injected_telemetry';
+  };
 }
 
 export class WorkerCapacityService {
@@ -47,19 +67,27 @@ export class WorkerCapacityService {
 
   /**
    * Computes recommended worker cluster sizing for target daily throughput.
+   * Explicitly labeled as theoretical estimation unless empirical telemetry is injected.
    */
-  static calculateClusterSizing(dailyRendersTarget: number): ClusterSizing {
-    // Standard rule: 20% of traffic occurs in peak 60-minute window
-    const peakHourRenders = Math.ceil(dailyRendersTarget * 0.2);
+  static calculateClusterSizing(
+    dailyRendersTarget: number,
+    options?: CapacitySizingOptions
+  ): ClusterSizing {
+    const peakShare = options?.peakTrafficSharePercent ?? 20;
+    const peakHourRenders = Math.ceil(dailyRendersTarget * (peakShare / 100));
 
-    // Blended render throughput: 70% previews (300/hr), 25% 1080p (128/hr), 5% 4K (37/hr)
-    // Weighted average capacity per worker = 0.70*300 + 0.25*128 + 0.05*37 = 210 + 32 + 1.85 ~= 243 jobs/hr/worker
-    const blendedJobsPerHourPerWorker = 240;
+    // Blended render throughput:
+    // Default baseline model: 70% previews (300/hr), 25% 1080p (128/hr), 5% 4K (37/hr) = ~240 jobs/hr/worker
+    const isMeasured = Boolean(options?.measuredTelemetry?.measuredJobsPerHour);
+    const blendedJobsPerHourPerWorker =
+      options?.blendedJobsPerHourOverride || options?.measuredTelemetry?.measuredJobsPerHour || 240;
 
-    // Number of render workers needed to keep peak utilization below 75%
+    const targetPeakUtilization = options?.targetPeakUtilization ?? 0.75;
+
+    // Number of render workers needed to keep peak utilization below target
     const minRenderWorkers = Math.max(
       2,
-      Math.ceil(peakHourRenders / (blendedJobsPerHourPerWorker * 0.75))
+      Math.ceil(peakHourRenders / (blendedJobsPerHourPerWorker * targetPeakUtilization))
     );
 
     // Analysis jobs take ~18s for 10-minute video (~200 jobs/hr/worker)
@@ -73,7 +101,7 @@ export class WorkerCapacityService {
 
     // Expected queue wait time at peak using M/M/c queueing approximation
     const utilization = peakHourRenders / (minRenderWorkers * blendedJobsPerHourPerWorker);
-    const avgServiceTimeSec = 18.0; // weighted avg render time
+    const avgServiceTimeSec = options?.measuredTelemetry?.avgRenderTimeSec ?? 18.0;
     const expectedMaxQueueWaitSec = Number(
       (
         (utilization / (1 - Math.min(utilization, 0.95))) *
@@ -89,19 +117,38 @@ export class WorkerCapacityService {
       totalVcpuRequired: Math.ceil(totalVcpu),
       totalMemoryGbRequired: Math.ceil(totalMemoryGb),
       expectedMaxQueueWaitSec,
+      isEstimated: true,
+      modelType: isMeasured ? 'EMPIRICAL_MEASURED_MODEL' : 'ESTIMATED_THEORETICAL_MODEL',
+      label: isMeasured
+        ? 'EMPIRICAL CAPACITY ESTIMATE (MEASURED TELEMETRY)'
+        : 'THEORETICAL CAPACITY ESTIMATE (SIMULATED PROFILE MODEL)',
+      assumptions: {
+        peakTrafficSharePercent: peakShare,
+        targetPeakUtilization,
+        blendedJobsPerHourPerWorker,
+        benchmarkSource: isMeasured ? 'injected_telemetry' : 'static_profile_defaults',
+      },
     };
   }
 }
 
 // Auto-run if executed directly via CLI
-if (
-  process.argv[1]?.endsWith('workerCapacityCheck.ts') ||
-  process.argv[1]?.endsWith('workerCapacityCheck.js')
-) {
-  console.log('[WorkerCapacityCheck] Cluster Sizing Sizing Calculator:');
+const isDirectEntry = Boolean(
+  process.argv[1]?.includes('backend') &&
+  (process.argv[1]?.endsWith('workerCapacityCheck.ts') ||
+    process.argv[1]?.endsWith('workerCapacityCheck.js'))
+);
+
+if (isDirectEntry) {
+  console.log(
+    '[WorkerCapacityCheck] Worker Cluster Sizing Planner (ESTIMATED / THEORETICAL MODEL):'
+  );
+  console.log(
+    'NOTE: Sizing outputs are theoretical capacity models based on baseline FFmpeg benchmarks and simulated traffic distributions. Actual production cluster performance requires real-time queue telemetry.\n'
+  );
   const tiers = [100, 1000, 10000];
   for (const t of tiers) {
-    console.log(`\n--- Sizing for ${t} Daily Renders ---`);
+    console.log(`\n--- Estimated Sizing for ${t} Daily Renders (SIMULATED) ---`);
     console.table(WorkerCapacityService.calculateClusterSizing(t));
   }
 }
