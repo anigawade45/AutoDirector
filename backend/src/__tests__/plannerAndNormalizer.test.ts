@@ -303,9 +303,9 @@ describe('Phase 4: Plan Normalizer, Patch Engine & Planner Service', () => {
           height: 1080,
           fps: 30,
           silences: [
-            { startMs: 2000, endMs: 3500 }, // 1.5s silence
-            { startMs: 8000, endMs: 8200 }, // 0.2s silence (below 0.6s threshold)
-            { startMs: 15000, endMs: 16200 }, // 1.2s silence
+            { startMs: 2000, endMs: 3500, avgDb: -45 }, // 1.5s silence
+            { startMs: 8000, endMs: 8200, avgDb: -45 }, // 0.2s silence (below 0.6s threshold)
+            { startMs: 15000, endMs: 16200, avgDb: -45 }, // 1.2s silence
           ],
           sceneCuts: [],
           beats: { bpm: 120, grid: [] },

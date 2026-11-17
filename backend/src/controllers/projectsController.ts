@@ -183,7 +183,10 @@ export class ProjectsController {
 
           analysisSummary = {
             durationMs:
-              baseAsset.media?.durationMs || (project.durationSec ? project.durationSec * 1000 : 0),
+              baseAsset.media?.durationMs ||
+              ((project as any).durationSec
+                ? (project as any).durationSec * 1000
+                : project.stats?.durationMs || 0),
             silencesCount: analysis?.silences?.length || 0,
             sceneCutsCount: analysis?.sceneCuts?.length || 0,
             bpm: analysis?.beats?.bpm || 120,
