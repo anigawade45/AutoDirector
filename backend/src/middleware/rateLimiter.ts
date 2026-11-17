@@ -7,6 +7,7 @@ export interface RateLimiterOptions {
   prefix: string;
   message?: string;
   skip?: (req: Request) => boolean;
+  keyGenerator?: (req: Request) => string;
 }
 
 // In-memory sliding window fallback map: key -> list of request timestamps (epoch ms)
@@ -19,7 +20,7 @@ export function resetRateLimiterCache(): void {
 /**
  * Extracts the real client IP, respecting trusted reverse proxy headers.
  */
-function getClientIp(req: Request): string {
+export function getClientIp(req: Request): string {
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string' && forwarded) {
     const first = forwarded.split(',')[0].trim();
@@ -33,7 +34,7 @@ function getClientIp(req: Request): string {
  * Uses atomic Redis transactions when available, with a resilient in-memory sliding-window fallback.
  */
 export function createRateLimiter(options: RateLimiterOptions) {
-  const { windowMs, max, prefix, message, skip } = options;
+  const { windowMs, max, prefix, message, skip, keyGenerator } = options;
   const windowSec = Math.ceil(windowMs / 1000);
 
   return async function rateLimiterMiddleware(
@@ -45,8 +46,8 @@ export function createRateLimiter(options: RateLimiterOptions) {
       return next();
     }
 
-    const clientIp = getClientIp(req);
-    const redisKey = `ratelimit:${prefix}:${clientIp}`;
+    const key = keyGenerator ? keyGenerator(req) : getClientIp(req);
+    const redisKey = `ratelimit:${prefix}:${key}`;
     const now = Date.now();
 
     let currentHits = 1;
@@ -90,7 +91,7 @@ export function createRateLimiter(options: RateLimiterOptions) {
 
     // 2. In-memory sliding window fallback if Redis is not used
     if (!usedRedis) {
-      const memKey = `${prefix}:${clientIp}`;
+      const memKey = `${prefix}:${key}`;
       const windowStart = now - windowMs;
       const timestamps = inMemoryCache.get(memKey) || [];
 
@@ -144,6 +145,50 @@ export const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20,
   message: 'Too many authentication attempts. Please wait 15 minutes before trying again.',
+});
+
+/**
+ * Account-level login brute-force and credential stuffing limiter (SEC-009).
+ * Limits repeated/failed login attempts targeting a specific account/email address,
+ * preventing distributed botnet password spraying against user accounts.
+ * Limit: 10 attempts per 15 minutes per email account.
+ */
+export const accountBruteForceLimiter = createRateLimiter({
+  prefix: 'auth_account',
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  keyGenerator: (req) =>
+    req.body?.email && typeof req.body.email === 'string'
+      ? `email_${req.body.email.toLowerCase().trim()}`
+      : getClientIp(req),
+  message:
+    'Too many login attempts for this account. Please wait 15 minutes before retrying or reset your password.',
+});
+
+/**
+ * Upload Sessions Limiter (/api/uploads/*) (SEC-009).
+ * Protects S3 bucket initialization, multipart session allocations, and storage metadata from rapid churn.
+ * Limit: 60 upload operations per 1 minute per IP/user.
+ */
+export const uploadRateLimiter = createRateLimiter({
+  prefix: 'upload',
+  windowMs: 60 * 1000, // 1 minute
+  max: 60,
+  keyGenerator: (req) => (req as any).user?.id || getClientIp(req),
+  message: 'Upload request limit reached. Please wait a moment before initiating more uploads.',
+});
+
+/**
+ * Job Status & SSE Ticket Limiter (/api/jobs/*) (SEC-009).
+ * Protects background queue status polling and ephemeral SSE ticket issuance from polling storms.
+ * Limit: 120 queries per 1 minute per IP/user.
+ */
+export const jobsRateLimiter = createRateLimiter({
+  prefix: 'jobs',
+  windowMs: 60 * 1000, // 1 minute
+  max: 120,
+  keyGenerator: (req) => (req as any).user?.id || getClientIp(req),
+  message: 'Job status query limit reached. Please reduce polling frequency or connect via SSE.',
 });
 
 /**

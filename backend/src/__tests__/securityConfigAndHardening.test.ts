@@ -9,6 +9,9 @@ import { securityHeadersMiddleware } from '../middleware/securityHeaders.js';
 import {
   createRateLimiter,
   authRateLimiter,
+  accountBruteForceLimiter,
+  uploadRateLimiter,
+  jobsRateLimiter,
   generalApiRateLimiter,
   resetRateLimiterCache,
 } from '../middleware/rateLimiter.js';
@@ -796,6 +799,185 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
 
       expect(nextCalled).toBe(true);
       expect(mockRes.setHeader).not.toHaveBeenCalled();
+    });
+
+    it('enforces account-level brute-force throttling across distributed client IPs (SEC-009)', async () => {
+      const targetEmail = 'target-user@example.com';
+      const createMockRes = () => {
+        const h: Record<string, any> = {};
+        return {
+          headers: h,
+          setHeader: vi.fn((k: string, v: any) => {
+            h[k] = v;
+          }),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as unknown as Response & { headers: Record<string, any> };
+      };
+
+      // 10 attempts from 10 different distributed IP addresses targeting targetEmail
+      for (let i = 1; i <= 10; i++) {
+        const req = {
+          body: { email: targetEmail },
+          headers: { 'x-forwarded-for': `192.0.2.${i}` },
+        } as unknown as Request;
+        const res = createMockRes();
+        let nextCalled = false;
+        await accountBruteForceLimiter(req, res, () => {
+          nextCalled = true;
+        });
+        expect(nextCalled).toBe(true);
+        expect(res.status).not.toHaveBeenCalled();
+      }
+
+      // 11th attempt from another distinct IP (192.0.2.11) targeting targetEmail should be throttled (HTTP 429)
+      const attackReq = {
+        body: { email: `  ${targetEmail.toUpperCase()}  ` }, // tests normalization (trim + lowercase)
+        headers: { 'x-forwarded-for': '192.0.2.11' },
+      } as unknown as Request;
+      const attackRes = createMockRes();
+      let attackNextCalled = false;
+      await accountBruteForceLimiter(attackReq, attackRes, () => {
+        attackNextCalled = true;
+      });
+
+      expect(attackNextCalled).toBe(false);
+      expect(attackRes.status).toHaveBeenCalledWith(429);
+      expect(attackRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: expect.stringContaining('Too many login attempts for this account'),
+          }),
+        })
+      );
+
+      // Meanwhile, an attempt targeting an unattacked account from the same IP succeeds
+      const innocentReq = {
+        body: { email: 'innocent@example.com' },
+        headers: { 'x-forwarded-for': '192.0.2.11' },
+      } as unknown as Request;
+      const innocentRes = createMockRes();
+      let innocentNextCalled = false;
+      await accountBruteForceLimiter(innocentReq, innocentRes, () => {
+        innocentNextCalled = true;
+      });
+      expect(innocentNextCalled).toBe(true);
+      expect(innocentRes.status).not.toHaveBeenCalled();
+    });
+
+    it('enforces upload rate limiting per user/IP (SEC-009)', async () => {
+      const createMockRes = () => {
+        const h: Record<string, any> = {};
+        return {
+          headers: h,
+          setHeader: vi.fn((k: string, v: any) => {
+            h[k] = v;
+          }),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as unknown as Response & { headers: Record<string, any> };
+      };
+
+      const userReq = {
+        user: { id: 'user_upload_test_123' },
+        headers: { 'x-forwarded-for': '198.51.100.50' },
+      } as unknown as Request;
+
+      // 60 requests within limit
+      for (let i = 1; i <= 60; i++) {
+        const res = createMockRes();
+        let nextCalled = false;
+        await uploadRateLimiter(userReq, res, () => {
+          nextCalled = true;
+        });
+        expect(nextCalled).toBe(true);
+      }
+
+      // 61st request rejected with HTTP 429
+      const overflowRes = createMockRes();
+      let overflowNextCalled = false;
+      await uploadRateLimiter(userReq, overflowRes, () => {
+        overflowNextCalled = true;
+      });
+      expect(overflowNextCalled).toBe(false);
+      expect(overflowRes.status).toHaveBeenCalledWith(429);
+      expect(overflowRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: expect.stringContaining('Upload request limit reached'),
+          }),
+        })
+      );
+    });
+
+    it('enforces jobs rate limiting per user/IP (SEC-009)', async () => {
+      const createMockRes = () => {
+        const h: Record<string, any> = {};
+        return {
+          headers: h,
+          setHeader: vi.fn((k: string, v: any) => {
+            h[k] = v;
+          }),
+          status: vi.fn().mockReturnThis(),
+          json: vi.fn(),
+        } as unknown as Response & { headers: Record<string, any> };
+      };
+
+      const userReq = {
+        user: { id: 'user_jobs_test_456' },
+        headers: { 'x-forwarded-for': '198.51.100.60' },
+      } as unknown as Request;
+
+      // 120 queries within limit
+      for (let i = 1; i <= 120; i++) {
+        const res = createMockRes();
+        let nextCalled = false;
+        await jobsRateLimiter(userReq, res, () => {
+          nextCalled = true;
+        });
+        expect(nextCalled).toBe(true);
+      }
+
+      // 121st query rejected with HTTP 429
+      const overflowRes = createMockRes();
+      let overflowNextCalled = false;
+      await jobsRateLimiter(userReq, overflowRes, () => {
+        overflowNextCalled = true;
+      });
+      expect(overflowNextCalled).toBe(false);
+      expect(overflowRes.status).toHaveBeenCalledWith(429);
+      expect(overflowRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: expect.stringContaining('Job status query limit reached'),
+          }),
+        })
+      );
+    });
+
+    it('verifies route mounting for upload, jobs, and auth brute-force rate limiters (SEC-009)', () => {
+      const uploadsRoutesPath = path.join(rootDir, 'backend/src/routes/uploads.routes.ts');
+      const jobsRoutesPath = path.join(rootDir, 'backend/src/routes/jobs.routes.ts');
+      const authRoutesPath = path.join(rootDir, 'backend/src/routes/auth.routes.ts');
+
+      const uploadsContent = fs.readFileSync(uploadsRoutesPath, 'utf8');
+      const jobsContent = fs.readFileSync(jobsRoutesPath, 'utf8');
+      const authContent = fs.readFileSync(authRoutesPath, 'utf8');
+
+      expect(uploadsContent).toContain('uploadRateLimiter');
+      expect(uploadsContent).toMatch(/uploadsRouter\.use\(\s*uploadRateLimiter\s*\)/);
+
+      expect(jobsContent).toContain('jobsRateLimiter');
+      expect(jobsContent).toMatch(/jobsRouter\.use\(\s*jobsRateLimiter\s*\)/);
+
+      expect(authContent).toContain('accountBruteForceLimiter');
+      expect(authContent).toMatch(/authRouter\.post\(\s*['"]\/login['"],\s*accountBruteForceLimiter/);
     });
   });
 
