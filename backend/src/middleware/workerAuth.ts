@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { env } from '../config/env.js';
 import { AppError } from './errorHandler.js';
 import { redisConnection } from '../config/redis.js';
+import { StructuredLogger } from '../services/observability/logger.js';
 
 // Local in-memory sliding TTL map for test environments or temporary Redis disconnects
 const inMemoryFallbackMap = new Map<string, number>();
@@ -18,6 +19,14 @@ function cleanExpiredInMemoryEntries(): void {
 }
 
 /**
+ * Returns current size of local in-memory fallback replay cache (for test assertions).
+ */
+export function getInMemoryFallbackReplaySize(): number {
+  cleanExpiredInMemoryEntries();
+  return inMemoryFallbackMap.size;
+}
+
+/**
  * Resets local in-memory replay cache (primarily for automated test suite isolation).
  */
 export function resetWorkerAuthReplayCache(): void {
@@ -28,7 +37,7 @@ export function resetWorkerAuthReplayCache(): void {
  * Atomically marks an event as processed in Redis with a 10-minute TTL.
  * Returns true if the event was already processed (replay detected), or false if new.
  */
-async function checkAndMarkProcessed(eventId: string): Promise<boolean> {
+export async function checkAndMarkWorkerEventProcessed(eventId: string): Promise<boolean> {
   const redisKey = `worker:event:${eventId}`;
   const isProd = env.NODE_ENV === 'production';
 
@@ -53,19 +62,20 @@ async function checkAndMarkProcessed(eventId: string): Promise<boolean> {
     }
 
     if (isProd) {
-      console.error(
+      StructuredLogger.error(
         `[WorkerAuth] CRITICAL: Redis unavailable in production (status: ${redisConnection?.status || 'uninitialized'}). Distributed replay protection degraded.`
       );
     }
   } catch (err: any) {
     if (isProd) {
-      console.error(
-        `[WorkerAuth] CRITICAL: Redis error during replay check in production: ${err?.message}`
+      StructuredLogger.error(
+        `[WorkerAuth] CRITICAL: Redis error during replay check in production: ${err?.message}`,
+        { error: err?.message, eventId }
       );
     } else {
-      console.warn(
-        '[WorkerAuth] Redis replay check error, falling back to local cache:',
-        err?.message
+      StructuredLogger.warn(
+        '[WorkerAuth] Redis replay check error, falling back to local cache',
+        { error: err?.message, eventId }
       );
     }
   }
@@ -82,6 +92,9 @@ async function checkAndMarkProcessed(eventId: string): Promise<boolean> {
   inMemoryFallbackMap.set(eventId, now + REPLAY_TTL_SECONDS * 1000);
   return false;
 }
+
+// Alias for internal module consistency
+const checkAndMarkProcessed = checkAndMarkWorkerEventProcessed;
 
 export async function verifyWorkerSignature(
   req: Request,
@@ -141,6 +154,14 @@ export async function verifyWorkerSignature(
   try {
     const isReplay = await checkAndMarkProcessed(eventId);
     if (isReplay) {
+      StructuredLogger.warn(
+        '[WorkerAuth] Duplicate worker event ignored via distributed replay guard',
+        {
+          workerId,
+          eventId,
+          requestId: req.id,
+        }
+      );
       // Monotonic idempotent delivery: acknowledge duplicate with HTTP 200 without reprocessing
       res.status(200).json({
         success: true,
