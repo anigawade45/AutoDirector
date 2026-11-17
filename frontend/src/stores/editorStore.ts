@@ -138,6 +138,7 @@ export interface EditorStoreState {
   undo: () => void;
   redo: () => void;
   setCurrentTime: (timeSec: number) => void;
+  setDuration: (durationSec: number) => void;
   setPlaybackStatus: (status: EditorStoreState['playback']['status']) => void;
   registerVideoElement: (el: HTMLVideoElement | null) => void;
   togglePlayback: () => void;
@@ -392,6 +393,16 @@ export const useEditorStore = create<EditorStoreState>()(
     setCurrentTime: (timeSec) =>
       set((state) => {
         state.playback.currentTime = Math.max(0, Math.min(timeSec, state.playback.duration));
+      }),
+
+    setDuration: (durationSec) =>
+      set((state) => {
+        if (Number.isFinite(durationSec) && durationSec > 0) {
+          state.playback.duration = durationSec;
+          if (state.project) {
+            state.project.durationSec = Math.max(state.project.durationSec || 0, durationSec);
+          }
+        }
       }),
 
     setPlaybackStatus: (status) =>

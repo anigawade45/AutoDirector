@@ -103,9 +103,17 @@ export class TranscriptionService {
         ].filter(Boolean) as string[];
 
         const audioBuffer = fs.readFileSync(audioWavPath);
-        const base64Audio = audioBuffer.toString('base64');
 
-        const prompt = `You are a high-accuracy speech transcription engine. Listen carefully to the entire audio clip and transcribe 100% of the spoken words with millisecond word timestamps.
+        // Guard: Gemini inlineData has a strict 20MB payload limit (approx 14MB binary before base64 expansion)
+        // If audio exceeds 14MB (e.g. videos > 7-10 minutes), defer to Whisper or acoustic alignment
+        if (audioBuffer.length > 14 * 1024 * 1024) {
+          console.warn(
+            `[TranscriptionService] Audio file (${(audioBuffer.length / (1024 * 1024)).toFixed(1)}MB) exceeds Gemini 20MB inline payload limit. Deferring to Whisper or acoustic fallback.`
+          );
+        } else {
+          const base64Audio = audioBuffer.toString('base64');
+
+          const prompt = `You are a high-accuracy speech transcription engine. Listen carefully to the entire audio clip and transcribe 100% of the spoken words with millisecond word timestamps.
 CRITICAL TRANSCRIPTION RULES:
 1. Do NOT truncate or cut off words at the end of the sentence or greeting. Transcribe every single spoken word to the very end (including cultural terms, festival names like Diwali, Deepavali, Eid, Christmas, greetings, and proper nouns).
 2. The 'text' must match the complete spoken sentence verbatim.
@@ -124,86 +132,90 @@ Return a JSON array of cues formatted as:
 ]
 If the audio has no speech or only silence/background music, return: [].`;
 
-        for (const modelName of candidateModels) {
-          try {
-            const model = genAI.getGenerativeModel({
-              model: modelName,
-              generationConfig: { responseMimeType: 'application/json' },
-            });
-
-            const result = await model.generateContent([
-              prompt,
-              {
-                inlineData: {
-                  data: base64Audio,
-                  mimeType: 'audio/wav',
-                },
-              },
-            ]);
-
-            const responseText = result.response.text();
-            const parsed = JSON.parse(responseText);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              return parsed.map((c: any, idx: number) => {
-                const textStr = (c.text || '').trim();
-                let words: CaptionWord[] = (c.words || [])
-                  .map((w: any) => {
-                    const s = Math.round(w.s || w.startMs || 0);
-                    const rawE = Math.round(w.e || w.endMs || 0);
-                    const e = Math.max(s + 200, rawE);
-                    return {
-                      w: (w.w || w.word || '').trim(),
-                      s,
-                      e,
-                      conf: typeof w.conf === 'number' ? w.conf : 0.95,
-                    };
-                  })
-                  .filter((w: CaptionWord) => w.w.length > 0);
-
-                // If text contains more words than words array (e.g. final word like Diwali dropped from array), reconcile
-                const textTokens = textStr.split(/\s+/).filter(Boolean);
-                if (textTokens.length > words.length) {
-                  const baseStart =
-                    words.length > 0 ? words[words.length - 1].e : Math.round(c.startMs || 0);
-                  const cueEnd = Math.max(baseStart + 400, Math.round(c.endMs || totalDurationMs));
-                  const missingTokens = textTokens.slice(words.length);
-                  const perWordDur = Math.max(
-                    250,
-                    Math.floor((cueEnd - baseStart) / Math.max(1, missingTokens.length))
-                  );
-
-                  missingTokens.forEach((tok: string, mIdx: number) => {
-                    const s = baseStart + mIdx * perWordDur;
-                    const e = s + perWordDur;
-                    words.push({
-                      w: tok,
-                      s,
-                      e,
-                      conf: 0.95,
-                    });
-                  });
-                }
-
-                const startMs = words.length > 0 ? words[0].s : Math.round(c.startMs || 0);
-                const lastWordEnd =
-                  words.length > 0
-                    ? words[words.length - 1].e
-                    : Math.round(c.endMs || totalDurationMs);
-                const endMs = Math.max(lastWordEnd + 400, Math.round(c.endMs || lastWordEnd));
-
-                return {
-                  id: `cue_${idx + 1}`,
-                  startMs,
-                  endMs,
-                  text: textStr || words.map((w) => w.w).join(' '),
-                  words,
-                };
+          for (const modelName of candidateModels) {
+            try {
+              const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: { responseMimeType: 'application/json' },
               });
-            } else if (Array.isArray(parsed) && parsed.length === 0) {
-              return [];
+
+              const result = await model.generateContent([
+                prompt,
+                {
+                  inlineData: {
+                    data: base64Audio,
+                    mimeType: 'audio/wav',
+                  },
+                },
+              ]);
+
+              const responseText = result.response.text();
+              const parsed = JSON.parse(responseText);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed.map((c: any, idx: number) => {
+                  const textStr = (c.text || '').trim();
+                  let words: CaptionWord[] = (c.words || [])
+                    .map((w: any) => {
+                      const s = Math.round(w.s || w.startMs || 0);
+                      const rawE = Math.round(w.e || w.endMs || 0);
+                      const e = Math.max(s + 200, rawE);
+                      return {
+                        w: (w.w || w.word || '').trim(),
+                        s,
+                        e,
+                        conf: typeof w.conf === 'number' ? w.conf : 0.95,
+                      };
+                    })
+                    .filter((w: CaptionWord) => w.w.length > 0);
+
+                  // If text contains more words than words array (e.g. final word like Diwali dropped from array), reconcile
+                  const textTokens = textStr.split(/\s+/).filter(Boolean);
+                  if (textTokens.length > words.length) {
+                    const baseStart =
+                      words.length > 0 ? words[words.length - 1].e : Math.round(c.startMs || 0);
+                    const cueEnd = Math.max(
+                      baseStart + 400,
+                      Math.round(c.endMs || totalDurationMs)
+                    );
+                    const missingTokens = textTokens.slice(words.length);
+                    const perWordDur = Math.max(
+                      250,
+                      Math.floor((cueEnd - baseStart) / Math.max(1, missingTokens.length))
+                    );
+
+                    missingTokens.forEach((tok: string, mIdx: number) => {
+                      const s = baseStart + mIdx * perWordDur;
+                      const e = s + perWordDur;
+                      words.push({
+                        w: tok,
+                        s,
+                        e,
+                        conf: 0.95,
+                      });
+                    });
+                  }
+
+                  const startMs = words.length > 0 ? words[0].s : Math.round(c.startMs || 0);
+                  const lastWordEnd =
+                    words.length > 0
+                      ? words[words.length - 1].e
+                      : Math.round(c.endMs || totalDurationMs);
+                  const endMs = Math.max(lastWordEnd + 400, Math.round(c.endMs || lastWordEnd));
+
+                  return {
+                    id: `cue_${idx + 1}`,
+                    startMs,
+                    endMs,
+                    text: textStr || words.map((w) => w.w).join(' '),
+                    words,
+                  };
+                });
+              } else if (Array.isArray(parsed) && parsed.length === 0) {
+                return [];
+              }
+            } catch (modelErr: any) {
+              console.warn(`[TranscriptionService] Model ${modelName} notice:`, modelErr.message);
             }
-          } catch (modelErr: any) {
-            console.warn(`[TranscriptionService] Model ${modelName} notice:`, modelErr.message);
           }
         }
       } catch (geminiErr: any) {

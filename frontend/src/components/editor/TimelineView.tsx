@@ -132,12 +132,9 @@ export const TimelineView: React.FC = () => {
       const visibleLeft = container.scrollLeft;
       const visibleRight = visibleLeft + container.clientWidth;
 
-      // When playhead nears the right boundary or falls behind left
-      if (playheadPx > visibleRight - 80 || playheadPx < visibleLeft) {
-        container.scrollTo({
-          left: Math.max(0, playheadPx - 100),
-          behavior: 'smooth',
-        });
+      // When playhead nears the right boundary or falls behind left, scroll immediately to keep playhead in view
+      if (playheadPx > visibleRight - 60 || playheadPx < visibleLeft) {
+        container.scrollLeft = Math.max(0, playheadPx - 100);
       }
     }
   }, [playback.currentTime, playback.status, zoom]);

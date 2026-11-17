@@ -166,9 +166,10 @@ export function startAnalysisWorker() {
           percent: 65,
         });
 
-        // 5. Scene Cuts Detection
+        // 5. Scene Cuts Detection (prefer 480p proxy to speed up processing 10x and prevent OOM on long/10-minute videos)
         console.log(`[AnalysisWorker] Detecting visual scene cuts...`);
-        const sceneCuts = await MediaProbeService.detectSceneCuts(localRawPath, 0.3);
+        const sceneSource = fs.existsSync(localProxyPath) ? localProxyPath : localRawPath;
+        const sceneCuts = await MediaProbeService.detectSceneCuts(sceneSource, 0.3);
 
         await JobEventsPublisher.publishProgress(jobId, {
           jobId,

@@ -22,6 +22,7 @@ export const VideoPlayer: React.FC = () => {
   const {
     playback,
     setCurrentTime,
+    setDuration,
     setPlaybackStatus,
     setPlaybackRate,
     setVolume,
@@ -108,8 +109,13 @@ export const VideoPlayer: React.FC = () => {
   // Synchronize external seeks (from timeline ruler or transcript click)
   useEffect(() => {
     if (videoRef.current) {
+      const isPaused = videoRef.current.paused;
       const delta = Math.abs(videoRef.current.currentTime - playback.currentTime);
-      if (delta > 0.08) {
+      // When playing, the native video element is the hardware master clock.
+      // Only seek if there is an explicit large jump from user interaction (e.g. clicking the timeline ruler or jump shortcut).
+      // When paused, maintain sub-frame accuracy for scrubbing and stepping.
+      const threshold = isPaused ? 0.02 : 0.5;
+      if (delta > threshold) {
         videoRef.current.currentTime = playback.currentTime;
       }
     }
@@ -199,7 +205,7 @@ export const VideoPlayer: React.FC = () => {
     toggleMute,
   ]);
 
-  // rAF loop: sampling currentTime at ~30Hz master clock
+  // rAF loop: sampling currentTime during playback with smooth 20Hz UI throttling
   useEffect(() => {
     let animId: number;
     let lastTime = 0;
@@ -207,7 +213,7 @@ export const VideoPlayer: React.FC = () => {
     const tick = () => {
       if (videoRef.current && !videoRef.current.paused) {
         const cur = videoRef.current.currentTime;
-        if (Math.abs(cur - lastTime) > 0.033) {
+        if (Math.abs(cur - lastTime) >= 0.05) {
           lastTime = cur;
           setCurrentTime(cur);
         }
@@ -570,6 +576,18 @@ export const VideoPlayer: React.FC = () => {
             onEnded={() => {
               setIsPlaying(false);
               setPlaybackStatus('ended');
+            }}
+            onLoadedMetadata={(e) => {
+              const dur = e.currentTarget.duration;
+              if (Number.isFinite(dur) && dur > 0) {
+                setDuration(dur);
+              }
+            }}
+            onDurationChange={(e) => {
+              const dur = e.currentTarget.duration;
+              if (Number.isFinite(dur) && dur > 0) {
+                setDuration(dur);
+              }
             }}
           />
 
