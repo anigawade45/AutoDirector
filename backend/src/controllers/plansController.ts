@@ -29,8 +29,14 @@ export class PlansController {
       }
 
       let planDoc = null;
-      if (versionStr === 'latest' || isNaN(version)) {
+      if (versionStr === 'latest') {
         planDoc = await EditPlanModel.findOne({ projectId: project._id }).sort({ version: -1 });
+      } else if (isNaN(version) || version <= 0) {
+        throw new AppError(
+          400,
+          'BAD_REQUEST',
+          'Plan version must be a positive integer or "latest"'
+        );
       } else {
         planDoc = await EditPlanModel.findOne({ projectId: project._id, version });
       }
@@ -79,16 +85,75 @@ export class PlansController {
       }
 
       if (project.headVersion !== baseVersion) {
-        throw new AppError(
-          409,
-          'VERSION_CONFLICT',
-          `Cannot patch stale base version ${baseVersion}. Latest is ${project.headVersion}`
-        );
+        // Auto-heal / bootstrap if the project has not persisted an initial plan yet (headVersion === 0)
+        // and the client started editing from the synthesized baseline plan (baseVersion === 0 or 1)
+        if (project.headVersion === 0 && (baseVersion === 0 || baseVersion === 1)) {
+          let v1Doc = await EditPlanModel.findOne({ projectId: project._id, version: 1 });
+          if (!v1Doc) {
+            const baselinePlan: EditPlan = {
+              schemaVersion: '1.0',
+              projectId: project.publicId,
+              baseAssetId: project.baseAssetId?.toString() || 'ast_base',
+              version: 1,
+              parentVersion: null,
+              global: {
+                aspect: project.settings?.aspect || '16:9',
+                fps: project.settings?.fps || 30,
+                resolution: '1080p',
+              },
+              layers: [
+                {
+                  id: 'lyr_c1',
+                  layer: 'color',
+                  enabled: true,
+                  timebase: 'global',
+                  params: {
+                    preset: 'cinematic',
+                    contrast: 1.15,
+                    saturation: 0.95,
+                    vignette: 0.25,
+                  },
+                },
+              ],
+              meta: {
+                prompt: 'Initial baseline setup',
+                model: 'system-bootstrap',
+                createdAt: new Date().toISOString(),
+              },
+            };
+            try {
+              v1Doc = await EditPlanModel.create({
+                projectId: project._id,
+                version: 1,
+                parentVersion: null,
+                prompt: 'Initial baseline setup',
+                plan: baselinePlan,
+                model: 'system-bootstrap',
+              });
+            } catch (createErr: any) {
+              if (createErr.code === 11000) {
+                v1Doc = await EditPlanModel.findOne({ projectId: project._id, version: 1 });
+              } else {
+                throw createErr;
+              }
+            }
+          }
+          project.headVersion = 1;
+          if (typeof project.save === 'function') {
+            await project.save();
+          }
+        } else {
+          throw new AppError(
+            409,
+            'VERSION_CONFLICT',
+            `Cannot patch stale base version ${baseVersion}. Latest is ${project.headVersion}`
+          );
+        }
       }
 
       const currentPlanDoc = await EditPlanModel.findOne({
         projectId: project._id,
-        version: baseVersion,
+        version: project.headVersion > 0 ? project.headVersion : baseVersion,
       });
 
       if (!currentPlanDoc) {
@@ -117,17 +182,18 @@ export class PlansController {
       }
       const patchedObject = patchResult.newDocument || clonedPlan;
 
-      const nextVersion = baseVersion + 1;
+      const effectiveBaseVersion = project.headVersion > 0 ? project.headVersion : baseVersion;
+      const nextVersion = effectiveBaseVersion + 1;
       const asset = await AssetModel.findById(project.baseAssetId);
       const assetDurationSec = (asset?.media?.durationMs || 60000) / 1000;
 
       // Normalize patched object to ensure all layer types, defaults, and ranges are valid
       const normalizedPlan = PlanNormalizer.normalize(patchedObject, {
         assetDurationSec,
-        prompt: `Manual edit on v${baseVersion}`,
+        prompt: `Manual edit on v${effectiveBaseVersion}`,
       });
       normalizedPlan.version = nextVersion;
-      normalizedPlan.parentVersion = baseVersion;
+      normalizedPlan.parentVersion = effectiveBaseVersion;
 
       // Validate patched object with Zod schema
       const validatedPlan = EditPlanSchema.parse(normalizedPlan) as EditPlan;

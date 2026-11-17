@@ -72,11 +72,18 @@ export class PromptsController {
 
       // Check optimistic concurrency if baseVersion provided
       if (baseVersion !== undefined && baseVersion !== project.headVersion) {
-        throw new AppError(
-          409,
-          'VERSION_CONFLICT',
-          `Base version ${baseVersion} is stale; current project version is ${project.headVersion}`
-        );
+        if (project.headVersion === 0 && (baseVersion === 0 || baseVersion === 1)) {
+          project.headVersion = 1;
+          if (typeof project.save === 'function') {
+            await project.save();
+          }
+        } else {
+          throw new AppError(
+            409,
+            'VERSION_CONFLICT',
+            `Base version ${baseVersion} is stale; current project version is ${project.headVersion}`
+          );
+        }
       }
 
       // Fetch current plan if present

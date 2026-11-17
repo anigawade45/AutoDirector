@@ -12,6 +12,7 @@ import { S3Service } from '../services/storage/s3Service.js';
 import { StorageKeys } from '../config/s3.js';
 import { PurgeService } from '../services/maintenance/purgeService.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { EditPlan } from '@ai-video/shared';
 
 export class ProjectsController {
   static async createProject(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -199,17 +200,87 @@ export class ProjectsController {
       }
 
       let headPlan = null;
-      if (project.headVersion > 0) {
-        const headPlanDoc =
-          (await EditPlanModel.findOne({
+      let headPlanDoc = await EditPlanModel.findOne({
+        projectId: project._id,
+        version: project.headVersion > 0 ? project.headVersion : 1,
+      });
+
+      if (!headPlanDoc) {
+        headPlanDoc = await EditPlanModel.findOne({
+          projectId: project._id,
+        }).sort({ version: -1 });
+      }
+
+      if (headPlanDoc) {
+        headPlan = headPlanDoc.plan;
+        if (project.headVersion !== headPlanDoc.version) {
+          project.headVersion = headPlanDoc.version;
+          if (typeof project.save === 'function') {
+            await project.save();
+          }
+        }
+      } else {
+        // Auto-bootstrap baseline plan v1 so newly opened projects immediately have a valid EditPlan
+        const baselinePlan: EditPlan = {
+          schemaVersion: '1.0',
+          projectId: project.publicId,
+          baseAssetId:
+            (project.baseAssetId as any)?._id?.toString() ||
+            project.baseAssetId?.toString() ||
+            'ast_base',
+          version: 1,
+          parentVersion: null,
+          global: {
+            aspect: project.settings?.aspect || '16:9',
+            fps: project.settings?.fps || 30,
+            resolution: '1080p',
+          },
+          layers: [
+            {
+              id: 'lyr_c1',
+              layer: 'color',
+              enabled: true,
+              timebase: 'global',
+              params: {
+                preset: 'cinematic',
+                contrast: 1.15,
+                saturation: 0.95,
+                vignette: 0.25,
+              },
+            },
+          ],
+          meta: {
+            prompt: 'Initial project baseline',
+            model: 'system-bootstrap',
+            createdAt: new Date().toISOString(),
+          },
+        };
+
+        try {
+          const createdDoc = await EditPlanModel.create({
             projectId: project._id,
-            version: project.headVersion,
-          })) ||
-          (await EditPlanModel.findOne({
-            projectId: project._id,
-          }).sort({ version: -1 }));
-        if (headPlanDoc) {
-          headPlan = headPlanDoc.plan;
+            version: 1,
+            parentVersion: null,
+            prompt: 'Initial project baseline',
+            plan: baselinePlan,
+            model: 'system-bootstrap',
+          });
+          headPlan = createdDoc.plan;
+          project.headVersion = 1;
+          if (typeof project.save === 'function') {
+            await project.save();
+          }
+        } catch (planCreateErr: any) {
+          if (planCreateErr.code === 11000) {
+            const existing = await EditPlanModel.findOne({ projectId: project._id, version: 1 });
+            if (existing) {
+              headPlan = existing.plan;
+              project.headVersion = 1;
+              if (typeof project.save === 'function') {
+                await project.save();
+              }
+            }
+          }
         }
       }
 

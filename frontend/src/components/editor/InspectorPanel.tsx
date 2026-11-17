@@ -110,8 +110,16 @@ export const InspectorPanel: React.FC = () => {
 
         try {
           const latest = await api.getProject(project.id);
-          const headV = latest.project?.headVersion ?? latest.headVersion ?? plan.version ?? 1;
-          const truePlan = latest.plan || (await api.getPlanVersion(project.id, headV))?.plan;
+          const headV =
+            latest.project?.headVersion && latest.project.headVersion > 0
+              ? latest.project.headVersion
+              : latest.headVersion && latest.headVersion > 0
+                ? latest.headVersion
+                : plan.version && plan.version > 0
+                  ? plan.version
+                  : 1;
+          const truePlan =
+            latest.plan || (headV > 0 ? (await api.getPlanVersion(project.id, headV))?.plan : null);
           if (truePlan) {
             // Attempt smart optimistic rebase of user's local edits onto the newer head plan
             let rebaseSuccess = false;
@@ -170,8 +178,16 @@ export const InspectorPanel: React.FC = () => {
     setStatusMessage('Syncing to latest version...');
     try {
       const latest = await api.getProject(project.id);
-      const headV = latest.project?.headVersion ?? latest.headVersion ?? plan.version ?? 1;
-      const truePlan = latest.plan || (await api.getPlanVersion(project.id, headV))?.plan;
+      const headV =
+        latest.project?.headVersion && latest.project.headVersion > 0
+          ? latest.project.headVersion
+          : latest.headVersion && latest.headVersion > 0
+            ? latest.headVersion
+            : plan.version && plan.version > 0
+              ? plan.version
+              : 1;
+      const truePlan =
+        latest.plan || (headV > 0 ? (await api.getPlanVersion(project.id, headV))?.plan : null);
       if (truePlan) {
         setPlan(truePlan);
         setSaveStatus('saved');

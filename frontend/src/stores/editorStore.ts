@@ -240,7 +240,7 @@ export const useEditorStore = create<EditorStoreState>()(
           status: proj.status,
           assetId: proj.baseAssetId?.publicId || proj.baseAssetId || '',
           durationSec: media.durationMs / 1000,
-          headVersion: proj.headVersion ?? 1,
+          headVersion: proj.headVersion && proj.headVersion > 0 ? proj.headVersion : 1,
           aspect: proj.settings?.aspect || '16:9',
           fps: proj.settings?.fps || media.fps || 30,
           resolution: proj.settings?.resolution || `${media.height || 1080}p`,
