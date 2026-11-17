@@ -6,6 +6,8 @@ import {
   Volume2,
   VolumeX,
   Maximize2,
+  Minimize2,
+  Maximize,
   ChevronLeft,
   ChevronRight,
   Gauge,
@@ -38,6 +40,26 @@ export const VideoPlayer: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showSafeGuides, setShowSafeGuides] = useState(false);
   const [showRateMenu, setShowRateMenu] = useState(false);
+  const [objectFitMode, setObjectFitMode] = useState<'contain' | 'cover'>('contain');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [videoDims, setVideoDims] = useState<{ width: number; height: number }>({
+    width: project?.media?.width || 1280,
+    height: project?.media?.height || 720,
+  });
+
+  useEffect(() => {
+    if (project?.media?.width && project?.media?.height) {
+      setVideoDims({ width: project.media.width, height: project.media.height });
+    }
+  }, [project?.media?.width, project?.media?.height]);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
 
   const fps = project?.fps || effectivePlan?.global?.fps || 30;
 
@@ -266,6 +288,27 @@ export const VideoPlayer: React.FC = () => {
       ctx.moveTo(canvas.width / 2, canvas.height / 2 - 15);
       ctx.lineTo(canvas.width / 2, canvas.height / 2 + 15);
       ctx.stroke();
+
+      // If target plan aspect differs from video (e.g. 9:16 target for 16:9 video), draw social framing crop guides
+      const targetAspect = effectivePlan?.global?.aspect || project?.aspect;
+      if (targetAspect === '9:16' && canvas.width > canvas.height) {
+        const targetW = canvas.height * (9 / 16);
+        const startX = (canvas.width - targetW) / 2;
+
+        // Subtle shaded side zones
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fillRect(0, 0, startX, canvas.height);
+        ctx.fillRect(startX + targetW, 0, startX, canvas.height);
+
+        // Reel guide outline
+        ctx.strokeStyle = 'rgba(227, 181, 190, 0.85)';
+        ctx.setLineDash([8, 4]);
+        ctx.strokeRect(startX, 0, targetW, canvas.height);
+
+        ctx.font = '600 16px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(227, 181, 190, 0.95)';
+        ctx.fillText('9:16 Reel Safe Zone', startX + 16, 36);
+      }
 
       ctx.restore();
     }
@@ -551,91 +594,101 @@ export const VideoPlayer: React.FC = () => {
       ref={containerRef}
       className="flex-1 min-h-0 flex flex-col bg-black relative overflow-hidden select-none"
     >
-      {/* Video Canvas Container */}
-      <div className="flex-1 min-h-0 relative flex items-center justify-center p-3">
-        <div className="relative aspect-video max-h-full max-w-full bg-[#05080E] rounded-xl overflow-hidden shadow-2xl border border-surfaceBorder group">
-          {/* Master Video Element */}
-          <video
-            ref={videoRef}
-            src={preview.url || undefined}
-            playsInline
-            muted={playback.muted}
-            style={{
-              filter: activeFilter,
-              transition: 'filter 0.2s ease',
-            }}
-            className="w-full h-full object-contain"
-            onPlay={() => {
-              setIsPlaying(true);
-              setPlaybackStatus('playing');
-            }}
-            onPause={() => {
-              setIsPlaying(false);
-              setPlaybackStatus('paused');
-            }}
-            onEnded={() => {
-              setIsPlaying(false);
-              setPlaybackStatus('ended');
-            }}
-            onLoadedMetadata={(e) => {
-              const dur = e.currentTarget.duration;
-              if (Number.isFinite(dur) && dur > 0) {
-                setDuration(dur);
-              }
-            }}
-            onDurationChange={(e) => {
-              const dur = e.currentTarget.duration;
-              if (Number.isFinite(dur) && dur > 0) {
-                setDuration(dur);
-              }
-            }}
-          />
+      {/* Video Canvas Container — Direct edge-to-edge video stage without artificial card borders */}
+      <div className="flex-1 min-h-0 relative flex items-center justify-center bg-black overflow-hidden group">
+        {/* Master Video Element */}
+        <video
+          ref={videoRef}
+          src={preview.url || undefined}
+          playsInline
+          muted={playback.muted}
+          style={{
+            filter: activeFilter,
+            transition: 'filter 0.2s ease',
+          }}
+          className={`w-full h-full transition-all duration-200 ${
+            objectFitMode === 'cover' ? 'object-cover' : 'object-contain'
+          }`}
+          onPlay={() => {
+            setIsPlaying(true);
+            setPlaybackStatus('playing');
+          }}
+          onPause={() => {
+            setIsPlaying(false);
+            setPlaybackStatus('paused');
+          }}
+          onEnded={() => {
+            setIsPlaying(false);
+            setPlaybackStatus('ended');
+          }}
+          onLoadedMetadata={(e) => {
+            const dur = e.currentTarget.duration;
+            if (Number.isFinite(dur) && dur > 0) {
+              setDuration(dur);
+            }
+            const vw = e.currentTarget.videoWidth;
+            const vh = e.currentTarget.videoHeight;
+            if (vw > 0 && vh > 0) {
+              setVideoDims({ width: vw, height: vh });
+            }
+          }}
+          onDurationChange={(e) => {
+            const dur = e.currentTarget.duration;
+            if (Number.isFinite(dur) && dur > 0) {
+              setDuration(dur);
+            }
+          }}
+        />
 
-          {/* Real-time CSS Vignette Overlay */}
-          {colorLayer &&
-            !isVideoBaked &&
-            (() => {
-              const resolved = resolveColorParams(colorLayer.params);
-              if (resolved.vignette <= 0) return null;
-              return (
-                <div
-                  className="absolute inset-0 pointer-events-none transition-all duration-200 z-[5]"
-                  style={{
-                    background: `radial-gradient(circle at center, transparent 36%, rgba(0,0,0,${Math.min(0.92, resolved.vignette * 0.88).toFixed(2)}) 100%)`,
-                  }}
-                />
-              );
-            })()}
+        {/* Real-time CSS Vignette Overlay */}
+        {colorLayer &&
+          !isVideoBaked &&
+          (() => {
+            const resolved = resolveColorParams(colorLayer.params);
+            if (resolved.vignette <= 0) return null;
+            return (
+              <div
+                className="absolute inset-0 pointer-events-none transition-all duration-200 z-[5]"
+                style={{
+                  background: `radial-gradient(circle at center, transparent 36%, rgba(0,0,0,${Math.min(0.92, resolved.vignette * 0.88).toFixed(2)}) 100%)`,
+                }}
+              />
+            );
+          })()}
 
-          {/* Central Click-To-Play / Pause Overlay */}
-          <div
-            onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center cursor-pointer z-10"
-            title={isPlaying ? 'Click to Pause' : 'Click to Play'}
-          >
-            {!isPlaying && (
-              <div className="w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-[#393B3F] flex items-center justify-center text-white shadow-2xl transition-all transform hover:scale-110 active:scale-95 group-hover:bg-[#E3B5BE]/80">
-                <Play className="w-7 h-7 ml-1 fill-white text-white" />
-              </div>
-            )}
-          </div>
+        {/* Central Click-To-Play / Pause Overlay */}
+        <div
+          onClick={togglePlay}
+          className="absolute inset-0 flex items-center justify-center cursor-pointer z-10"
+          title={isPlaying ? 'Click to Pause' : 'Click to Play'}
+        >
+          {!isPlaying && (
+            <div className="w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-[#393B3F] flex items-center justify-center text-white shadow-2xl transition-all transform hover:scale-110 active:scale-95 group-hover:bg-[#E3B5BE]/80">
+              <Play className="w-7 h-7 ml-1 fill-white text-white" />
+            </div>
+          )}
+        </div>
 
-          {/* Real-time Canvas 2D Overlay (Subtitles, Overlays, Vignette, Intros) */}
-          <canvas
-            ref={canvasRef}
-            width={1280}
-            height={720}
-            className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-          />
+        {/* Real-time Canvas 2D Overlay (Subtitles, Overlays, Vignette, Intros, Safe Guides) */}
+        <canvas
+          ref={canvasRef}
+          width={videoDims.width}
+          height={videoDims.height}
+          className={`absolute inset-0 w-full h-full pointer-events-none transition-all duration-200 ${
+            objectFitMode === 'cover' ? 'object-cover' : 'object-contain'
+          }`}
+        />
 
+        {/* Top Controls Overlay Header — Spans full width cleanly with zero badge collision */}
+        <div className="absolute top-0 left-0 right-0 p-3 flex items-center justify-between pointer-events-none z-10 gap-2">
           {/* Preview Mode & Stale State Indicator */}
-          <div className="absolute top-3 left-3 flex items-center space-x-2 px-2.5 py-1 rounded-md bg-black/70 backdrop-blur-md border border-[#393B3F] text-[11px] text-[#FFF5F5]/80">
+          <div className="pointer-events-auto flex items-center space-x-2 px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md border border-[#393B3F] text-[11px] text-[#FFF5F5]/80 min-w-0 shrink">
             <span
-              className={`w-2 h-2 rounded-full ${
+              className={`w-2 h-2 rounded-full shrink-0 ${
                 preview.stale ? 'bg-amber-400' : 'bg-emerald-400'
               } animate-pulse`}
             />
-            <span className="font-medium">
+            <span className="font-medium truncate">
               {preview.mode === 'proxy' && !preview.stale
                 ? 'Rendered 480p Preview'
                 : preview.stale
@@ -644,14 +697,41 @@ export const VideoPlayer: React.FC = () => {
             </span>
           </div>
 
-          {/* Safe Margins Toggle Indicator */}
-          <div className="absolute top-3 right-3 flex items-center space-x-2">
+          {/* Safe Margins & Fit/Fill Toggle Controls */}
+          <div className="pointer-events-auto flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            {/* Fit vs Fill Frame Toggle */}
+            <button
+              onClick={() => setObjectFitMode(objectFitMode === 'contain' ? 'cover' : 'contain')}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md backdrop-blur-md border transition-colors shadow-sm ${
+                objectFitMode === 'cover'
+                  ? 'bg-[#E3B5BE]/25 border-[#E3B5BE] text-[#F7D7D1]'
+                  : 'bg-black/70 border-white/10 text-[#FFF5F5]/70 hover:text-[#FFF5F5]'
+              }`}
+              title={
+                objectFitMode === 'cover'
+                  ? 'Fit in frame (Show full video with natural letterbox)'
+                  : 'Fill screen (Occupy entire black screen edge-to-edge)'
+              }
+            >
+              {objectFitMode === 'cover' ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[11px] font-medium">Fit Frame</span>
+                </>
+              ) : (
+                <>
+                  <Maximize className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[11px] font-medium">Fill Screen</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={() => setShowSafeGuides(!showSafeGuides)}
-              className={`p-1.5 rounded-md backdrop-blur-sm border transition-colors ${
+              className={`p-1.5 rounded-md backdrop-blur-md border transition-colors ${
                 showSafeGuides
                   ? 'bg-[#E3B5BE]/20 border-[#E3B5BE] text-[#F7D7D1]'
-                  : 'bg-black/60 border-white/10 text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
+                  : 'bg-black/70 border-white/10 text-[#FFF5F5]/60 hover:text-[#FFF5F5]'
               }`}
               title="Toggle Safe Margins (90% Title, 80% Action)"
             >
@@ -659,7 +739,7 @@ export const VideoPlayer: React.FC = () => {
             </button>
 
             {effectivePlan && (
-              <div className="px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm border border-[#393B3F] text-[10px] font-mono text-[#FFF5F5]/60">
+              <div className="px-2 py-1 rounded-md bg-black/70 backdrop-blur-md border border-[#393B3F] text-[10px] font-mono text-[#FFF5F5]/70">
                 EditPlan v{effectivePlan.version}
               </div>
             )}
@@ -797,9 +877,13 @@ export const VideoPlayer: React.FC = () => {
               }
             }}
             className="p-1 sm:p-1.5 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors"
-            title="Fullscreen (F)"
+            title={isFullscreen ? 'Exit Fullscreen (F)' : 'Fullscreen (F)'}
           >
-            <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            {isFullscreen ? (
+              <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            ) : (
+              <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            )}
           </button>
         </div>
       </div>
