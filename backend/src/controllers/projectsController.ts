@@ -182,7 +182,8 @@ export class ProjectsController {
             .join(' ');
 
           analysisSummary = {
-            durationMs: baseAsset.media?.durationMs || (project.durationSec ? project.durationSec * 1000 : 0),
+            durationMs:
+              baseAsset.media?.durationMs || (project.durationSec ? project.durationSec * 1000 : 0),
             silencesCount: analysis?.silences?.length || 0,
             sceneCutsCount: analysis?.sceneCuts?.length || 0,
             bpm: analysis?.beats?.bpm || 120,
@@ -530,8 +531,16 @@ export class ProjectsController {
         if (Array.isArray(cue.words) && cue.words.length === tokens.length && tokens.length > 0) {
           words = cue.words.map((w: any, wIdx: number) => ({
             w: String(w.w || w.word || tokens[wIdx] || ''),
-            s: Math.max(0, Math.round(Number(w.s !== undefined ? w.s : w.startMs !== undefined ? w.startMs : startMs))),
-            e: Math.max(0, Math.round(Number(w.e !== undefined ? w.e : w.endMs !== undefined ? w.endMs : endMs))),
+            s: Math.max(
+              0,
+              Math.round(
+                Number(w.s !== undefined ? w.s : w.startMs !== undefined ? w.startMs : startMs)
+              )
+            ),
+            e: Math.max(
+              0,
+              Math.round(Number(w.e !== undefined ? w.e : w.endMs !== undefined ? w.endMs : endMs))
+            ),
             conf: Number(w.conf ?? w.score ?? 1),
           }));
         } else if (tokens.length > 0) {
@@ -573,7 +582,10 @@ export class ProjectsController {
             cues: normalizedCues,
             origin: 'manual',
             ...(language ? { language } : {}),
-            contentHash: crypto.createHash('sha256').update(JSON.stringify(normalizedCues)).digest('hex'),
+            contentHash: crypto
+              .createHash('sha256')
+              .update(JSON.stringify(normalizedCues))
+              .digest('hex'),
           },
         },
         { new: true, upsert: true }

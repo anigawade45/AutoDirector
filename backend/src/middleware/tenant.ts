@@ -30,9 +30,7 @@ export async function requireProjectOwner(
 
   try {
     const isPurgeOp = Boolean(
-      req.path?.endsWith('/purge') ||
-        req.query?.purge === 'true' ||
-        req.query?.permanent === 'true'
+      req.path?.endsWith('/purge') || req.query?.purge === 'true' || req.query?.permanent === 'true'
     );
 
     const project = await ProjectModel.findOne({

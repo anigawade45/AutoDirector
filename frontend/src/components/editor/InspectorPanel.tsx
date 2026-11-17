@@ -57,7 +57,9 @@ export const InspectorPanel: React.FC = () => {
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Subtitle / Caption editing states
-  const [captionSaveStatus, setCaptionSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [captionSaveStatus, setCaptionSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>(
+    'idle'
+  );
   const [subtitleSearch, setSubtitleSearch] = useState('');
   const captionDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1056,7 +1058,9 @@ export const InspectorPanel: React.FC = () => {
                 <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
                   {!project?.analysisSummary?.cues || project.analysisSummary.cues.length === 0 ? (
                     <div className="text-center py-4 px-3 bg-[#222326] rounded-lg border border-[#393B3F] space-y-1.5">
-                      <p className="text-[11px] text-[#FFF5F5]/70">No subtitle lines detected or added.</p>
+                      <p className="text-[11px] text-[#FFF5F5]/70">
+                        No subtitle lines detected or added.
+                      </p>
                       <button
                         type="button"
                         onClick={handleAddCueLine}
