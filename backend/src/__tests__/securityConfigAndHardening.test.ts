@@ -182,6 +182,28 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
         CORS_ORIGIN: 'https://ai-video-frontend-57bk.onrender.com, https://studio.ai',
       });
       expect(validParseResult.success).toBe(true);
+
+      // Omitting CORS_ORIGIN in production defaults to wildcard and is rejected
+      const { CORS_ORIGIN: _omitted, ...envWithoutCors } = baseValidEnv;
+      const omittedParseResult = envSchema.safeParse(envWithoutCors);
+      expect(omittedParseResult.success).toBe(false);
+      if (!omittedParseResult.success) {
+        const corsIssue = omittedParseResult.error.issues.find((i) => i.path.includes('CORS_ORIGIN'));
+        expect(corsIssue).toBeDefined();
+        expect(corsIssue?.message).toMatch(/Wildcard CORS_ORIGIN \("\*"\) is prohibited in production|CORS_ORIGIN is required in production/);
+      }
+
+      // Empty string / whitespace CORS_ORIGIN in production is rejected
+      const emptyParseResult = envSchema.safeParse({
+        ...baseValidEnv,
+        CORS_ORIGIN: '   ',
+      });
+      expect(emptyParseResult.success).toBe(false);
+      if (!emptyParseResult.success) {
+        const corsIssue = emptyParseResult.error.issues.find((i) => i.path.includes('CORS_ORIGIN'));
+        expect(corsIssue).toBeDefined();
+        expect(corsIssue?.message).toContain('CORS_ORIGIN is required in production');
+      }
     });
 
     it('executes CORS integration dispatch allowing configured origins with credentials and rejecting unauthorized origins', async () => {

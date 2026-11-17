@@ -9,6 +9,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { securityHeadersMiddleware } from './middleware/securityHeaders.js';
 import { generalApiRateLimiter } from './middleware/rateLimiter.js';
 import { apiRouter } from './routes/index.js';
+import { StructuredLogger } from './services/observability/logger.js';
 
 export async function getHealthStatus() {
   const isMongoOk = mongoose.connection.readyState === 1;
@@ -87,8 +88,9 @@ export function createApp(options?: { corsOrigins?: string[] }) {
         // 3. Handle wildcard origin
         if (isWildcardConfigured) {
           if (isProduction) {
-            console.warn(
-              `[CORS] Warning: Wildcard CORS origin is configured in production. Rejecting credentialed origin: ${requestOrigin}`
+            StructuredLogger.warn(
+              `[CORS] Warning: Wildcard CORS origin is configured in production. Rejecting credentialed origin: ${requestOrigin}`,
+              { requestOrigin }
             );
             return callback(
               new Error(`Origin ${requestOrigin} not permitted by production CORS policy`)

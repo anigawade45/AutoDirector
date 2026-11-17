@@ -76,7 +76,10 @@ export const envSchema = z
     PORT: z.string().optional().default('4000').transform(Number),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
     API_BASE_URL: z.string().optional().default('http://localhost:4000/api'),
-    CORS_ORIGIN: z.string().optional().default('*'),
+    CORS_ORIGIN: z
+      .string()
+      .optional()
+      .default(process.env.NODE_ENV === 'production' ? '' : '*'),
     S3_ALLOWED_ORIGINS: z.string().optional().default(''),
     ALLOW_DEGRADED_BOOT: z
       .string()
