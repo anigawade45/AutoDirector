@@ -113,6 +113,16 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
       expect(workerRenderSection).toBeDefined();
       expect(workerRenderSection).not.toContain('ports:');
     });
+
+    it('verifies Nginx reverse proxy blocks public ingress to internal endpoints with HTTP 403 (SEC-002)', () => {
+      const nginxConfPath = path.join(rootDir, 'frontend/nginx.conf');
+      expect(fs.existsSync(nginxConfPath)).toBe(true);
+      const nginxContent = fs.readFileSync(nginxConfPath, 'utf8');
+
+      expect(nginxContent).toMatch(/location\s+\^\~\s+\/api\/internal\//);
+      expect(nginxContent).toContain('return 403');
+      expect(nginxContent).toContain('Direct access to internal endpoints is prohibited');
+    });
   });
 
   describe('Development Compose Security Policy', () => {

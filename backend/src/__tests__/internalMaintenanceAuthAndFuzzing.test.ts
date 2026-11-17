@@ -5,7 +5,11 @@ import { createApp } from '../app.js';
 import { MaintenanceService } from '../services/maintenance/maintenanceService.js';
 import { env } from '../config/env.js';
 import { resetRateLimiterCache } from '../middleware/rateLimiter.js';
-import { resetWorkerAuthReplayCache } from '../middleware/workerAuth.js';
+import {
+  resetWorkerAuthReplayCache,
+  isPrivateOrLoopbackIp,
+  restrictInternalNetwork,
+} from '../middleware/workerAuth.js';
 
 // Mock MaintenanceService
 vi.mock('../services/maintenance/maintenanceService.js', () => ({
@@ -296,7 +300,8 @@ describe('BUG-002 Prevention Suite: Internal Maintenance Authentication & Input 
 
   describe('4. Rate Limiting Protection on Maintenance Route', () => {
     it('blocks excessive rapid invocations beyond limit (10 per window) with HTTP 429', async () => {
-      const uniqueIp = '198.51.100.42';
+      // Use internal private IP to pass network boundary gating and test rate limiter isolation
+      const uniqueIp = '10.0.42.100';
 
       for (let i = 0; i < 10; i++) {
         const res = await dispatchRequest(app, {
@@ -325,6 +330,143 @@ describe('BUG-002 Prevention Suite: Internal Maintenance Authentication & Input 
       expect(blockedRes.status).toBe(429);
       expect(blockedRes.body.error?.code).toBe('RATE_LIMIT_EXCEEDED');
       expect(blockedRes.body.error?.message).toMatch(/Internal maintenance request limit reached/);
+    });
+  });
+
+  describe('5. Network Boundary & Public Ingress Restriction Gating (SEC-002)', () => {
+    const publicIps = ['198.51.100.42', '203.0.113.1', '8.8.8.8', '1.1.1.1', '93.184.216.34'];
+
+    for (const publicIp of publicIps) {
+      it(`blocks request from public IP (${publicIp}) with HTTP 403 FORBIDDEN_NETWORK_ACCESS even with valid internal secret`, async () => {
+        const res = await dispatchRequest(app, {
+          method: 'POST',
+          url: '/api/internal/v1/maintenance/cleanup-uploads',
+          headers: {
+            'x-internal-secret': env.INTERNAL_WORKER_SECRET,
+          },
+          body: { olderThanHours: 24 },
+          ip: publicIp,
+        });
+
+        expect(res.status).toBe(403);
+        expect(res.body.error?.code).toBe('FORBIDDEN_NETWORK_ACCESS');
+        expect(res.body.error?.message).toMatch(/external networks is prohibited/);
+        expect(MaintenanceService.runAbandonedUploadCleanup).not.toHaveBeenCalled();
+      });
+    }
+
+    it('blocks request with public client IP in X-Forwarded-For header even behind private socket', async () => {
+      const res = await dispatchRequest(app, {
+        method: 'POST',
+        url: '/api/internal/v1/maintenance/cleanup-uploads',
+        headers: {
+          'x-internal-secret': env.INTERNAL_WORKER_SECRET,
+          'x-forwarded-for': '203.0.113.50, 10.0.0.1',
+        },
+        body: { olderThanHours: 24 },
+        ip: '10.0.0.1',
+      });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error?.code).toBe('FORBIDDEN_NETWORK_ACCESS');
+      expect(res.body.error?.message).toMatch(/public ingress proxies is prohibited/);
+      expect(MaintenanceService.runAbandonedUploadCleanup).not.toHaveBeenCalled();
+    });
+
+    it('allows request from IPv4 loopback (127.0.0.1) with valid internal secret', async () => {
+      const res = await dispatchRequest(app, {
+        method: 'POST',
+        url: '/api/internal/v1/maintenance/cleanup-uploads',
+        headers: {
+          'x-internal-secret': env.INTERNAL_WORKER_SECRET,
+        },
+        body: { olderThanHours: 24 },
+        ip: '127.0.0.1',
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+
+    it('allows request from IPv6 loopback (::1) with valid internal secret', async () => {
+      const res = await dispatchRequest(app, {
+        method: 'POST',
+        url: '/api/internal/v1/maintenance/cleanup-uploads',
+        headers: {
+          'x-internal-secret': env.INTERNAL_WORKER_SECRET,
+        },
+        body: { olderThanHours: 24 },
+        ip: '::1',
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+
+    it('allows request from private RFC 1918 subnets (10.x, 172.16-31.x, 192.168.x)', async () => {
+      const internalIps = ['10.0.1.20', '172.18.0.5', '192.168.1.100'];
+
+      for (const internalIp of internalIps) {
+        const res = await dispatchRequest(app, {
+          method: 'POST',
+          url: '/api/internal/v1/maintenance/cleanup-uploads',
+          headers: {
+            'x-internal-secret': env.INTERNAL_WORKER_SECRET,
+          },
+          body: { olderThanHours: 24 },
+          ip: internalIp,
+        });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+      }
+    });
+
+    describe('isPrivateOrLoopbackIp helper unit tests', () => {
+      it('correctly classifies loopback, private RFC 1918, link-local, and public IPs', () => {
+        // Loopback
+        expect(isPrivateOrLoopbackIp('127.0.0.1')).toBe(true);
+        expect(isPrivateOrLoopbackIp('127.0.0.5')).toBe(true);
+        expect(isPrivateOrLoopbackIp('::1')).toBe(true);
+        expect(isPrivateOrLoopbackIp('localhost')).toBe(true);
+        expect(isPrivateOrLoopbackIp('::ffff:127.0.0.1')).toBe(true);
+        expect(isPrivateOrLoopbackIp('127.0.0.1:4000')).toBe(true);
+        expect(isPrivateOrLoopbackIp('[::1]:8080')).toBe(true);
+
+        // Private 10.0.0.0/8
+        expect(isPrivateOrLoopbackIp('10.0.0.1')).toBe(true);
+        expect(isPrivateOrLoopbackIp('10.254.254.254')).toBe(true);
+
+        // Private 172.16.0.0/12
+        expect(isPrivateOrLoopbackIp('172.16.0.1')).toBe(true);
+        expect(isPrivateOrLoopbackIp('172.20.5.10')).toBe(true);
+        expect(isPrivateOrLoopbackIp('172.31.255.255')).toBe(true);
+        expect(isPrivateOrLoopbackIp('172.15.255.255')).toBe(false); // below 16
+        expect(isPrivateOrLoopbackIp('172.32.0.1')).toBe(false); // above 31
+
+        // Private 192.168.0.0/16
+        expect(isPrivateOrLoopbackIp('192.168.1.1')).toBe(true);
+        expect(isPrivateOrLoopbackIp('192.168.254.254')).toBe(true);
+        expect(isPrivateOrLoopbackIp('192.169.1.1')).toBe(false);
+
+        // Link-local
+        expect(isPrivateOrLoopbackIp('169.254.1.1')).toBe(true);
+        expect(isPrivateOrLoopbackIp('fe80::1')).toBe(true);
+
+        // IPv6 Unique Local Address
+        expect(isPrivateOrLoopbackIp('fc00::1')).toBe(true);
+        expect(isPrivateOrLoopbackIp('fd12:3456:789a::1')).toBe(true);
+
+        // Public IPs
+        expect(isPrivateOrLoopbackIp('8.8.8.8')).toBe(false);
+        expect(isPrivateOrLoopbackIp('1.1.1.1')).toBe(false);
+        expect(isPrivateOrLoopbackIp('203.0.113.1')).toBe(false);
+        expect(isPrivateOrLoopbackIp('198.51.100.42')).toBe(false);
+
+        // Edge cases
+        expect(isPrivateOrLoopbackIp('')).toBe(false);
+        expect(isPrivateOrLoopbackIp(undefined)).toBe(false);
+      });
     });
   });
 });

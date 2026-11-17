@@ -1,12 +1,19 @@
 import { Router } from 'express';
 import { WorkerEventsController } from '../controllers/workerEventsController.js';
 import { MaintenanceService } from '../services/maintenance/maintenanceService.js';
-import { verifyWorkerSignature, verifyInternalAuth } from '../middleware/workerAuth.js';
+import {
+  verifyWorkerSignature,
+  verifyInternalAuth,
+  restrictInternalNetwork,
+} from '../middleware/workerAuth.js';
 import { maintenanceRateLimiter } from '../middleware/rateLimiter.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { StructuredLogger } from '../services/observability/logger.js';
 
 export const internalRouter = Router();
+
+// Enforce network boundary isolation on all internal endpoints (SEC-002)
+internalRouter.use(restrictInternalNetwork);
 
 // Internal worker callbacks authenticated via HMAC-SHA256 signature
 internalRouter.post(

@@ -185,3 +185,118 @@ export async function verifyInternalAuth(
 
   return await verifyWorkerSignature(req, res, next);
 }
+
+/**
+ * Helper to determine if an IP address belongs to loopback, link-local,
+ * or private RFC 1918 / RFC 4193 subnets.
+ */
+export function isPrivateOrLoopbackIp(ip: string | undefined): boolean {
+  if (!ip) return false;
+
+  let cleanIp = ip.trim();
+
+  // Strip brackets from IPv6 host if formatted as [::1]:port
+  const bracketMatch = cleanIp.match(/^\[([a-fA-F0-9:]+)\](?::\d+)?$/);
+  if (bracketMatch) {
+    cleanIp = bracketMatch[1];
+  }
+
+  // Strip IPv4-mapped IPv6 prefix: ::ffff:127.0.0.1 -> 127.0.0.1
+  if (cleanIp.startsWith('::ffff:')) {
+    cleanIp = cleanIp.slice(7);
+  }
+
+  // Strip port from IPv4 address if present (e.g. 127.0.0.1:4000)
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/.test(cleanIp)) {
+    cleanIp = cleanIp.split(':')[0];
+  }
+
+  // Loopback check
+  if (
+    cleanIp === '127.0.0.1' ||
+    cleanIp === '::1' ||
+    cleanIp === 'localhost' ||
+    cleanIp.startsWith('127.')
+  ) {
+    return true;
+  }
+
+  // RFC 1918 Private IPv4: 10.0.0.0/8
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(cleanIp)) {
+    return true;
+  }
+
+  // RFC 1918 Private IPv4: 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+  const match172 = cleanIp.match(/^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+  if (match172) {
+    const octet2 = parseInt(match172[1], 10);
+    if (octet2 >= 16 && octet2 <= 31) {
+      return true;
+    }
+  }
+
+  // RFC 1918 Private IPv4: 192.168.0.0/16
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(cleanIp)) {
+    return true;
+  }
+
+  // RFC 3927 Link-local IPv4: 169.254.0.0/16
+  if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(cleanIp)) {
+    return true;
+  }
+
+  // RFC 4193 Unique Local IPv6 (fc00::/7 -> fc00.. to fdff..)
+  if (/^f[cd][0-9a-f]{2}:/i.test(cleanIp)) {
+    return true;
+  }
+
+  // RFC 4291 Link-Local IPv6 (fe80::/10)
+  if (/^fe[89ab][0-9a-f]{1}:/i.test(cleanIp)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Network boundary restriction middleware (SEC-002).
+ * Prohibits direct access to internal endpoints from external networks or public reverse proxies.
+ * Enforces that callers originate strictly from private subnets (RFC 1918 / RFC 4193) or loopback interfaces.
+ */
+export function restrictInternalNetwork(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  const socketIp = (req.socket?.remoteAddress || req.ip || '').trim();
+  const forwardedFor = req.headers['x-forwarded-for'] as string | undefined;
+
+  // Verify direct connecting socket IP
+  if (!isPrivateOrLoopbackIp(socketIp)) {
+    return next(
+      new AppError(
+        403,
+        'FORBIDDEN_NETWORK_ACCESS',
+        'Direct access to internal endpoints from external networks is prohibited'
+      )
+    );
+  }
+
+  // If X-Forwarded-For is present, every IP in the forwarding chain must also belong to private/internal subnets
+  if (forwardedFor) {
+    const forwardedIps = forwardedFor.split(',').map((part) => part.trim());
+    for (const ip of forwardedIps) {
+      if (ip && !isPrivateOrLoopbackIp(ip)) {
+        return next(
+          new AppError(
+            403,
+            'FORBIDDEN_NETWORK_ACCESS',
+            'Direct access to internal endpoints through public ingress proxies is prohibited'
+          )
+        );
+      }
+    }
+  }
+
+  next();
+}
