@@ -18,6 +18,14 @@ export interface SseTicketPayload {
 }
 
 export class TokenService {
+  /**
+   * Checks whether a non-empty JWT_SECRET is present in the configuration.
+   */
+  static hasConfiguredSecret(): boolean {
+    const secret = env.JWT_SECRET;
+    return typeof secret === 'string' && secret.trim().length > 0;
+  }
+
   private static getSecret(): string {
     const secret = env.JWT_SECRET;
     if (!secret || typeof secret !== 'string' || secret.trim() === '') {
@@ -25,16 +33,22 @@ export class TokenService {
         'JWT_SECRET configuration is missing or empty. Refusing to sign or verify tokens with insecure fallback secret.'
       );
     }
-    if (
-      env.NODE_ENV === 'production' &&
-      (secret.length < 32 ||
-        secret.includes('secret-key') ||
-        secret.includes('change_me') ||
-        secret.includes('__INJECT_'))
-    ) {
-      throw new Error(
-        'JWT_SECRET is insecure for production. Must be at least 32 characters and cannot use default placeholders.'
-      );
+    if (env.NODE_ENV === 'production') {
+      const lower = secret.toLowerCase();
+      if (
+        secret.length < 32 ||
+        lower.includes('secret-key') ||
+        lower.includes('ai-video-studio-jwt-secret-key-2026') ||
+        lower.includes('change_me') ||
+        lower.includes('__inject_') ||
+        lower.includes('password') ||
+        lower.includes('admin') ||
+        lower === '123456'
+      ) {
+        throw new Error(
+          'JWT_SECRET is insecure for production. Must be at least 32 characters and cannot use default placeholders.'
+        );
+      }
     }
     return secret;
   }

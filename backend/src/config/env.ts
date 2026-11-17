@@ -87,8 +87,14 @@ export const envSchema = z
       .default('false')
       .transform((val) => val === 'true'),
 
-    JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
-    INTERNAL_WORKER_SECRET: z.string().min(1, 'INTERNAL_WORKER_SECRET is required'),
+    JWT_SECRET: z
+      .string()
+      .min(1, 'JWT_SECRET is required')
+      .refine((val) => val.trim().length > 0, 'JWT_SECRET cannot be whitespace only'),
+    INTERNAL_WORKER_SECRET: z
+      .string()
+      .min(1, 'INTERNAL_WORKER_SECRET is required')
+      .refine((val) => val.trim().length > 0, 'INTERNAL_WORKER_SECRET cannot be whitespace only'),
 
     MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
 
@@ -199,6 +205,45 @@ export const envSchema = z
             message:
               'MONGODB_URI contains placeholder or weak default credentials in production. Must supply verified production credentials.',
             path: ['MONGODB_URI'],
+          });
+        }
+      }
+
+      // Production JWT & Worker Secret Hardening (SEC-007)
+      const weakSecretPlaceholders = [
+        'ai-video-studio-jwt-secret-key-2026',
+        'change_me',
+        '__inject_',
+        'default_secret',
+        'password',
+        '123456',
+        'admin',
+      ];
+
+      const jwtSecretLower = data.JWT_SECRET.toLowerCase();
+      if (
+        data.JWT_SECRET.length < 32 ||
+        weakSecretPlaceholders.some((p) => jwtSecretLower.includes(p))
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'JWT_SECRET is insecure for production. Must be at least 32 characters and cannot use default placeholders or weak patterns.',
+          path: ['JWT_SECRET'],
+        });
+      }
+
+      if (data.INTERNAL_WORKER_SECRET) {
+        const workerSecretLower = data.INTERNAL_WORKER_SECRET.toLowerCase();
+        if (
+          data.INTERNAL_WORKER_SECRET.length < 32 ||
+          weakSecretPlaceholders.some((p) => workerSecretLower.includes(p))
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              'INTERNAL_WORKER_SECRET is insecure for production. Must be at least 32 characters and cannot use default placeholders or weak patterns.',
+            path: ['INTERNAL_WORKER_SECRET'],
           });
         }
       }

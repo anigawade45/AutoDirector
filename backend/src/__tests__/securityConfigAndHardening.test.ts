@@ -310,6 +310,118 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
       }
     });
 
+    it('refuses to use insecure fallback if JWT_SECRET is whitespace only (SEC-007)', () => {
+      const originalSecret = env.JWT_SECRET;
+      try {
+        (env as any).JWT_SECRET = '   \t  \n ';
+        expect(() => {
+          (TokenService as any).getSecret();
+        }).toThrow(/JWT_SECRET configuration is missing or empty/i);
+        expect(TokenService.hasConfiguredSecret()).toBe(false);
+      } finally {
+        (env as any).JWT_SECRET = originalSecret;
+      }
+    });
+
+    it('fails closed in verifyToken returning null when JWT_SECRET is missing (SEC-007)', () => {
+      const payload = {
+        id: 'usr_fail_closed',
+        email: 'failclosed@studio.ai',
+        tier: 'free',
+      };
+      const token = TokenService.generateToken(payload, 3600);
+      expect(token).toBeDefined();
+
+      const originalSecret = env.JWT_SECRET;
+      try {
+        (env as any).JWT_SECRET = '';
+        const verified = TokenService.verifyToken(token);
+        expect(verified).toBeNull();
+      } finally {
+        (env as any).JWT_SECRET = originalSecret;
+      }
+    });
+
+    it('fails closed in generateToken throwing when JWT_SECRET is missing (SEC-007)', () => {
+      const originalSecret = env.JWT_SECRET;
+      try {
+        (env as any).JWT_SECRET = '';
+        expect(() => {
+          TokenService.generateToken({
+            id: 'usr_fail_closed_gen',
+            email: 'failgen@studio.ai',
+            tier: 'free',
+          });
+        }).toThrow(/JWT_SECRET configuration is missing or empty/i);
+      } finally {
+        (env as any).JWT_SECRET = originalSecret;
+      }
+    });
+
+    it('statically verifies tokenService.ts source code contains zero hardcoded fallback strings (SEC-007)', () => {
+      const tokenServiceSourcePath = path.resolve(__dirname, '../services/auth/tokenService.ts');
+      expect(fs.existsSync(tokenServiceSourcePath)).toBe(true);
+      const source = fs.readFileSync(tokenServiceSourcePath, 'utf8');
+
+      // Must not contain legacy hardcoded default fallback
+      expect(source).not.toContain("|| 'ai-video-studio-jwt-secret-key-2026'");
+      expect(source).not.toMatch(/getSecret\(\)[^{]*\{\s*return\s+env\.JWT_SECRET\s*\|\|/);
+    });
+
+    it('enforces startup Zod schema rejection of weak or placeholder JWT_SECRET in production (SEC-007)', () => {
+      const baseValidProd = {
+        PORT: '4000',
+        NODE_ENV: 'production' as const,
+        API_BASE_URL: 'https://api.studio.ai/api',
+        CORS_ORIGIN: 'https://studio.ai',
+        INTERNAL_WORKER_SECRET: 'super-secure-production-worker-secret-12345',
+        MONGODB_URI: 'mongodb://localhost:27017/prod',
+        AWS_ACCESS_KEY_ID: 'AKIA_PROD_12345',
+        AWS_SECRET_ACCESS_KEY: 'secret_key_prod_12345',
+        S3_BUCKET_NAME: 'prod-bucket',
+      };
+
+      // 1. Whitespace only JWT_SECRET
+      const wsResult = envSchema.safeParse({
+        ...baseValidProd,
+        JWT_SECRET: '     ',
+      });
+      expect(wsResult.success).toBe(false);
+
+      // 2. Short secret (< 32 characters) in production
+      const shortResult = envSchema.safeParse({
+        ...baseValidProd,
+        JWT_SECRET: 'short_secret_under_32_chars',
+      });
+      expect(shortResult.success).toBe(false);
+      if (!shortResult.success) {
+        const issue = shortResult.error.issues.find((i) => i.path.includes('JWT_SECRET'));
+        expect(issue).toBeDefined();
+        expect(issue?.message).toContain('Must be at least 32 characters');
+      }
+
+      // 3. Legacy placeholder in production
+      const placeholderResult = envSchema.safeParse({
+        ...baseValidProd,
+        JWT_SECRET: 'ai-video-studio-jwt-secret-key-2026',
+      });
+      expect(placeholderResult.success).toBe(false);
+
+      // 4. Template placeholder in production
+      const templatePlaceholderResult = envSchema.safeParse({
+        ...baseValidProd,
+        JWT_SECRET: '__INJECT_VIA_SECRETS_MANAGER_MIN_32_CHARS__',
+      });
+      expect(templatePlaceholderResult.success).toBe(false);
+
+      // 5. Verified valid production secret (>= 32 chars, random/strong)
+      const validResult = envSchema.safeParse({
+        ...baseValidProd,
+        JWT_SECRET: 'super-secure-production-random-jwt-secret-987654321',
+      });
+      expect(validResult.success).toBe(true);
+    });
+
     it('rejects weak placeholder secrets in production mode', () => {
       const originalSecret = env.JWT_SECRET;
       const originalNodeEnv = env.NODE_ENV;
