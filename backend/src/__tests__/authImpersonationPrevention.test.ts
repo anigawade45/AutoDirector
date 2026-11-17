@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
+import crypto from 'crypto';
 import { createApp } from '../app.js';
 import { UserModel } from '../models/User.js';
 import { ProjectModel } from '../models/Project.js';
@@ -338,6 +339,96 @@ describe('BUG-001 Prevention Suite: Bearer & Query Token Cryptographic Enforceme
 
       expect(res.status).toBe(401);
       expect(res.body.error?.code).toBe('INVALID_OR_EXPIRED_TICKET');
+    });
+  });
+
+  describe('4. Cryptographic Tampering & Algorithm Exploitation Resistance', () => {
+    it('rejects tokens with alg: none attack with HTTP 401 UNAUTHENTICATED', async () => {
+      const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+      const payload = Buffer.from(
+        JSON.stringify({ sub: validObjectId, email: knownEmail, tier: 'pro', exp: Math.floor(Date.now() / 1000) + 3600 })
+      ).toString('base64url');
+      const noneToken = `${header}.${payload}.`;
+
+      const res = await dispatchRequest(app, {
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: {
+          authorization: `Bearer ${noneToken}`,
+        },
+      });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error?.code).toBe('UNAUTHENTICATED');
+    });
+
+    it('rejects tokens signed with an invalid or untrusted secret with HTTP 401 UNAUTHENTICATED', async () => {
+      const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+      const payload = Buffer.from(
+        JSON.stringify({ sub: validObjectId, email: knownEmail, tier: 'pro', exp: Math.floor(Date.now() / 1000) + 3600 })
+      ).toString('base64url');
+      const fakeSig = crypto
+        .createHmac('sha256', 'completely_wrong_attacker_secret_key_12345')
+        .update(`${header}.${payload}`)
+        .digest('base64url');
+      const tamperedToken = `${header}.${payload}.${fakeSig}`;
+
+      const res = await dispatchRequest(app, {
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: {
+          authorization: `Bearer ${tamperedToken}`,
+        },
+      });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error?.code).toBe('UNAUTHENTICATED');
+    });
+
+    it('rejects expired JWT tokens with HTTP 401 UNAUTHENTICATED', async () => {
+      const expiredToken = TokenService.generateToken(
+        { id: validObjectId, email: knownEmail, tier: 'pro' },
+        -3600
+      );
+
+      const res = await dispatchRequest(app, {
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: {
+          authorization: `Bearer ${expiredToken}`,
+        },
+      });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error?.code).toBe('UNAUTHENTICATED');
+    });
+  });
+
+  describe('5. Cookie-Based Raw Identifier Impersonation Resistance', () => {
+    it('rejects raw MongoDB ObjectId passed via auth_token cookie with HTTP 401 UNAUTHENTICATED', async () => {
+      const res = await dispatchRequest(app, {
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: {
+          cookie: `auth_token=${validObjectId}`,
+        },
+      });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error?.code).toBe('UNAUTHENTICATED');
+    });
+
+    it('rejects raw email address passed via auth_token cookie with HTTP 401 UNAUTHENTICATED', async () => {
+      const res = await dispatchRequest(app, {
+        method: 'GET',
+        url: '/api/auth/me',
+        headers: {
+          cookie: `auth_token=${knownEmail}`,
+        },
+      });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error?.code).toBe('UNAUTHENTICATED');
     });
   });
 });

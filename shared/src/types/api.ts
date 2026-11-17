@@ -125,6 +125,8 @@ export interface UserProfile {
     renderMinutesUsed: number;
     promptsToday: number;
   };
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AuthResponseData {
