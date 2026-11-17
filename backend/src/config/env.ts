@@ -156,7 +156,7 @@ export const envSchema = z
           return ffprobeInstaller.path;
         return val && val.trim() ? val : ffprobeInstaller?.path || 'ffprobe';
       }),
-    TEMP_MEDIA_DIR: z.string().optional().default('/tmp/renders'),
+    TEMP_MEDIA_DIR: z.string().optional().default(path.resolve(process.cwd(), 'tmp/renders')),
   })
   .superRefine((data, ctx) => {
     const corsCheck = validateCorsOrigin(data.CORS_ORIGIN, data.NODE_ENV);
@@ -277,17 +277,45 @@ let parsedEnv: z.infer<typeof envSchema>;
 try {
   parsedEnv = envSchema.parse(process.env);
 } catch (err: any) {
-  console.error('\n======================================================');
-  console.error('❌ FATAL: Environment variable validation failed!');
-  if (err instanceof z.ZodError) {
-    err.errors.forEach((e) => {
-      console.error(`   - Missing or invalid: ${e.path.join('.')} (${e.message})`);
+  const isTestRunner =
+    process.env.VITEST !== undefined ||
+    process.env.NODE_ENV === 'test' ||
+    typeof (globalThis as any).__vitest_environment__ !== 'undefined';
+
+  if (isTestRunner) {
+    // In hermetic test environments / CI without a .env file, fall back to safe test configuration
+    parsedEnv = envSchema.parse({
+      ...process.env,
+      NODE_ENV: 'test',
+      JWT_SECRET:
+        process.env.JWT_SECRET ||
+        'test_jwt_secret_for_ci_and_vitest_runs_minimum_32_characters_long',
+      INTERNAL_WORKER_SECRET:
+        process.env.INTERNAL_WORKER_SECRET ||
+        'test_internal_worker_secret_for_ci_and_vitest_runs_32_chars_long',
+      MONGODB_URI: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/test_db',
+      AWS_REGION: process.env.AWS_REGION || 'ap-southeast-2',
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || 'test_aws_access_key_id',
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || 'test_aws_secret_access_key',
+      S3_BUCKET_NAME: process.env.S3_BUCKET_NAME || 'test-bucket-name',
+      CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173',
+      REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
+      REDIS_PORT: process.env.REDIS_PORT || '6379',
+      TEMP_MEDIA_DIR: process.env.TEMP_MEDIA_DIR || path.resolve(process.cwd(), 'tmp/renders'),
     });
   } else {
-    console.error('   ', err);
+    console.error('\n======================================================');
+    console.error('❌ FATAL: Environment variable validation failed!');
+    if (err instanceof z.ZodError) {
+      err.errors.forEach((e) => {
+        console.error(`   - Missing or invalid: ${e.path.join('.')} (${e.message})`);
+      });
+    } else {
+      console.error('   ', err);
+    }
+    console.error('======================================================\n');
+    process.exit(1);
   }
-  console.error('======================================================\n');
-  process.exit(1);
 }
 
 export const env = parsedEnv;

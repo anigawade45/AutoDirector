@@ -51,6 +51,21 @@ jobs:
 
       - name: Run Backend Tests
         run: npm --workspace=backend run test
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test_jwt_secret_for_ci_pipeline_32_characters_minimum
+          INTERNAL_WORKER_SECRET: test_worker_secret_for_ci_pipeline_32_chars
+          MONGODB_URI: mongodb://127.0.0.1:27017/test_db
+          AWS_REGION: ap-southeast-2
+          AWS_ACCESS_KEY_ID: test_aws_access_key_id
+          AWS_SECRET_ACCESS_KEY: test_aws_secret_access_key
+          S3_BUCKET_NAME: test-bucket-name
+          CORS_ORIGIN: http://localhost:5173
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: 6379
+          TEMP_MEDIA_DIR: ./tmp/renders
 
       - name: Run Frontend Tests
         run: npm --workspace=frontend run test
+        env:
+          NODE_ENV: test
