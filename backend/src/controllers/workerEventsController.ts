@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { RenderJobModel } from '../models/RenderJob.js';
-import { ProjectModel } from '../models/Project.js';
-import { RenderJobLifecycle } from '../services/jobs/renderJobLifecycle.js';
+import { RenderJobLifecycle, TERMINAL_STATES } from '../services/jobs/renderJobLifecycle.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 export class WorkerEventsController {
@@ -18,7 +17,7 @@ export class WorkerEventsController {
       }
 
       // Replay / terminal guard: a late progress event must not move a completed/failed job
-      if (job.state === 'completed' || job.state === 'failed' || job.state === 'canceled') {
+      if (TERMINAL_STATES.includes(job.state)) {
         res.status(200).json({
           success: true,
           data: { accepted: true, duplicate: true, state: job.state },
@@ -27,19 +26,23 @@ export class WorkerEventsController {
         return;
       }
 
+      const initialJobState = job.state;
+      let updatedJob = null;
+
       switch (eventType) {
         case 'render.progress': {
-          await RenderJobLifecycle.transition(cleanJobId, 'processing', {
-            percent: payload.progress?.percent || job.percent,
+          updatedJob = await RenderJobLifecycle.transition(cleanJobId, 'processing', {
+            percent:
+              payload.progress?.percent !== undefined ? payload.progress.percent : job.percent,
             outTimeMs: payload.progress?.outTimeMs,
-            workerId: req.headers['x-worker-id'] as string,
+            workerId: (req.headers['x-worker-id'] as string) || payload.workerId,
           });
           break;
         }
 
         case 'render.completed': {
           const outKey = payload.result?.outputKey || payload.result?.key;
-          await RenderJobLifecycle.transition(cleanJobId, 'completed', {
+          updatedJob = await RenderJobLifecycle.transition(cleanJobId, 'completed', {
             percent: 100,
             output: {
               key: outKey,
@@ -48,34 +51,27 @@ export class WorkerEventsController {
               checksum: payload.result?.checksum,
             },
           });
-
-          // If final export, update project's publishedVersion
-          if (job.type === 'export' || job.type === 'render') {
-            await ProjectModel.updateOne(
-              { _id: job.projectId },
-              { $set: { publishedVersion: job.timelineVersion, status: 'ready' } }
-            );
-          } else if (job.type === 'preview') {
-            await ProjectModel.updateOne({ _id: job.projectId }, { $set: { status: 'ready' } });
-          }
           break;
         }
 
         case 'render.failed': {
-          await RenderJobLifecycle.transition(cleanJobId, 'failed', {
+          updatedJob = await RenderJobLifecycle.transition(cleanJobId, 'failed', {
             error: payload.error,
           });
-
-          await ProjectModel.updateOne({ _id: job.projectId }, { $set: { status: 'error' } });
           break;
         }
 
         case 'analysis.completed': {
-          await RenderJobLifecycle.transition(cleanJobId, 'completed', {
+          updatedJob = await RenderJobLifecycle.transition(cleanJobId, 'completed', {
             percent: 100,
           });
+          break;
+        }
 
-          await ProjectModel.updateOne({ _id: job.projectId }, { $set: { status: 'ready' } });
+        case 'analysis.failed': {
+          updatedJob = await RenderJobLifecycle.transition(cleanJobId, 'failed', {
+            error: payload.error,
+          });
           break;
         }
 
@@ -83,9 +79,16 @@ export class WorkerEventsController {
           throw new AppError(400, 'UNKNOWN_EVENT_TYPE', `Unsupported worker event: ${eventType}`);
       }
 
+      const isDuplicate =
+        !updatedJob || (initialJobState === updatedJob.state && eventType !== 'render.progress');
+
       res.status(200).json({
         success: true,
-        data: { accepted: true, duplicate: false },
+        data: {
+          accepted: true,
+          duplicate: isDuplicate,
+          state: updatedJob?.state || job.state,
+        },
         requestId: req.id,
       });
     } catch (err) {

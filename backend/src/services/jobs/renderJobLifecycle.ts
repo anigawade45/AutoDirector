@@ -5,6 +5,7 @@ import {
   JobType,
   JobProfile,
 } from '../../models/RenderJob.js';
+import { ProjectModel } from '../../models/Project.js';
 import { JobEventsPublisher } from '../queue/queueService.js';
 import { QuotaService } from '../auth/quotaService.js';
 import { AppError } from '../../middleware/errorHandler.js';
@@ -99,10 +100,18 @@ export class RenderJobLifecycle {
       throw new AppError(404, 'JOB_NOT_FOUND', `RenderJob ${jobId} not found`);
     }
 
-    // Terminal guard: once completed, failed or canceled, never regress to active/processing
+    // 1. Terminal guard: once completed, failed or canceled, never regress to active/processing
     if (TERMINAL_STATES.includes(job.state)) {
       console.warn(
         `[RenderJobLifecycle] Monotonic guard: ignoring transition from terminal state ${job.state} to ${targetState} for job ${jobId}`
+      );
+      return job;
+    }
+
+    // 2. Regressive progress guard: if job has already reached uploading_output, ignore late processing events
+    if (targetState === 'processing' && job.state === 'uploading_output') {
+      console.warn(
+        `[RenderJobLifecycle] Monotonic guard: ignoring late processing event for job ${jobId} currently in uploading_output`
       );
       return job;
     }
@@ -151,13 +160,37 @@ export class RenderJobLifecycle {
         const durationMs =
           updates?.output?.durationMs || job.output?.durationMs || job.timings.durationMs || 60000;
         const minutesRendered = Math.max(1, Math.ceil(durationMs / 60000));
-        await QuotaService.incrementRenderMinutes(job.userId.toString(), minutesRendered).catch(
-          (err) =>
-            console.warn(
-              '[RenderJobLifecycle] Failed to record render minutes quota:',
-              err.message || err
-            )
+        await Promise.resolve(
+          QuotaService.incrementRenderMinutes(job.userId.toString(), minutesRendered)
+        ).catch((err) =>
+          console.warn(
+            '[RenderJobLifecycle] Failed to record render minutes quota:',
+            err.message || err
+          )
         );
+      }
+
+      // Synchronize associated Project model status and publishedVersion
+      if (
+        job.projectId &&
+        typeof ProjectModel !== 'undefined' &&
+        typeof ProjectModel.updateOne === 'function'
+      ) {
+        try {
+          if (job.type === 'export' || job.type === 'render') {
+            await ProjectModel.updateOne(
+              { _id: job.projectId },
+              { $set: { publishedVersion: job.timelineVersion, status: 'ready' } }
+            );
+          } else if (job.type === 'preview' || job.type === 'analysis') {
+            await ProjectModel.updateOne({ _id: job.projectId }, { $set: { status: 'ready' } });
+          }
+        } catch (projErr: any) {
+          console.warn(
+            '[RenderJobLifecycle] Project synchronization notice:',
+            projErr.message || projErr
+          );
+        }
       }
     } else if (targetState === 'failed') {
       job.timings.finishedAt = now;
@@ -165,6 +198,22 @@ export class RenderJobLifecycle {
         job.timings.durationMs = now.getTime() - job.timings.startedAt.getTime();
       }
       job.error = this.classifyError(updates?.error || {});
+
+      // Synchronize associated Project model status on failure
+      if (
+        job.projectId &&
+        typeof ProjectModel !== 'undefined' &&
+        typeof ProjectModel.updateOne === 'function'
+      ) {
+        try {
+          await ProjectModel.updateOne({ _id: job.projectId }, { $set: { status: 'error' } });
+        } catch (projErr: any) {
+          console.warn(
+            '[RenderJobLifecycle] Project synchronization notice on failure:',
+            projErr.message || projErr
+          );
+        }
+      }
     } else if (targetState === 'canceled') {
       job.timings.finishedAt = now;
       if (job.timings.startedAt) {

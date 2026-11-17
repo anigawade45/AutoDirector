@@ -7,6 +7,7 @@ import { CaptionSetModel } from '../models/CaptionSet.js';
 import { ProjectModel } from '../models/Project.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { EditPlanModel } from '../models/EditPlan.js';
+import { RenderJobLifecycle } from '../services/jobs/renderJobLifecycle.js';
 import { JobEventsPublisher, QUEUE_CONFIGS } from '../services/queue/queueService.js';
 import { S3Service } from '../services/storage/s3Service.js';
 import { JobScratchDirectory } from '../services/storage/jobScratchDirectory.js';
@@ -367,14 +368,18 @@ export function startAnalysisWorker() {
         }
 
         // 10. Update RenderJob & Project Status
-        await RenderJobModel.updateOne(
-          { _id: jobId },
-          {
-            $set: {
-              state: 'completed',
-              percent: 100,
-              'timings.finishedAt': new Date(),
-            },
+        await RenderJobLifecycle.transition(jobId, 'completed', { percent: 100 }).catch(
+          async () => {
+            await RenderJobModel.updateOne(
+              { _id: jobId },
+              {
+                $set: {
+                  state: 'completed',
+                  percent: 100,
+                  'timings.finishedAt': new Date(),
+                },
+              }
+            );
           }
         );
 
@@ -410,20 +415,28 @@ export function startAnalysisWorker() {
         const errorCode = err.code || 'ANALYSIS_FAILED';
         const isCorrupt = errorCode === 'INPUT_CORRUPT';
 
-        await RenderJobModel.updateOne(
-          { _id: jobId },
-          {
-            $set: {
-              state: 'failed',
-              error: {
-                code: errorCode,
-                message: err.message || 'Media analysis failed',
-                retryable: !isCorrupt,
+        await RenderJobLifecycle.transition(jobId, 'failed', {
+          error: {
+            code: errorCode,
+            message: err.message || 'Media analysis failed',
+            retryable: !isCorrupt,
+          },
+        }).catch(async () => {
+          await RenderJobModel.updateOne(
+            { _id: jobId },
+            {
+              $set: {
+                state: 'failed',
+                error: {
+                  code: errorCode,
+                  message: err.message || 'Media analysis failed',
+                  retryable: !isCorrupt,
+                },
+                'timings.finishedAt': new Date(),
               },
-              'timings.finishedAt': new Date(),
-            },
-          }
-        );
+            }
+          );
+        });
 
         await AssetModel.updateOne({ publicId: assetId }, { $set: { status: 'failed' } });
 
