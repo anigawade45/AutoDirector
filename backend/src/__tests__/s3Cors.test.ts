@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PutBucketCorsCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '../config/s3.js';
 import { S3Service } from '../services/storage/s3Service.js';
-import { env } from '../config/env.js';
+import { env, envSchema } from '../config/env.js';
 
 vi.mock('../config/s3.js', () => ({
   s3Client: {
@@ -29,7 +29,7 @@ describe('S3 Bucket Hardened CORS Security Suite', () => {
   });
 
   describe('S3Service.resolveAllowedOrigins', () => {
-    it('prioritizes explicit customOrigins argument when provided', () => {
+    it('prioritizes explicit customOrigins argument when provided in non-prod', () => {
       const custom = ['https://custom-studio.ai', 'https://editor.custom.com'];
       const resolved = S3Service.resolveAllowedOrigins(custom);
       expect(resolved).toEqual(custom);
@@ -48,15 +48,41 @@ describe('S3 Bucket Hardened CORS Security Suite', () => {
       expect(resolved).toEqual(['https://app1.studio.ai', 'https://app2.studio.ai']);
     });
 
-    it('restricts wildcard to trusted origins in production environment by default', () => {
+    it('restricts wildcard to trusted origins in production environment by default (SEC-008)', () => {
       (env as any).S3_ALLOWED_ORIGINS = '';
       (env as any).CORS_ORIGIN = '*';
       (env as any).NODE_ENV = 'production';
 
       const resolved = S3Service.resolveAllowedOrigins();
-      expect(resolved).toContain('https://ai-video-frontend-57bk.onrender.com');
-      expect(resolved).toContain('http://localhost:5173');
+      expect(resolved).toEqual(['https://ai-video-frontend-57bk.onrender.com']);
+      expect(resolved).not.toContain('http://localhost:5173');
       expect(resolved).not.toContain('*');
+    });
+
+    it('strips wildcard * and insecure HTTP origins from customOrigins in production (SEC-008)', () => {
+      (env as any).NODE_ENV = 'production';
+
+      const custom = ['*', 'https://custom-studio.ai', 'http://insecure-domain.com'];
+      const resolved = S3Service.resolveAllowedOrigins(custom);
+      expect(resolved).toEqual(['https://custom-studio.ai']);
+      expect(resolved).not.toContain('*');
+      expect(resolved).not.toContain('http://insecure-domain.com');
+    });
+
+    it('strips wildcard * from S3_ALLOWED_ORIGINS in production (SEC-008)', () => {
+      (env as any).NODE_ENV = 'production';
+      (env as any).S3_ALLOWED_ORIGINS = '*, https://app.studio.ai, http://untrusted.com';
+
+      const resolved = S3Service.resolveAllowedOrigins();
+      expect(resolved).toEqual(['https://app.studio.ai']);
+    });
+
+    it('falls back strictly to production domain when all provided origins are wildcard or insecure in prod (SEC-008)', () => {
+      (env as any).NODE_ENV = 'production';
+      (env as any).S3_ALLOWED_ORIGINS = '*, http://localhost:5173, http://test.com';
+
+      const resolved = S3Service.resolveAllowedOrigins();
+      expect(resolved).toEqual(['https://ai-video-frontend-57bk.onrender.com']);
     });
 
     it('allows wildcard in development environment when CORS_ORIGIN is *', () => {
@@ -66,6 +92,55 @@ describe('S3 Bucket Hardened CORS Security Suite', () => {
 
       const resolved = S3Service.resolveAllowedOrigins();
       expect(resolved).toEqual(['*']);
+    });
+  });
+
+  describe('Startup S3_ALLOWED_ORIGINS Validation in envSchema (SEC-008)', () => {
+    const baseValidProdEnv = {
+      PORT: '4000',
+      NODE_ENV: 'production' as const,
+      API_BASE_URL: 'https://api.studio.ai/api',
+      CORS_ORIGIN: 'https://studio.ai',
+      JWT_SECRET: 'super-secure-production-jwt-secret-key-12345',
+      INTERNAL_WORKER_SECRET: 'super-secure-worker-secret-key-12345',
+      MONGODB_URI: 'mongodb://localhost:27017/prod',
+      AWS_ACCESS_KEY_ID: 'AKIA_PROD_12345',
+      AWS_SECRET_ACCESS_KEY: 'secret_key_prod_12345',
+      S3_BUCKET_NAME: 'prod-bucket',
+    };
+
+    it('rejects wildcard S3_ALLOWED_ORIGINS in production mode', () => {
+      const result = envSchema.safeParse({
+        ...baseValidProdEnv,
+        S3_ALLOWED_ORIGINS: '*',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find((i) => i.path.includes('S3_ALLOWED_ORIGINS'));
+        expect(issue).toBeDefined();
+        expect(issue?.message).toContain('Wildcard S3_ALLOWED_ORIGINS ("*") is prohibited in production');
+      }
+    });
+
+    it('rejects non-HTTPS S3_ALLOWED_ORIGINS in production mode', () => {
+      const result = envSchema.safeParse({
+        ...baseValidProdEnv,
+        S3_ALLOWED_ORIGINS: 'http://insecure.studio.ai',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find((i) => i.path.includes('S3_ALLOWED_ORIGINS'));
+        expect(issue).toBeDefined();
+        expect(issue?.message).toContain('must use HTTPS protocol in production');
+      }
+    });
+
+    it('accepts valid HTTPS S3_ALLOWED_ORIGINS in production mode', () => {
+      const result = envSchema.safeParse({
+        ...baseValidProdEnv,
+        S3_ALLOWED_ORIGINS: 'https://app.studio.ai, https://editor.studio.ai',
+      });
+      expect(result.success).toBe(true);
     });
   });
 

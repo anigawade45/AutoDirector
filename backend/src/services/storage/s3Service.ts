@@ -92,35 +92,47 @@ export class S3Service {
   /**
    * Resolves the list of allowed CORS origins for S3 direct browser interactions.
    * Prioritizes explicit customOrigins parameter, then env.S3_ALLOWED_ORIGINS,
-   * then env.CORS_ORIGIN, falling back safely to production frontend domains or localhost in dev.
+   * then env.CORS_ORIGIN, falling back safely to production frontend domain or localhost in dev.
+   *
+   * Security Hardening (SEC-008):
+   * In production mode, wildcard '*' is strictly prohibited and stripped,
+   * non-HTTPS insecure origins (http://localhost) are prohibited,
+   * and origins default strictly to the trusted production frontend domain.
    */
   static resolveAllowedOrigins(customOrigins?: string[]): string[] {
+    const isProduction = env.NODE_ENV === 'production';
+    const defaultProdOrigin = 'https://ai-video-frontend-57bk.onrender.com';
+
+    let candidates: string[] = [];
+
     if (customOrigins && customOrigins.length > 0) {
-      return customOrigins;
-    }
-
-    if (env.S3_ALLOWED_ORIGINS && env.S3_ALLOWED_ORIGINS.trim()) {
-      return env.S3_ALLOWED_ORIGINS.split(',')
+      candidates = customOrigins;
+    } else if (env.S3_ALLOWED_ORIGINS && env.S3_ALLOWED_ORIGINS.trim()) {
+      candidates = env.S3_ALLOWED_ORIGINS.split(',')
+        .map((o) => o.trim())
+        .filter(Boolean);
+    } else if (env.CORS_ORIGIN && env.CORS_ORIGIN.trim() && env.CORS_ORIGIN !== '*') {
+      candidates = env.CORS_ORIGIN.split(',')
         .map((o) => o.trim())
         .filter(Boolean);
     }
 
-    if (env.CORS_ORIGIN && env.CORS_ORIGIN.trim() && env.CORS_ORIGIN !== '*') {
-      return env.CORS_ORIGIN.split(',')
-        .map((o) => o.trim())
-        .filter(Boolean);
+    if (isProduction) {
+      // In production, strictly reject and filter out wildcard '*' and insecure non-HTTPS origins
+      const filtered = candidates.filter(
+        (origin) => origin !== '*' && origin.startsWith('https://')
+      );
+      if (filtered.length > 0) {
+        return filtered;
+      }
+      return [defaultProdOrigin];
     }
 
-    // In production, avoid blanket '*' wildcard unless explicitly overridden
-    if (env.NODE_ENV === 'production' && env.CORS_ORIGIN === '*') {
-      return [
-        'https://ai-video-frontend-57bk.onrender.com',
-        'http://localhost:5173',
-        'http://localhost:3000',
-      ];
+    // Development and test environments
+    if (candidates.length > 0) {
+      return candidates;
     }
 
-    // In local development / test, allow wildcard if CORS_ORIGIN is '*'
     if (env.CORS_ORIGIN === '*') {
       return ['*'];
     }

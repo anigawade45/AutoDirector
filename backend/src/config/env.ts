@@ -247,6 +247,29 @@ export const envSchema = z
           });
         }
       }
+
+      // Production S3 CORS Hardening (SEC-008)
+      if (data.S3_ALLOWED_ORIGINS && data.S3_ALLOWED_ORIGINS.trim()) {
+        const s3Origins = data.S3_ALLOWED_ORIGINS.split(',')
+          .map((o) => o.trim())
+          .filter(Boolean);
+        if (s3Origins.includes('*')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Wildcard S3_ALLOWED_ORIGINS ("*") is prohibited in production.',
+            path: ['S3_ALLOWED_ORIGINS'],
+          });
+        }
+        for (const origin of s3Origins) {
+          if (origin !== '*' && !origin.startsWith('https://')) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `S3_ALLOWED_ORIGINS entry "${origin}" must use HTTPS protocol in production.`,
+              path: ['S3_ALLOWED_ORIGINS'],
+            });
+          }
+        }
+      }
     }
   });
 
