@@ -182,6 +182,7 @@ describe('SSE Ticket & Streaming Authentication Hardening Suite', () => {
       expect(nextFn).toHaveBeenCalled();
       expect(req1.user).toBeDefined();
       expect(req1.user?.email).toBe('creator@studio.ai');
+      expect((req1.query as any).ticket).toBeUndefined();
 
       // Replay attempt with same burned ticket is rejected immediately with 401
       const nextFnReplay = vi.fn();
@@ -245,10 +246,12 @@ describe('SSE Ticket & Streaming Authentication Hardening Suite', () => {
       );
     });
 
-    it('accepts ?token= on /events with deprecation warning for backward compatibility', async () => {
+    it('accepts ?token= on /events with deprecation warning and scrubs in-memory parameter', async () => {
       const req = {
         headers: { accept: 'text/event-stream' },
         query: { token: validJwt },
+        url: `/job_123/events?token=${validJwt}`,
+        originalUrl: `/api/jobs/job_123/events?token=${validJwt}`,
         path: '/job_123/events',
       } as unknown as Request;
 
@@ -257,6 +260,31 @@ describe('SSE Ticket & Streaming Authentication Hardening Suite', () => {
       expect(nextFn).toHaveBeenCalled();
       expect(req.user).toBeDefined();
       expect(req.user?.email).toBe('creator@studio.ai');
+      expect((req.query as any).token).toBeUndefined();
+      expect(req.url).toBe('/job_123/events?token=[REDACTED]');
+      expect(req.originalUrl).toBe('/api/jobs/job_123/events?token=[REDACTED]');
+    });
+
+    it('redacts in-memory req.url and req.originalUrl when ?ticket= is processed', async () => {
+      const ticket = await TokenService.createSseTicket(
+        { userId: userId.toString(), jobId: '123' },
+        30
+      );
+
+      const req = {
+        headers: { accept: 'text/event-stream' },
+        query: { ticket },
+        url: `/job_123/events?ticket=${ticket}`,
+        originalUrl: `/api/jobs/job_123/events?ticket=${ticket}`,
+        path: '/job_123/events',
+      } as unknown as Request;
+
+      await authMiddleware(req, mockRes as unknown as Response, nextFn);
+
+      expect(nextFn).toHaveBeenCalled();
+      expect((req.query as any).ticket).toBeUndefined();
+      expect(req.url).toBe('/job_123/events?ticket=[REDACTED]');
+      expect(req.originalUrl).toBe('/api/jobs/job_123/events?ticket=[REDACTED]');
     });
   });
 
