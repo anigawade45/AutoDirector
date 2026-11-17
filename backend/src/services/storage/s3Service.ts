@@ -167,6 +167,7 @@ export class S3Service {
                 AllowedOrigins: allowedOrigins,
                 AllowedMethods: ['GET', 'PUT', 'HEAD'],
                 AllowedHeaders: [
+                  '*',
                   'Content-Type',
                   'Content-MD5',
                   'Content-Length',
