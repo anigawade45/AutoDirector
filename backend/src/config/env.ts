@@ -161,6 +161,48 @@ export const envSchema = z
         path: ['CORS_ORIGIN'],
       });
     }
+
+    // Production datastore security & credentials hygiene (SEC-006)
+    if (data.NODE_ENV === 'production') {
+      if (data.REDIS_PASSWORD) {
+        const weakRedisPasswords = [
+          'prod_redis_pass_change_me',
+          '__inject_redis_password__',
+          'password',
+          'admin',
+          '123456',
+          'redis',
+          'change_me',
+        ];
+        if (
+          weakRedisPasswords.includes(data.REDIS_PASSWORD.toLowerCase()) ||
+          data.REDIS_PASSWORD.includes('__INJECT_')
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              'REDIS_PASSWORD is weak or uses a default placeholder in production. Must supply a secure secret.',
+            path: ['REDIS_PASSWORD'],
+          });
+        }
+      }
+
+      if (data.MONGODB_URI) {
+        if (
+          data.MONGODB_URI.includes('__INJECT_') ||
+          data.MONGODB_URI.includes(':password@') ||
+          data.MONGODB_URI.includes(':admin@') ||
+          data.MONGODB_URI.includes(':change_me@')
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              'MONGODB_URI contains placeholder or weak default credentials in production. Must supply verified production credentials.',
+            path: ['MONGODB_URI'],
+          });
+        }
+      }
+    }
   });
 
 let parsedEnv: z.infer<typeof envSchema>;

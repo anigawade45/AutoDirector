@@ -1,15 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
+import { envSchema } from '../config/env.js';
 
 /**
- * Production Compose & Datastore Security Policy Test Suite (POT-004)
+ * Production Compose & Datastore Security Policy Test Suite (POT-004 / SEC-006)
  * 
  * Verifies that production and development Docker Compose configurations:
  * 1. Do not expose datastores (MongoDB, Redis) or direct backend APIs to public network interfaces (0.0.0.0).
  * 2. Enforce strict mandatory credentials with no weak fallback passwords (${VAR:?message}).
- * 3. Restrict administrative host port mappings strictly to loopback (127.0.0.1).
- * 4. Configure authenticated healthchecks for secured datastore containers.
+ * 3. Restrict administrative host port mappings strictly to loopback (127.0.0.1) and declare internal expose ports.
+ * 4. Configure authenticated healthchecks for secured datastore containers without unauthenticated fallbacks.
+ * 5. Enforce tiered private networking: isolated internal datastore network (internal: true) preventing public egress and frontend direct access.
+ * 6. Enforce startup fail-fast validation against weak or default placeholder database/cache credentials.
  */
 describe('POT-004: Production Compose Datastore Security & Port Isolation Policy', () => {
   const rootDir = path.resolve(__dirname, '../../../');
@@ -45,11 +48,21 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
       expect(prodContent).not.toContain('MONGO_ROOT_PASSWORD:-change_me');
     });
 
-    it('configures authenticated healthcheck for MongoDB replica set', () => {
+    it('configures authenticated healthcheck for MongoDB replica set without unauthenticated fallback (SEC-006)', () => {
       // Healthcheck must include credentialed authentication
       expect(prodContent).toContain('MONGO_INITDB_ROOT_PASSWORD');
       expect(prodContent).toContain('--authenticationDatabase admin');
       expect(prodContent).toContain('rs.status().ok');
+      // Must not contain any unauthenticated mongosh fallback (|| mongosh ...)
+      expect(prodContent).not.toMatch(/\|\|\s*mongosh/);
+    });
+
+    it('attaches MongoDB strictly to datastore_net and isolates from frontend_net (SEC-006)', () => {
+      const mongoSection = prodContent.split('\n  mongodb:\n')[1]?.split('\n  redis:\n')[0];
+      expect(mongoSection).toBeDefined();
+      expect(mongoSection).toContain('- datastore_net');
+      expect(mongoSection).not.toContain('frontend_net');
+      expect(mongoSection).toContain("expose:\n      - '27017'");
     });
 
     it('prohibits hardcoded localhost:27017 replica set member host in production compose (POT-009)', () => {
@@ -83,6 +96,15 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
     it('configures authenticated healthcheck for Redis', () => {
       // Redis healthcheck must pass auth password
       expect(prodContent).toMatch(/redis-cli -a "\$\$REDIS_PASSWORD" ping/);
+    });
+
+    it('enforces protected-mode and attaches Redis strictly to datastore_net (SEC-006)', () => {
+      const redisSection = prodContent.split('\n  redis:\n')[1]?.split('\n  frontend:\n')[0];
+      expect(redisSection).toBeDefined();
+      expect(redisSection).toContain('--protected-mode');
+      expect(redisSection).toContain('- datastore_net');
+      expect(redisSection).not.toContain('frontend_net');
+      expect(redisSection).toContain("expose:\n      - '6379'");
     });
   });
 
@@ -122,6 +144,123 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
       expect(nginxContent).toMatch(/location\s+\^\~\s+\/api\/internal\//);
       expect(nginxContent).toContain('return 403');
       expect(nginxContent).toContain('Direct access to internal endpoints is prohibited');
+    });
+
+    it('verifies frontend service attaches only to frontend_net and cannot access datastore_net (SEC-006)', () => {
+      const frontendSection = prodContent.split('\n  frontend:\n')[1]?.split('\nvolumes:\n')[0];
+      expect(frontendSection).toBeDefined();
+      expect(frontendSection).toContain('- frontend_net');
+      expect(frontendSection).not.toContain('datastore_net');
+      expect(frontendSection).not.toContain('backend_net');
+    });
+  });
+
+  describe('Tiered Private Networking & Datastore Isolation (SEC-006)', () => {
+    const prodContent = fs.readFileSync(prodComposePath, 'utf8');
+
+    it('defines explicit segmented networks for frontend, backend, and datastores', () => {
+      expect(prodContent).toContain('networks:');
+      expect(prodContent).toContain('frontend_net:');
+      expect(prodContent).toContain('backend_net:');
+      expect(prodContent).toContain('datastore_net:');
+    });
+
+    it('marks datastore_net as internal: true to block public internet egress/ingress', () => {
+      const networksSection = prodContent.split('networks:')[prodContent.split('networks:').length - 1];
+      expect(networksSection).toBeDefined();
+      expect(networksSection).toContain('datastore_net:');
+      expect(networksSection).toContain('internal: true');
+    });
+
+    it('bridges API service across frontend, backend, and datastore networks', () => {
+      const apiSection = prodContent.split('\n  api:\n')[1]?.split('\n  worker-analysis:\n')[0];
+      expect(apiSection).toBeDefined();
+      expect(apiSection).toContain('- frontend_net');
+      expect(apiSection).toContain('- backend_net');
+      expect(apiSection).toContain('- datastore_net');
+    });
+
+    it('attaches background workers strictly to backend and datastore networks', () => {
+      const analysisSection = prodContent.split('worker-analysis:')[1]?.split('worker-render:')[0];
+      expect(analysisSection).toBeDefined();
+      expect(analysisSection).toContain('- backend_net');
+      expect(analysisSection).toContain('- datastore_net');
+      expect(analysisSection).not.toContain('frontend_net');
+
+      const renderSection = prodContent.split('worker-render:')[1]?.split('mongodb:')[0];
+      expect(renderSection).toBeDefined();
+      expect(renderSection).toContain('- backend_net');
+      expect(renderSection).toContain('- datastore_net');
+      expect(renderSection).not.toContain('frontend_net');
+    });
+  });
+
+  describe('Datastore Credentials Hygiene & Startup Validation (SEC-006)', () => {
+    const baseValidProdEnv = {
+      PORT: '4000',
+      NODE_ENV: 'production' as const,
+      API_BASE_URL: 'https://api.studio.ai/api',
+      CORS_ORIGIN: 'https://studio.ai',
+      JWT_SECRET: 'super-secure-production-jwt-secret-key-12345',
+      INTERNAL_WORKER_SECRET: 'super-secure-worker-secret-key-12345',
+      MONGODB_URI: 'mongodb://app_user:verified_strong_mongo_pass@mongodb:27017/ai_video_prod?replicaSet=rs0&authSource=admin',
+      REDIS_HOST: 'redis',
+      REDIS_PORT: '6379',
+      REDIS_PASSWORD: 'verified_strong_redis_password_98765',
+      AWS_ACCESS_KEY_ID: 'AKIA_PROD_12345',
+      AWS_SECRET_ACCESS_KEY: 'secret_key_prod_12345',
+      S3_BUCKET_NAME: 'prod-bucket',
+    };
+
+    it('accepts strong production datastore credentials', () => {
+      const result = envSchema.safeParse(baseValidProdEnv);
+      expect(result.success).toBe(true);
+    });
+
+    it('rejects deprecated weak default Redis password in production mode', () => {
+      const result = envSchema.safeParse({
+        ...baseValidProdEnv,
+        REDIS_PASSWORD: 'prod_redis_pass_change_me',
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const issue = result.error.issues.find((i) => i.path.includes('REDIS_PASSWORD'));
+        expect(issue).toBeDefined();
+        expect(issue?.message).toContain('REDIS_PASSWORD is weak or uses a default placeholder in production');
+      }
+    });
+
+    it('rejects trivial or placeholder Redis passwords in production', () => {
+      for (const weakPass of ['password', 'admin', '123456', '__INJECT_REDIS_PASSWORD__']) {
+        const result = envSchema.safeParse({
+          ...baseValidProdEnv,
+          REDIS_PASSWORD: weakPass,
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          const issue = result.error.issues.find((i) => i.path.includes('REDIS_PASSWORD'));
+          expect(issue).toBeDefined();
+        }
+      }
+    });
+
+    it('rejects placeholder or default MongoDB credentials in production', () => {
+      const resultPlaceholder = envSchema.safeParse({
+        ...baseValidProdEnv,
+        MONGODB_URI: 'mongodb://app_user:__INJECT_MONGO_PASSWORD__@mongodb:27017/prod?replicaSet=rs0',
+      });
+      expect(resultPlaceholder.success).toBe(false);
+      if (!resultPlaceholder.success) {
+        const issue = resultPlaceholder.error.issues.find((i) => i.path.includes('MONGODB_URI'));
+        expect(issue).toBeDefined();
+        expect(issue?.message).toContain('MONGODB_URI contains placeholder or weak default credentials in production');
+      }
+
+      const resultDefaultPass = envSchema.safeParse({
+        ...baseValidProdEnv,
+        MONGODB_URI: 'mongodb://admin:password@mongodb:27017/prod?replicaSet=rs0',
+      });
+      expect(resultDefaultPass.success).toBe(false);
     });
   });
 
