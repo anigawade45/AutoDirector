@@ -9,8 +9,10 @@ services:
       dockerfile: backend/Dockerfile
     container_name: ai_video_prod_api
     restart: always
+    # Security: Restrict direct API port exposure to loopback (127.0.0.1).
+    # Public ingress routes strictly through the frontend Nginx reverse proxy on 80/443.
     ports:
-      - '4000:4000'
+      - '127.0.0.1:4000:4000'
     env_file:
       - .env.production
     environment:
@@ -127,7 +129,16 @@ services:
       - mongodb_prod_data:/data/db
     healthcheck:
       test: >
-        mongosh --quiet --eval "
+        mongosh -u "$${MONGO_INITDB_ROOT_USERNAME:-admin}" -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --quiet --eval "
+          try {
+            rs.status().ok
+          } catch (e) {
+            rs.initiate({
+              _id: 'rs0',
+              members: [{ _id: 0, host: 'localhost:27017' }]
+            }).ok
+          }
+        " || mongosh --quiet --eval "
           try {
             rs.status().ok
           } catch (e) {
