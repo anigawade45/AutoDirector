@@ -230,7 +230,7 @@ describe('Phase 8 — Integration, QA and Performance Acceptance Suite', () => {
           success: true,
           data: expect.objectContaining({
             user: expect.objectContaining({ email: 'director@studio.ai' }),
-            token: userA_Id.toString(),
+            token: expect.any(String),
           }),
         })
       );

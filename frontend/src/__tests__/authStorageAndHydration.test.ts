@@ -390,4 +390,74 @@ describe('AuthStorage & Safe Hydration Suite', () => {
       expect(AuthStorage.getUser()?.name).toBe('Cache User');
     });
   });
+
+  describe('6. SEC-010: Tab-Scoped Storage & XSS Token Theft Mitigation', () => {
+    const testUser = {
+      id: 'usr_sec010_test',
+      name: 'Scoped User',
+      email: 'scoped@studio.ai',
+      tier: 'pro' as const,
+      createdAt: '2026-11-16T12:00:00Z',
+    };
+    const futureSec = Math.floor(Date.now() / 1000) + 3600;
+    const payload = Buffer.from(
+      JSON.stringify({ sub: 'usr_sec010_test', exp: futureSec })
+    ).toString('base64url');
+    const sampleToken = `eyJhbGciOiJIUzI1NiJ9.${payload}.validSig`;
+
+    it('stores token strictly in sessionStorage when rememberMe is false (SEC-010)', () => {
+      AuthStorage.setSession(sampleToken, testUser, { rememberMe: false });
+
+      // Token is accessible to active tab
+      expect(AuthStorage.getToken()).toBe(sampleToken);
+      expect(sessionStorageMap.get('auth_token')).toBe(sampleToken);
+
+      // Crucially, token is NOT stored in localStorage (preventing persistent token theft via XSS)
+      expect(localStorageMap.has('auth_token')).toBe(false);
+      expect(AuthStorage.isSessionOnly()).toBe(true);
+
+      // User profile remains in storage for hydration
+      expect(sessionStorageMap.has('auth_user')).toBe(true);
+    });
+
+    it('stores token in both storages when rememberMe is true', () => {
+      AuthStorage.setSession(sampleToken, testUser, { rememberMe: true });
+
+      expect(AuthStorage.getToken()).toBe(sampleToken);
+      expect(sessionStorageMap.get('auth_token')).toBe(sampleToken);
+      expect(localStorageMap.get('auth_token')).toBe(sampleToken);
+      expect(AuthStorage.isSessionOnly()).toBe(false);
+    });
+
+    it('migrates persistent localStorage token to session-only storage via migrateToSessionOnly()', () => {
+      AuthStorage.setSession(sampleToken, testUser, { rememberMe: true });
+      expect(localStorageMap.has('auth_token')).toBe(true);
+
+      AuthStorage.migrateToSessionOnly();
+
+      expect(sessionStorageMap.get('auth_token')).toBe(sampleToken);
+      expect(localStorageMap.has('auth_token')).toBe(false);
+      expect(AuthStorage.isSessionOnly()).toBe(true);
+      expect(AuthStorage.getToken()).toBe(sampleToken);
+    });
+
+    it('triggers server logout API and clears local credentials upon store logout', async () => {
+      (api as any).logout = vi.fn().mockResolvedValue({ message: 'Signed out' });
+
+      AuthStorage.setSession(sampleToken, testUser, { rememberMe: true });
+      useAuthStore.getState().hydrateFromStorage();
+
+      useAuthStore.getState().logout();
+
+      expect((api as any).logout).toHaveBeenCalled();
+      expect(AuthStorage.hasToken()).toBe(false);
+      expect(localStorageMap.has('auth_token')).toBe(false);
+      expect(sessionStorageMap.has('auth_token')).toBe(false);
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.user).toBeNull();
+      expect(state.token).toBeNull();
+    });
+  });
 });

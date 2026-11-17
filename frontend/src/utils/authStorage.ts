@@ -180,14 +180,23 @@ export const AuthStorage = {
 
   /**
    * Sets the auth session (token and user profile).
+   * Supports session-only mode (options.rememberMe === false or options.sessionOnly === true)
+   * which stores the token strictly in tab-scoped sessionStorage and memory, eliminating
+   * persistent token exposure in localStorage (SEC-010).
    */
-  setSession(token: string, user: UserProfile): void {
+  setSession(
+    token: string,
+    user: UserProfile,
+    options?: { rememberMe?: boolean; sessionOnly?: boolean }
+  ): void {
     inMemoryToken = token;
     inMemoryUser = user;
 
     const sessionStore = getStorage('sessionStorage');
     const localStore = getStorage('localStorage');
     const serializedUser = JSON.stringify(user);
+
+    const isSessionOnly = options?.sessionOnly === true || options?.rememberMe === false;
 
     try {
       sessionStore?.setItem(TOKEN_KEY, token);
@@ -197,11 +206,42 @@ export const AuthStorage = {
     }
 
     try {
-      localStore?.setItem(TOKEN_KEY, token);
+      if (isSessionOnly) {
+        // Security (SEC-010): In session-only mode, eliminate token persistence in localStorage
+        // to mitigate long-term XSS theft or shared terminal exposure
+        localStore?.removeItem(TOKEN_KEY);
+      } else {
+        localStore?.setItem(TOKEN_KEY, token);
+      }
       localStore?.setItem(USER_KEY, serializedUser);
     } catch {
       // Ignore localStorage errors
     }
+  },
+
+  /**
+   * Security (SEC-010): Migrates persistent localStorage token to tab-scoped sessionStorage,
+   * purging the token from localStorage to reduce persistent token theft exposure.
+   */
+  migrateToSessionOnly(): void {
+    const token = this.getToken();
+    if (token) {
+      try {
+        getStorage('sessionStorage')?.setItem(TOKEN_KEY, token);
+      } catch {}
+    }
+    try {
+      getStorage('localStorage')?.removeItem(TOKEN_KEY);
+    } catch {}
+  },
+
+  /**
+   * Checks whether the current session is tab-scoped (stored only in sessionStorage).
+   */
+  isSessionOnly(): boolean {
+    const localStore = getStorage('localStorage');
+    const sessionStore = getStorage('sessionStorage');
+    return !localStore?.getItem(TOKEN_KEY) && !!sessionStore?.getItem(TOKEN_KEY);
   },
 
   /**

@@ -4,6 +4,8 @@ import path from 'path';
 import { EventEmitter } from 'events';
 import { createApp } from '../app.js';
 import { TokenService } from '../services/auth/tokenService.js';
+import { AuthController } from '../controllers/authController.js';
+import { UserModel } from '../models/User.js';
 import { verifyWorkerSignature, resetWorkerAuthReplayCache } from '../middleware/workerAuth.js';
 import { securityHeadersMiddleware } from '../middleware/securityHeaders.js';
 import {
@@ -1017,6 +1019,184 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
       expect(content).not.toContain('ai-video-studio-prod-aniket');
       expect(content).toContain('key: S3_BUCKET_NAME');
       expect(content).toContain('sync: false');
+    });
+  });
+
+  // =========================================================================
+  // 9. Session Hardening, HttpOnly Cookies, Token Rotation & CSP (SEC-010)
+  // =========================================================================
+  describe('9. Session Hardening, HttpOnly Cookies, Token Rotation & CSP (SEC-010)', () => {
+    it('rotates valid tokens with updated iat and exp while preserving claims', () => {
+      const original = TokenService.generateToken(
+        { id: 'usr_rot_01', email: 'rot@studio.ai', tier: 'pro', name: 'Rotator' },
+        3600
+      );
+
+      const rotated = TokenService.rotateToken(original, 7200);
+      expect(rotated).not.toBeNull();
+      expect(rotated).not.toBe(original);
+
+      const verified = TokenService.verifyToken(rotated!);
+      expect(verified).not.toBeNull();
+      expect(verified?.sub).toBe('usr_rot_01');
+      expect(verified?.email).toBe('rot@studio.ai');
+      expect(verified?.tier).toBe('pro');
+      expect(verified?.name).toBe('Rotator');
+      expect(verified?.exp).toBeGreaterThan(Math.floor(Date.now() / 1000) + 3600);
+    });
+
+    it('sets HttpOnly session cookie on successful registration and login', async () => {
+      const mockReq = {
+        body: {
+          email: 'cookie-user@studio.ai',
+          name: 'Cookie User',
+          password: 'Password123!',
+          tier: 'pro',
+        },
+        id: 'req_cookie_reg',
+      } as unknown as Request;
+
+      const cookieSpy = vi.fn();
+      const mockRes = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+        cookie: cookieSpy,
+      } as unknown as Response;
+
+      // Mock UserModel
+      const origFindOne = UserModel.findOne;
+      const origCreate = UserModel.create;
+      (UserModel as any).findOne = vi.fn().mockResolvedValue(null);
+      (UserModel as any).create = vi.fn().mockResolvedValue({
+        _id: '507f1f77bcf86cd799439099',
+        email: 'cookie-user@studio.ai',
+        name: 'Cookie User',
+        tier: 'pro',
+        quota: {},
+        usage: {},
+      });
+
+      try {
+        await AuthController.register(mockReq, mockRes, vi.fn());
+        expect(cookieSpy).toHaveBeenCalledWith(
+          'auth_token',
+          expect.any(String),
+          expect.objectContaining({
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+          })
+        );
+      } finally {
+        (UserModel as any).findOne = origFindOne;
+        (UserModel as any).create = origCreate;
+      }
+    });
+
+    it('clears HttpOnly session cookie on logout', async () => {
+      const clearCookieSpy = vi.fn();
+      const mockReq = { id: 'req_logout_1' } as unknown as Request;
+      const mockRes = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+        clearCookie: clearCookieSpy,
+      } as unknown as Response;
+
+      await AuthController.logout(mockReq, mockRes, vi.fn());
+
+      expect(clearCookieSpy).toHaveBeenCalledWith(
+        'auth_token',
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+        })
+      );
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            message: expect.stringContaining('Signed out successfully'),
+          }),
+        })
+      );
+    });
+
+    it('refreshes and rotates token via POST /refresh', async () => {
+      const validToken = TokenService.generateToken({
+        id: '507f1f77bcf86cd799439088',
+        email: 'refresh@studio.ai',
+        tier: 'enterprise',
+        name: 'Refresher',
+      });
+
+      const cookieSpy = vi.fn();
+      const mockReq = {
+        headers: {
+          authorization: `Bearer ${validToken}`,
+        },
+        id: 'req_refresh_1',
+      } as unknown as Request;
+
+      const mockRes = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+        cookie: cookieSpy,
+      } as unknown as Response;
+
+      const origFindById = UserModel.findById;
+      (UserModel as any).findById = vi.fn().mockResolvedValue({
+        _id: '507f1f77bcf86cd799439088',
+        email: 'refresh@studio.ai',
+        name: 'Refresher',
+        tier: 'enterprise',
+        quota: {},
+        usage: {},
+      });
+
+      try {
+        await AuthController.refresh(mockReq, mockRes, vi.fn());
+
+        expect(mockRes.status).toHaveBeenCalledWith(200);
+        expect(cookieSpy).toHaveBeenCalledWith(
+          'auth_token',
+          expect.any(String),
+          expect.objectContaining({
+            httpOnly: true,
+            sameSite: 'lax',
+            path: '/',
+          })
+        );
+        expect(mockRes.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            success: true,
+            data: expect.objectContaining({
+              token: expect.any(String),
+              jwt: expect.any(String),
+            }),
+          })
+        );
+      } finally {
+        (UserModel as any).findById = origFindById;
+      }
+    });
+
+    it('verifies route mounting for /logout and /refresh in auth.routes.ts', () => {
+      const authRoutesPath = path.join(rootDir, 'backend/src/routes/auth.routes.ts');
+      const content = fs.readFileSync(authRoutesPath, 'utf8');
+
+      expect(content).toMatch(/authRouter\.post\(\s*['"]\/logout['"],\s*AuthController\.logout\s*\)/);
+      expect(content).toMatch(/authRouter\.post\(\s*['"]\/refresh['"],\s*AuthController\.refresh\s*\)/);
+    });
+
+    it('verifies frontend/nginx.conf includes Content-Security-Policy and X-XSS-Protection "0"', () => {
+      const nginxPath = path.join(rootDir, 'frontend/nginx.conf');
+      const content = fs.readFileSync(nginxPath, 'utf8');
+
+      expect(content).toContain('add_header Content-Security-Policy');
+      expect(content).toContain("default-src 'self'");
+      expect(content).toContain('add_header X-XSS-Protection "0" always;');
     });
   });
 });

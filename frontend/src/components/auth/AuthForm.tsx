@@ -23,6 +23,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [tier, setTier] = useState<'free' | 'pro' | 'enterprise'>(initialTier);
+  const [rememberMe, setRememberMe] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const { login, register, isLoading, error, clearError } = useAuthStore();
@@ -74,6 +75,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
       const ok = await login({
         email: trimmedEmail,
         password: trimmedPassword,
+        rememberMe,
       });
 
       if (ok && onSuccess) {
@@ -177,6 +179,23 @@ export const AuthForm: React.FC<AuthFormProps> = ({
             />
           </div>
         </div>
+
+        {mode === 'login' && (
+          <div className="flex items-center justify-between text-xs text-[#FFF5F5]/70 pt-0.5">
+            <label className="flex items-center space-x-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-3.5 h-3.5 rounded bg-[#18191B] border-[#393B3F] text-[#E3B5BE] focus:ring-0 focus:outline-none"
+              />
+              <span className="text-[11px] font-mono text-[#FFF5F5]/80">Remember this device</span>
+            </label>
+            <span className="text-[10px] text-[#FFF5F5]/40 font-mono">
+              {rememberMe ? 'Persistent session' : 'Tab session only'}
+            </span>
+          </div>
+        )}
 
         {mode === 'register' && (
           <div>

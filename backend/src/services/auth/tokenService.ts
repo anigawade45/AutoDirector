@@ -106,6 +106,25 @@ export class TokenService {
   }
 
   /**
+   * Rotates an active JWT token, issuing a freshly signed token with a new issued-at
+   * and expiration timestamp while preserving user claims (SEC-010).
+   */
+  static rotateToken(token: string, expiresInSec = 7 * 86400): string | null {
+    const payload = this.verifyToken(token);
+    if (!payload) return null;
+
+    return this.generateToken(
+      {
+        id: payload.sub,
+        email: payload.email,
+        tier: payload.tier,
+        name: payload.name,
+      },
+      expiresInSec
+    );
+  }
+
+  /**
    * Verifies an incoming JWT token and returns its payload if valid, or null if expired/tampered
    */
   static verifyToken(token: string): JwtPayload | null {

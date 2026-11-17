@@ -50,21 +50,26 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
 
-  // 12. Content Security Policy (allows API and media assets, restricts inline execution)
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self'; " +
-      "script-src 'self'; " +
-      "style-src 'self' 'unsafe-inline'; " +
-      "img-src 'self' data: https: blob:; " +
-      "media-src 'self' https: blob:; " +
-      "connect-src 'self' https: wss:; " +
-      "font-src 'self' data: https:; " +
-      "object-src 'none'; " +
-      "base-uri 'self'; " +
-      "form-action 'self'; " +
-      "frame-ancestors 'self';"
-  );
+  // 12. Content Security Policy (allows API and media assets, restricts inline execution) (SEC-010)
+  const cspDirectives = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "img-src 'self' data: https: blob:",
+    "media-src 'self' https: blob:",
+    "connect-src 'self' https: wss:",
+    "font-src 'self' data: https://fonts.gstatic.com https:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+  ];
+
+  if (env.NODE_ENV === 'production') {
+    cspDirectives.push('upgrade-insecure-requests');
+  }
+
+  res.setHeader('Content-Security-Policy', cspDirectives.join('; '));
 
   next();
 }

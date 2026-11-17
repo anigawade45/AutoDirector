@@ -121,6 +121,7 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
     headers,
+    credentials: options.credentials || 'include',
   });
 
   // 1. Safely read raw body: try text() first, fallback to json() if text() is not provided (e.g. in test mocks)
@@ -209,6 +210,16 @@ export const api = {
     request<AuthResponseData>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+
+  logout: () =>
+    request<{ message: string }>('/auth/logout', {
+      method: 'POST',
+    }),
+
+  refreshToken: () =>
+    request<{ token: string; jwt: string; user: UserProfile }>('/auth/refresh', {
+      method: 'POST',
     }),
 
   getMe: () => request<{ user: UserProfile }>('/auth/me'),

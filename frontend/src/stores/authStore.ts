@@ -17,7 +17,7 @@ interface AuthState {
   error: string | null;
 
   // Actions
-  login: (credentials: LoginRequest) => Promise<boolean>;
+  login: (credentials: LoginRequest & { rememberMe?: boolean }) => Promise<boolean>;
   register: (data: RegisterRequest) => Promise<boolean>;
   logout: () => void;
   checkSession: () => Promise<void>;
@@ -108,11 +108,13 @@ const store = create<AuthState>((set, get, storeApi) => {
     set({ user, isAuthenticated: !!user });
   },
 
-  login: async (credentials: LoginRequest) => {
+  login: async (credentials: LoginRequest & { rememberMe?: boolean }) => {
     set({ isLoading: true, error: null });
     try {
       const response = await api.login(credentials);
-      AuthStorage.setSession(response.token, response.user);
+      AuthStorage.setSession(response.token, response.user, {
+        rememberMe: credentials.rememberMe,
+      });
       set({
         user: response.user,
         token: response.token,
@@ -180,6 +182,8 @@ const store = create<AuthState>((set, get, storeApi) => {
   },
 
   logout: () => {
+    // Notify server to clear HttpOnly session cookie (SEC-010)
+    api.logout().catch(() => {});
     AuthStorage.clear();
     set({
       user: null,
