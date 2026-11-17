@@ -69,7 +69,48 @@ export function resolveApiBaseUrl(rawEnv?: string): string {
 
 export const BASE_URL = resolveApiBaseUrl();
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+/**
+ * Safely extracts a meaningful, readable text summary from raw response text,
+ * stripping HTML markup or extracting title/header elements from proxy error pages.
+ */
+export function extractCleanErrorMessage(rawText: string): string | null {
+  if (!rawText) return null;
+  const trimmed = rawText.trim();
+  if (!trimmed) return null;
+
+  // Check if string contains HTML
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
+    // 1. Try extracting <title> content
+    const titleMatch = trimmed.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleMatch && titleMatch[1]?.trim()) {
+      return titleMatch[1].trim();
+    }
+
+    // 2. Try extracting <h1> or <h2> content
+    const headingMatch = trimmed.match(/<h[12][^>]*>([^<]+)<\/h[12]>/i);
+    if (headingMatch && headingMatch[1]?.trim()) {
+      return headingMatch[1].trim();
+    }
+
+    // 3. Strip script, style, HTML tags and collapse whitespace
+    const stripped = trimmed
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (stripped.length > 0) {
+      return stripped.length > 250 ? `${stripped.slice(0, 247)}...` : stripped;
+    }
+    return null;
+  }
+
+  // Plain text error response
+  return trimmed.length > 300 ? `${trimmed.slice(0, 297)}...` : trimmed;
+}
+
+export async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = AuthStorage.getToken();
   const headers = {
     'Content-Type': 'application/json',
@@ -82,18 +123,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers,
   });
 
-  // Guard against non-JSON or truncated responses (e.g. 502/504 HTML proxy errors, 204 No Content)
-  const contentType = response.headers.get('content-type') || '';
-  let payload: any = null;
+  // 1. Safely read raw body: try text() first, fallback to json() if text() is not provided (e.g. in test mocks)
   let rawText = '';
+  let payload: any = null;
 
-  if (contentType.includes('application/json')) {
-    try {
-      payload = await response.json();
-    } catch {
-      payload = null;
-    }
-  } else {
+  if (typeof response.text === 'function') {
     try {
       rawText = await response.text();
     } catch {
@@ -101,25 +135,66 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     }
   }
 
-  if (!response.ok || !payload || payload.success === false) {
+  // 2. Safely attempt JSON parsing without assuming Content-Type or throwing uncaught SyntaxError
+  if (rawText && rawText.trim()) {
+    try {
+      payload = JSON.parse(rawText);
+    } catch {
+      payload = null;
+    }
+  } else if (!rawText && typeof response.json === 'function') {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  }
+
+  // 3. Handle successful 204 No Content or empty successful responses
+  if (response.ok && payload === null && (!rawText || !rawText.trim() || response.status === 204)) {
+    return undefined as T;
+  }
+
+  // 4. Handle error states or failed envelope responses
+  const isEnvelopeError = payload && typeof payload === 'object' && payload.success === false;
+  if (!response.ok || isEnvelopeError) {
     if (response.status === 401) {
       AuthStorage.clear();
     }
+
+    const cleanText = extractCleanErrorMessage(rawText);
+
     const message =
       payload?.error?.message ||
-      (rawText && rawText.length < 300 ? rawText.trim() : null) ||
+      (typeof payload?.error === 'string' ? payload.error : null) ||
+      (typeof payload?.message === 'string' ? payload.message : null) ||
+      (typeof payload?.detail === 'string' ? payload.detail : null) ||
+      cleanText ||
       `HTTP Error ${response.status} (${response.statusText || 'Unknown'})`;
 
     const error = new Error(message) as any;
     error.status = response.status;
-    error.code = payload?.error?.code || `HTTP_${response.status}`;
+    error.code =
+      payload?.error?.code ||
+      payload?.code ||
+      (typeof payload?.error === 'string' ? payload.error : null) ||
+      `HTTP_${response.status}`;
+
     if (payload?.error?.details) {
       error.details = payload.error.details;
+    }
+    if (cleanText) {
+      error.rawBody = cleanText;
     }
     throw error;
   }
 
-  return (payload as ApiSuccessResponse<T>).data;
+  // 5. Successful response: return payload.data if standard envelope, or raw payload if direct
+  if (payload && typeof payload === 'object' && 'data' in payload && payload.success === true) {
+    return (payload as ApiSuccessResponse<T>).data;
+  }
+
+  return (payload !== null ? payload : undefined) as T;
 }
 
 export const api = {

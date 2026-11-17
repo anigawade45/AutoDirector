@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { api } from '../api/client';
+import { api, request, extractCleanErrorMessage } from '../api/client';
 import { AuthStorage } from '../utils/authStorage';
 
 describe('API Client Request Parsing & Error Handling', () => {
@@ -200,5 +200,138 @@ describe('API Client Request Parsing & Error Handling', () => {
     );
 
     unsubscribe();
+  });
+
+  describe('POT-006: Comprehensive Request Parsing & Non-JSON Resilience', () => {
+    it('handles HTML error with <title> extraction in request()', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: {
+          get: () => 'text/html; charset=UTF-8',
+        },
+        text: async () =>
+          '<html><head><title>503 Service Temporarily Unavailable</title></head><body><h1>Down for maintenance</h1></body></html>',
+      });
+
+      await expect(request('/test-endpoint')).rejects.toMatchObject({
+        status: 503,
+        code: 'HTTP_503',
+        message: '503 Service Temporarily Unavailable',
+      });
+    });
+
+    it('handles HTML error with <h1> extraction when <title> is missing in request()', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        headers: {
+          get: () => 'text/html',
+        },
+        text: async () =>
+          '<html><body><div><h1>Edge Worker Failed</h1><p>Request timed out</p></div></body></html>',
+      });
+
+      await expect(request('/test-endpoint')).rejects.toMatchObject({
+        status: 502,
+        code: 'HTTP_502',
+        message: 'Edge Worker Failed',
+      });
+    });
+
+    it('handles empty error response body with statusText fallback in request()', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: {
+          get: () => null,
+        },
+        text: async () => '',
+      });
+
+      await expect(request('/test-endpoint')).rejects.toMatchObject({
+        status: 500,
+        code: 'HTTP_500',
+        message: 'HTTP Error 500 (Internal Server Error)',
+      });
+    });
+
+    it('handles 204 No Content successfully without throwing SyntaxError', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        headers: {
+          get: () => null,
+        },
+        text: async () => '',
+      });
+
+      const result = await request<void>('/test-endpoint');
+      expect(result).toBeUndefined();
+    });
+
+    it('handles 200 OK with empty body successfully without throwing SyntaxError', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          get: () => 'text/plain',
+        },
+        text: async () => '   ',
+      });
+
+      const result = await request<void>('/test-endpoint');
+      expect(result).toBeUndefined();
+    });
+
+    it('handles corrupted JSON response safely without throwing SyntaxError', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: {
+          get: () => 'application/json',
+        },
+        text: async () => '{"brokenJson": true, unexpected_token',
+      });
+
+      await expect(request('/test-endpoint')).rejects.toMatchObject({
+        status: 500,
+        code: 'HTTP_500',
+        message: expect.stringContaining('{"brokenJson": true'),
+      });
+    });
+
+    it('handles non-envelope JSON error payloads ({ error: "string" } and { message: "string" })', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: {
+          get: () => 'application/json',
+        },
+        text: async () => JSON.stringify({ message: 'Rate limit exceeded: please slow down' }),
+      });
+
+      await expect(request('/test-endpoint')).rejects.toMatchObject({
+        status: 429,
+        code: 'HTTP_429',
+        message: 'Rate limit exceeded: please slow down',
+      });
+    });
+
+    it('extractCleanErrorMessage extracts title, heading, and strips tags correctly', () => {
+      expect(extractCleanErrorMessage('')).toBeNull();
+      expect(extractCleanErrorMessage('   ')).toBeNull();
+      expect(extractCleanErrorMessage('<title>Proxy Error</title>')).toBe('Proxy Error');
+      expect(extractCleanErrorMessage('<h2>Connection Reset</h2>')).toBe('Connection Reset');
+      expect(extractCleanErrorMessage('<div><p>Simple text error</p></div>')).toBe('Simple text error');
+      expect(extractCleanErrorMessage('Raw plain text failure message')).toBe('Raw plain text failure message');
+    });
   });
 });
