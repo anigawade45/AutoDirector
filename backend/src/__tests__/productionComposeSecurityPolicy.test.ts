@@ -51,6 +51,14 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
       expect(prodContent).toContain('--authenticationDatabase admin');
       expect(prodContent).toContain('rs.status().ok');
     });
+
+    it('prohibits hardcoded localhost:27017 replica set member host in production compose (POT-009)', () => {
+      // Must not initiate replica set with hardcoded localhost:27017 which breaks inter-container communication
+      expect(prodContent).not.toMatch(/members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/);
+      // Must support service hostname targetHost defaulting to mongodb:27017
+      expect(prodContent).toContain('MONGO_REPLICA_HOST');
+      expect(prodContent).toContain('mongodb:27017');
+    });
   });
 
   describe('Redis Security Policy in Production Compose', () => {
@@ -122,6 +130,14 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
       // S3 LocalStack
       expect(devContent).toMatch(/['"]127\.0\.0\.1:4566:4566['"]/);
       expect(devContent).not.toMatch(/['"](?:0\.0\.0\.0:)?4566:4566['"]/);
+    });
+
+    it('prohibits hardcoded localhost:27017 replica set member host in development compose (POT-009)', () => {
+      // Must not initiate replica set with hardcoded localhost:27017 which breaks inter-container communication
+      expect(devContent).not.toMatch(/members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/);
+      // Must support service hostname targetHost defaulting to mongodb:27017
+      expect(devContent).toContain('MONGO_REPLICA_HOST');
+      expect(devContent).toContain('mongodb:27017');
     });
   });
 

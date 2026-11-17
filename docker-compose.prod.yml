@@ -124,27 +124,44 @@ services:
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-admin}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD must be provided in production environment}
+      - MONGO_REPLICA_HOST=${MONGO_REPLICA_HOST:-mongodb:27017}
     command: ['--replSet', 'rs0', '--bind_ip_all']
     volumes:
       - mongodb_prod_data:/data/db
     healthcheck:
       test: >
         mongosh -u "$${MONGO_INITDB_ROOT_USERNAME:-admin}" -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --quiet --eval "
+          const targetHost = (typeof process !== 'undefined' && process.env && process.env.MONGO_REPLICA_HOST) || 'mongodb:27017';
           try {
-            rs.status().ok
+            if (rs.status().ok) {
+              const cfg = rs.config();
+              if (cfg && cfg.members && cfg.members[0] && cfg.members[0].host !== targetHost && cfg.members[0].host === 'localhost:27017') {
+                cfg.members[0].host = targetHost;
+                cfg.version = (cfg.version || 1) + 1;
+                rs.reconfig(cfg);
+              }
+            }
           } catch (e) {
             rs.initiate({
               _id: 'rs0',
-              members: [{ _id: 0, host: 'localhost:27017' }]
+              members: [{ _id: 0, host: targetHost }]
             }).ok
           }
         " || mongosh --quiet --eval "
+          const targetHost = (typeof process !== 'undefined' && process.env && process.env.MONGO_REPLICA_HOST) || 'mongodb:27017';
           try {
-            rs.status().ok
+            if (rs.status().ok) {
+              const cfg = rs.config();
+              if (cfg && cfg.members && cfg.members[0] && cfg.members[0].host !== targetHost && cfg.members[0].host === 'localhost:27017') {
+                cfg.members[0].host = targetHost;
+                cfg.version = (cfg.version || 1) + 1;
+                rs.reconfig(cfg);
+              }
+            }
           } catch (e) {
             rs.initiate({
               _id: 'rs0',
-              members: [{ _id: 0, host: 'localhost:27017' }]
+              members: [{ _id: 0, host: targetHost }]
             }).ok
           }
         "
