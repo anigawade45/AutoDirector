@@ -130,10 +130,12 @@ export class MongoReplicaSetValidator {
       if (mongoose.connection.readyState === 1 && !options.mongoUri) {
         connection = mongoose.connection;
       } else {
-        const client = await mongoose.createConnection(uri, {
-          serverSelectionTimeoutMS: timeoutMs,
-          connectTimeoutMS: timeoutMs,
-        }).asPromise();
+        const client = await mongoose
+          .createConnection(uri, {
+            serverSelectionTimeoutMS: timeoutMs,
+            connectTimeoutMS: timeoutMs,
+          })
+          .asPromise();
         connection = client;
         ownConnection = true;
       }

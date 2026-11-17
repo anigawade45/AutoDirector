@@ -126,7 +126,9 @@ export class PurgeService {
       await EditPlanModel.deleteMany({ projectId: { $in: projectIds } });
       await TimelineModel.deleteMany({ projectId: { $in: projectIds } });
       await TimelineVersionModel.deleteMany({ projectId: { $in: projectIds } });
-      const allProjectKeys = [...projectIds, ...userProjects.map((p) => p.publicId)].filter(Boolean);
+      const allProjectKeys = [...projectIds, ...userProjects.map((p) => p.publicId)].filter(
+        Boolean
+      );
       await ChatMessageModel.deleteMany({ projectId: { $in: allProjectKeys } });
       await ProjectModel.deleteMany({ _id: { $in: projectIds } });
     }

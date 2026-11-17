@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import mongoose from 'mongoose';
-import {
-  RenderJobLifecycle,
-  TERMINAL_STATES,
-} from '../services/jobs/renderJobLifecycle.js';
+import { RenderJobLifecycle, TERMINAL_STATES } from '../services/jobs/renderJobLifecycle.js';
 import { WorkerEventsController } from '../controllers/workerEventsController.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { ProjectModel } from '../models/Project.js';
@@ -15,9 +12,21 @@ vi.mock('../services/queue/queueService.js', () => ({
     publishProgress: vi.fn().mockResolvedValue(true),
   },
   QUEUE_CONFIGS: {
-    analysis: { concurrency: 2, timeoutMs: 1200000, attempts: 3, backoff: {}, lockDurationMs: 120000 },
+    analysis: {
+      concurrency: 2,
+      timeoutMs: 1200000,
+      attempts: 3,
+      backoff: {},
+      lockDurationMs: 120000,
+    },
     preview: { concurrency: 3, timeoutMs: 300000, attempts: 2, backoff: {}, lockDurationMs: 60000 },
-    render: { concurrency: 1, timeoutMs: 3600000, attempts: 2, backoff: {}, lockDurationMs: 180000 },
+    render: {
+      concurrency: 1,
+      timeoutMs: 3600000,
+      attempts: 2,
+      backoff: {},
+      lockDurationMs: 180000,
+    },
   },
 }));
 
@@ -70,7 +79,10 @@ describe('POT-007: Worker Lifecycle Concurrency, Monotonic Guards & Callback Ide
   it('guarantees single authoritative state when in-process completion precedes callback completion (no double quota or duplicate project writes)', async () => {
     const jobDoc = createMockJobDoc({ state: 'uploading_output', percent: 95 });
     vi.spyOn(RenderJobModel, 'findById').mockResolvedValue(jobDoc);
-    vi.spyOn(ProjectModel, 'updateOne').mockResolvedValue({ acknowledged: true, modifiedCount: 1 } as any);
+    vi.spyOn(ProjectModel, 'updateOne').mockResolvedValue({
+      acknowledged: true,
+      modifiedCount: 1,
+    } as any);
 
     // 1. In-process worker transitions job to completed
     const completedJob = await RenderJobLifecycle.transition(jobDoc._id, 'completed', {
@@ -137,7 +149,10 @@ describe('POT-007: Worker Lifecycle Concurrency, Monotonic Guards & Callback Ide
   it('guarantees single authoritative state when callback completion precedes in-process worker completion', async () => {
     const jobDoc = createMockJobDoc({ state: 'processing', percent: 50 });
     vi.spyOn(RenderJobModel, 'findById').mockResolvedValue(jobDoc);
-    vi.spyOn(ProjectModel, 'updateOne').mockResolvedValue({ acknowledged: true, modifiedCount: 1 } as any);
+    vi.spyOn(ProjectModel, 'updateOne').mockResolvedValue({
+      acknowledged: true,
+      modifiedCount: 1,
+    } as any);
 
     // 1. External callback arrives and transitions job to completed
     const req: any = {
@@ -355,7 +370,11 @@ describe('POT-007: Worker Lifecycle Concurrency, Monotonic Guards & Callback Ide
 
     let resData1: any = null;
     const res1: any = {
-      status: vi.fn(() => ({ json: vi.fn((b) => { resData1 = b; }) })),
+      status: vi.fn(() => ({
+        json: vi.fn((b) => {
+          resData1 = b;
+        }),
+      })),
     };
 
     await WorkerEventsController.handleWorkerEvent(req1, res1, vi.fn());
@@ -370,7 +389,11 @@ describe('POT-007: Worker Lifecycle Concurrency, Monotonic Guards & Callback Ide
     // 2. Duplicate analysis.completed returns duplicate: true
     let resData2: any = null;
     const res2: any = {
-      status: vi.fn(() => ({ json: vi.fn((b) => { resData2 = b; }) })),
+      status: vi.fn(() => ({
+        json: vi.fn((b) => {
+          resData2 = b;
+        }),
+      })),
     };
     await WorkerEventsController.handleWorkerEvent(req1, res2, vi.fn());
     expect(resData2.data.duplicate).toBe(true);

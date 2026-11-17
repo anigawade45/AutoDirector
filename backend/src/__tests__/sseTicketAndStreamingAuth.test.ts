@@ -344,15 +344,19 @@ describe('SSE Ticket & Streaming Authentication Hardening Suite', () => {
 
   describe('5. StructuredLogger Redaction Policy (POT-001 Verification)', () => {
     it('redacts query parameter tokens (?token=...) from URLs and logged strings', () => {
-      const rawUrl = 'https://api.studio.ai/api/jobs/job_123/events?token=eyJhbGciOiJIUzI1NiJ9.secret.sig&debug=true';
+      const rawUrl =
+        'https://api.studio.ai/api/jobs/job_123/events?token=eyJhbGciOiJIUzI1NiJ9.secret.sig&debug=true';
       const redacted = StructuredLogger.redact(rawUrl) as string;
 
       expect(redacted).not.toContain('eyJhbGciOiJIUzI1NiJ9.secret.sig');
-      expect(redacted).toBe('https://api.studio.ai/api/jobs/job_123/events?token=[REDACTED]&debug=true');
+      expect(redacted).toBe(
+        'https://api.studio.ai/api/jobs/job_123/events?token=[REDACTED]&debug=true'
+      );
     });
 
     it('redacts ephemeral ticket parameters (?ticket=...) from URLs and logged strings', () => {
-      const rawUrl = 'https://api.studio.ai/api/jobs/job_123/events?ticket=ticket_0123456789abcdef0123456789abcdef';
+      const rawUrl =
+        'https://api.studio.ai/api/jobs/job_123/events?ticket=ticket_0123456789abcdef0123456789abcdef';
       const redacted = StructuredLogger.redact(rawUrl) as string;
 
       expect(redacted).not.toContain('ticket_0123456789abcdef0123456789abcdef');
@@ -400,7 +404,8 @@ describe('SSE Ticket & Streaming Authentication Hardening Suite', () => {
     });
 
     it('redacts S3 pre-signed URL signatures (X-Amz-Signature and Signature)', () => {
-      const rawS3Url = 'https://s3.amazonaws.com/bucket/video.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abcdef123456&Signature=xyz789';
+      const rawS3Url =
+        'https://s3.amazonaws.com/bucket/video.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abcdef123456&Signature=xyz789';
       const redacted = StructuredLogger.redact(rawS3Url) as string;
 
       expect(redacted).not.toContain('abcdef123456');

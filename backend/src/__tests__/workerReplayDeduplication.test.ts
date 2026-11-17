@@ -54,13 +54,7 @@ describe('SEC-004: Distributed Worker Event Replay Deduplication & Idempotency S
         // First delivery: not a replay
         const firstIsReplay = await checkAndMarkWorkerEventProcessed(eventId);
         expect(firstIsReplay).toBe(false);
-        expect(mockRedisSet).toHaveBeenCalledWith(
-          `worker:event:${eventId}`,
-          '1',
-          'EX',
-          600,
-          'NX'
-        );
+        expect(mockRedisSet).toHaveBeenCalledWith(`worker:event:${eventId}`, '1', 'EX', 600, 'NX');
 
         // Second delivery: replay detected
         const secondIsReplay = await checkAndMarkWorkerEventProcessed(eventId);
@@ -112,7 +106,11 @@ describe('SEC-004: Distributed Worker Event Replay Deduplication & Idempotency S
       try {
         const now = Math.floor(Date.now() / 1000);
         const eventId = `evt_cluster_node_${Date.now()}`;
-        const body = { eventType: 'render.progress', jobId: 'job_cross_instance_test', progress: { percent: 45 } };
+        const body = {
+          eventType: 'render.progress',
+          jobId: 'job_cross_instance_test',
+          progress: { percent: 45 },
+        };
         const rawBody = JSON.stringify(body);
         const signature = crypto
           .createHmac('sha256', env.INTERNAL_WORKER_SECRET)
@@ -236,7 +234,8 @@ describe('SEC-004: Distributed Worker Event Replay Deduplication & Idempotency S
           'x-worker-id': 'worker-01',
           'x-event-id': 'evt_forged_sig',
           'x-event-timestamp': String(now),
-          'x-event-signature': 'sha256=0000000000000000000000000000000000000000000000000000000000000000',
+          'x-event-signature':
+            'sha256=0000000000000000000000000000000000000000000000000000000000000000',
         },
         body: { eventType: 'render.completed', jobId: 'job_123' },
       } as unknown as Request;

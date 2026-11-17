@@ -330,8 +330,12 @@ describe('API Client Request Parsing & Error Handling', () => {
       expect(extractCleanErrorMessage('   ')).toBeNull();
       expect(extractCleanErrorMessage('<title>Proxy Error</title>')).toBe('Proxy Error');
       expect(extractCleanErrorMessage('<h2>Connection Reset</h2>')).toBe('Connection Reset');
-      expect(extractCleanErrorMessage('<div><p>Simple text error</p></div>')).toBe('Simple text error');
-      expect(extractCleanErrorMessage('Raw plain text failure message')).toBe('Raw plain text failure message');
+      expect(extractCleanErrorMessage('<div><p>Simple text error</p></div>')).toBe(
+        'Simple text error'
+      );
+      expect(extractCleanErrorMessage('Raw plain text failure message')).toBe(
+        'Raw plain text failure message'
+      );
     });
   });
 });

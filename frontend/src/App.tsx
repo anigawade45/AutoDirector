@@ -43,7 +43,8 @@ export function parseRoute(pathname: string, hash: string = ''): RouteState {
 }
 
 export const App: React.FC = () => {
-  const { isAuthenticated, isInitialized, isBootstrapping, authStatus, checkSession } = useAuthStore();
+  const { isAuthenticated, isInitialized, isBootstrapping, authStatus, checkSession } =
+    useAuthStore();
   const [mobileTab, setMobileTab] = useState<'chat' | 'timeline' | 'inspector' | 'project'>('chat');
   const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'editor'>(() => {
     // If already validated and authenticated, honor the URL route; otherwise default strictly to landing

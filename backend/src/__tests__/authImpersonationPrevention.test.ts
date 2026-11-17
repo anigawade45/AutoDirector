@@ -346,7 +346,12 @@ describe('BUG-001 Prevention Suite: Bearer & Query Token Cryptographic Enforceme
     it('rejects tokens with alg: none attack with HTTP 401 UNAUTHENTICATED', async () => {
       const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
       const payload = Buffer.from(
-        JSON.stringify({ sub: validObjectId, email: knownEmail, tier: 'pro', exp: Math.floor(Date.now() / 1000) + 3600 })
+        JSON.stringify({
+          sub: validObjectId,
+          email: knownEmail,
+          tier: 'pro',
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        })
       ).toString('base64url');
       const noneToken = `${header}.${payload}.`;
 
@@ -363,9 +368,16 @@ describe('BUG-001 Prevention Suite: Bearer & Query Token Cryptographic Enforceme
     });
 
     it('rejects tokens signed with an invalid or untrusted secret with HTTP 401 UNAUTHENTICATED', async () => {
-      const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+      const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString(
+        'base64url'
+      );
       const payload = Buffer.from(
-        JSON.stringify({ sub: validObjectId, email: knownEmail, tier: 'pro', exp: Math.floor(Date.now() / 1000) + 3600 })
+        JSON.stringify({
+          sub: validObjectId,
+          email: knownEmail,
+          tier: 'pro',
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        })
       ).toString('base64url');
       const fakeSig = crypto
         .createHmac('sha256', 'completely_wrong_attacker_secret_key_12345')

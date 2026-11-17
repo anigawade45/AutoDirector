@@ -28,7 +28,10 @@ export async function authMiddleware(
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
-  } else if (req.headers.cookie && (req.headers.cookie.includes('auth_token=') || req.headers.cookie.includes('token='))) {
+  } else if (
+    req.headers.cookie &&
+    (req.headers.cookie.includes('auth_token=') || req.headers.cookie.includes('token='))
+  ) {
     // Cookie-authenticated session support (e.g. browser EventSource or credentialed requests)
     // Eliminates token transmission in URL query strings and proxy access logs
     const cookiePairs = req.headers.cookie.split(';').map((c) => c.trim().split('='));
@@ -60,7 +63,8 @@ export async function authMiddleware(
     // Scrub ticket parameter from query object and URL to eliminate secondary in-memory exposure
     delete (req.query as any).ticket;
     if (req.url) req.url = req.url.replace(/([?&]ticket=)[^&]+/i, '$1[REDACTED]');
-    if (req.originalUrl) req.originalUrl = req.originalUrl.replace(/([?&]ticket=)[^&]+/i, '$1[REDACTED]');
+    if (req.originalUrl)
+      req.originalUrl = req.originalUrl.replace(/([?&]ticket=)[^&]+/i, '$1[REDACTED]');
 
     const ticketPayload = await TokenService.consumeSseTicket(ticket);
     if (!ticketPayload) {
@@ -133,7 +137,8 @@ export async function authMiddleware(
     // Scrub raw token parameter from query object and URL to prevent secondary in-memory exposure
     delete (req.query as any).token;
     if (req.url) req.url = req.url.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]');
-    if (req.originalUrl) req.originalUrl = req.originalUrl.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]');
+    if (req.originalUrl)
+      req.originalUrl = req.originalUrl.replace(/([?&]token=)[^&]+/i, '$1[REDACTED]');
   }
 
   if (!token) {

@@ -178,7 +178,9 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
       if (!parseResult.success) {
         const corsIssue = parseResult.error.issues.find((i) => i.path.includes('CORS_ORIGIN'));
         expect(corsIssue).toBeDefined();
-        expect(corsIssue?.message).toContain('Wildcard CORS_ORIGIN ("*") is prohibited in production');
+        expect(corsIssue?.message).toContain(
+          'Wildcard CORS_ORIGIN ("*") is prohibited in production'
+        );
       }
 
       // Valid production origin passes schema validation
@@ -193,9 +195,13 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
       const omittedParseResult = envSchema.safeParse(envWithoutCors);
       expect(omittedParseResult.success).toBe(false);
       if (!omittedParseResult.success) {
-        const corsIssue = omittedParseResult.error.issues.find((i) => i.path.includes('CORS_ORIGIN'));
+        const corsIssue = omittedParseResult.error.issues.find((i) =>
+          i.path.includes('CORS_ORIGIN')
+        );
         expect(corsIssue).toBeDefined();
-        expect(corsIssue?.message).toMatch(/Wildcard CORS_ORIGIN \("\*"\) is prohibited in production|CORS_ORIGIN is required in production/);
+        expect(corsIssue?.message).toMatch(
+          /Wildcard CORS_ORIGIN \("\*"\) is prohibited in production|CORS_ORIGIN is required in production/
+        );
       }
 
       // Empty string / whitespace CORS_ORIGIN in production is rejected
@@ -979,7 +985,9 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
       expect(jobsContent).toMatch(/jobsRouter\.use\(\s*jobsRateLimiter\s*\)/);
 
       expect(authContent).toContain('accountBruteForceLimiter');
-      expect(authContent).toMatch(/authRouter\.post\(\s*['"]\/login['"],\s*accountBruteForceLimiter/);
+      expect(authContent).toMatch(
+        /authRouter\.post\(\s*['"]\/login['"],\s*accountBruteForceLimiter/
+      );
     });
   });
 
@@ -1186,8 +1194,12 @@ describe('Security & Configuration Hardening Suite (Section 5)', () => {
       const authRoutesPath = path.join(rootDir, 'backend/src/routes/auth.routes.ts');
       const content = fs.readFileSync(authRoutesPath, 'utf8');
 
-      expect(content).toMatch(/authRouter\.post\(\s*['"]\/logout['"],\s*AuthController\.logout\s*\)/);
-      expect(content).toMatch(/authRouter\.post\(\s*['"]\/refresh['"],\s*AuthController\.refresh\s*\)/);
+      expect(content).toMatch(
+        /authRouter\.post\(\s*['"]\/logout['"],\s*AuthController\.logout\s*\)/
+      );
+      expect(content).toMatch(
+        /authRouter\.post\(\s*['"]\/refresh['"],\s*AuthController\.refresh\s*\)/
+      );
     });
 
     it('verifies frontend/nginx.conf includes Content-Security-Policy and X-XSS-Protection "0"', () => {

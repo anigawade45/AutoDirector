@@ -225,7 +225,10 @@ describe('Frontend SSE Streaming Authentication Suite', () => {
         status: 403,
         statusText: 'Forbidden',
         headers: new Headers({ 'content-type': 'application/json' }),
-        json: async () => ({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } }),
+        json: async () => ({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'Access denied' },
+        }),
       };
     }) as any;
 

@@ -73,10 +73,10 @@ export async function checkAndMarkWorkerEventProcessed(eventId: string): Promise
         { error: err?.message, eventId }
       );
     } else {
-      StructuredLogger.warn(
-        '[WorkerAuth] Redis replay check error, falling back to local cache',
-        { error: err?.message, eventId }
-      );
+      StructuredLogger.warn('[WorkerAuth] Redis replay check error, falling back to local cache', {
+        error: err?.message,
+        eventId,
+      });
     }
   }
 
@@ -284,11 +284,7 @@ export function isPrivateOrLoopbackIp(ip: string | undefined): boolean {
  * Prohibits direct access to internal endpoints from external networks or public reverse proxies.
  * Enforces that callers originate strictly from private subnets (RFC 1918 / RFC 4193) or loopback interfaces.
  */
-export function restrictInternalNetwork(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): void {
+export function restrictInternalNetwork(req: Request, res: Response, next: NextFunction): void {
   const socketIp = (req.socket?.remoteAddress || req.ip || '').trim();
   const forwardedFor = req.headers['x-forwarded-for'] as string | undefined;
 

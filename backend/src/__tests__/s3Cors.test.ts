@@ -118,7 +118,9 @@ describe('S3 Bucket Hardened CORS Security Suite', () => {
       if (!result.success) {
         const issue = result.error.issues.find((i) => i.path.includes('S3_ALLOWED_ORIGINS'));
         expect(issue).toBeDefined();
-        expect(issue?.message).toContain('Wildcard S3_ALLOWED_ORIGINS ("*") is prohibited in production');
+        expect(issue?.message).toContain(
+          'Wildcard S3_ALLOWED_ORIGINS ("*") is prohibited in production'
+        );
       }
     });
 

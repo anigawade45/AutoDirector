@@ -33,9 +33,7 @@ describe('POT-005: Frontend Auth Bootstrap & Protected Views Gating', () => {
 
   const renderWithProviders = (ui: React.ReactElement) => {
     return renderToStaticMarkup(
-      <QueryClientProvider client={queryClient}>
-        {ui}
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
     );
   };
 

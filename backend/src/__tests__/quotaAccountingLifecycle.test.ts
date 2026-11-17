@@ -90,7 +90,9 @@ vi.mock('../models/ChatMessage.js', () => ({
 vi.mock('../services/storage/s3Service.js', () => ({
   S3Service: {
     createMultipartUpload: vi.fn(),
-    completeMultipartUpload: vi.fn().mockResolvedValue({ location: 'https://s3.example.com/asset.mp4' }),
+    completeMultipartUpload: vi
+      .fn()
+      .mockResolvedValue({ location: 'https://s3.example.com/asset.mp4' }),
     abortMultipartUpload: vi.fn().mockResolvedValue(undefined),
     deleteObjectsByPrefix: vi.fn().mockResolvedValue(3),
     fileExists: vi.fn().mockResolvedValue(true),
@@ -276,7 +278,9 @@ describe('POT-002: Quota Accounting & Usage Lifecycle Integration Suite', () => 
       // Ensures zero storage increment on abort
       expect(UserModel.updateOne).not.toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ $inc: expect.objectContaining({ 'usage.storageBytesUsed': expect.anything() }) })
+        expect.objectContaining({
+          $inc: expect.objectContaining({ 'usage.storageBytesUsed': expect.anything() }),
+        })
       );
     });
   });
@@ -371,7 +375,9 @@ describe('POT-002: Quota Accounting & Usage Lifecycle Integration Suite', () => 
       // Ensures no render minutes charged for failed render
       expect(UserModel.updateOne).not.toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ $inc: expect.objectContaining({ 'usage.renderMinutesUsed': expect.anything() }) })
+        expect.objectContaining({
+          $inc: expect.objectContaining({ 'usage.renderMinutesUsed': expect.anything() }),
+        })
       );
     });
 

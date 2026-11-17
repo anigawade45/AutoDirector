@@ -153,7 +153,7 @@ export const AuthStorage = {
 
     try {
       const parsed = JSON.parse(raw);
-      const userId = parsed && typeof parsed === 'object' ? (parsed.id || parsed._id) : null;
+      const userId = parsed && typeof parsed === 'object' ? parsed.id || parsed._id : null;
       if (
         parsed &&
         typeof parsed === 'object' &&

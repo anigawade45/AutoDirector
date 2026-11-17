@@ -14,11 +14,15 @@ describe('POT-009: MongoDB Replica Set Topology & Compose Member Host Validation
       const devContent = fs.readFileSync(devComposePath, 'utf8');
 
       // Must not initiate replica set with hardcoded localhost:27017
-      expect(devContent).not.toMatch(/members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/);
+      expect(devContent).not.toMatch(
+        /members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/
+      );
 
       // Must specify MONGO_REPLICA_HOST defaulting to mongodb:27017
       expect(devContent).toContain('MONGO_REPLICA_HOST=${MONGO_REPLICA_HOST:-mongodb:27017}');
-      expect(devContent).toContain("targetHost = (typeof process !== 'undefined' && process.env && process.env.MONGO_REPLICA_HOST) || 'mongodb:27017'");
+      expect(devContent).toContain(
+        "targetHost = (typeof process !== 'undefined' && process.env && process.env.MONGO_REPLICA_HOST) || 'mongodb:27017'"
+      );
 
       // Must include automatic reconfig migration for existing volumes
       expect(devContent).toContain("cfg.members[0].host === 'localhost:27017'");
@@ -29,11 +33,15 @@ describe('POT-009: MongoDB Replica Set Topology & Compose Member Host Validation
       const prodContent = fs.readFileSync(prodComposePath, 'utf8');
 
       // Must not initiate replica set with hardcoded localhost:27017
-      expect(prodContent).not.toMatch(/members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/);
+      expect(prodContent).not.toMatch(
+        /members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/
+      );
 
       // Must specify MONGO_REPLICA_HOST defaulting to mongodb:27017
       expect(prodContent).toContain('MONGO_REPLICA_HOST=${MONGO_REPLICA_HOST:-mongodb:27017}');
-      expect(prodContent).toContain("targetHost = (typeof process !== 'undefined' && process.env && process.env.MONGO_REPLICA_HOST) || 'mongodb:27017'");
+      expect(prodContent).toContain(
+        "targetHost = (typeof process !== 'undefined' && process.env && process.env.MONGO_REPLICA_HOST) || 'mongodb:27017'"
+      );
 
       // Must include automatic reconfig migration for existing volumes
       expect(prodContent).toContain("cfg.members[0].host === 'localhost:27017'");
@@ -133,7 +141,9 @@ describe('POT-009: MongoDB Replica Set Topology & Compose Member Host Validation
       });
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Replica set name mismatch: expected 'rs0', got 'wrong_replica_set'");
+      expect(result.message).toContain(
+        "Replica set name mismatch: expected 'rs0', got 'wrong_replica_set'"
+      );
     });
 
     it('detects when MongoDB is running in standalone mode (not a replica set)', async () => {
@@ -171,7 +181,9 @@ describe('POT-009: MongoDB Replica Set Topology & Compose Member Host Validation
       });
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Primary member host 'other-host:27017' does not match expected 'mongodb:27017'");
+      expect(result.message).toContain(
+        "Primary member host 'other-host:27017' does not match expected 'mongodb:27017'"
+      );
     });
   });
 });

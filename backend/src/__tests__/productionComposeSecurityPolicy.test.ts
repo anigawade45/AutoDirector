@@ -5,7 +5,7 @@ import { envSchema } from '../config/env.js';
 
 /**
  * Production Compose & Datastore Security Policy Test Suite (POT-004 / SEC-006)
- * 
+ *
  * Verifies that production and development Docker Compose configurations:
  * 1. Do not expose datastores (MongoDB, Redis) or direct backend APIs to public network interfaces (0.0.0.0).
  * 2. Enforce strict mandatory credentials with no weak fallback passwords (${VAR:?message}).
@@ -67,7 +67,9 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
 
     it('prohibits hardcoded localhost:27017 replica set member host in production compose (POT-009)', () => {
       // Must not initiate replica set with hardcoded localhost:27017 which breaks inter-container communication
-      expect(prodContent).not.toMatch(/members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/);
+      expect(prodContent).not.toMatch(
+        /members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/
+      );
       // Must support service hostname targetHost defaulting to mongodb:27017
       expect(prodContent).toContain('MONGO_REPLICA_HOST');
       expect(prodContent).toContain('mongodb:27017');
@@ -126,7 +128,9 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
 
     it('verifies workers do not publish any host ports', () => {
       // Worker services must not have any 'ports:' blocks
-      const workerAnalysisSection = prodContent.split('worker-analysis:')[1]?.split('worker-render:')[0];
+      const workerAnalysisSection = prodContent
+        .split('worker-analysis:')[1]
+        ?.split('worker-render:')[0];
       const workerRenderSection = prodContent.split('worker-render:')[1]?.split('mongodb:')[0];
 
       expect(workerAnalysisSection).toBeDefined();
@@ -166,7 +170,8 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
     });
 
     it('marks datastore_net as internal: true to block public internet egress/ingress', () => {
-      const networksSection = prodContent.split('networks:')[prodContent.split('networks:').length - 1];
+      const networksSection =
+        prodContent.split('networks:')[prodContent.split('networks:').length - 1];
       expect(networksSection).toBeDefined();
       expect(networksSection).toContain('datastore_net:');
       expect(networksSection).toContain('internal: true');
@@ -203,7 +208,8 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
       CORS_ORIGIN: 'https://studio.ai',
       JWT_SECRET: 'super-secure-production-jwt-secret-key-12345',
       INTERNAL_WORKER_SECRET: 'super-secure-worker-secret-key-12345',
-      MONGODB_URI: 'mongodb://app_user:verified_strong_mongo_pass@mongodb:27017/ai_video_prod?replicaSet=rs0&authSource=admin',
+      MONGODB_URI:
+        'mongodb://app_user:verified_strong_mongo_pass@mongodb:27017/ai_video_prod?replicaSet=rs0&authSource=admin',
       REDIS_HOST: 'redis',
       REDIS_PORT: '6379',
       REDIS_PASSWORD: 'verified_strong_redis_password_98765',
@@ -226,7 +232,9 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
       if (!result.success) {
         const issue = result.error.issues.find((i) => i.path.includes('REDIS_PASSWORD'));
         expect(issue).toBeDefined();
-        expect(issue?.message).toContain('REDIS_PASSWORD is weak or uses a default placeholder in production');
+        expect(issue?.message).toContain(
+          'REDIS_PASSWORD is weak or uses a default placeholder in production'
+        );
       }
     });
 
@@ -247,13 +255,16 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
     it('rejects placeholder or default MongoDB credentials in production', () => {
       const resultPlaceholder = envSchema.safeParse({
         ...baseValidProdEnv,
-        MONGODB_URI: 'mongodb://app_user:__INJECT_MONGO_PASSWORD__@mongodb:27017/prod?replicaSet=rs0',
+        MONGODB_URI:
+          'mongodb://app_user:__INJECT_MONGO_PASSWORD__@mongodb:27017/prod?replicaSet=rs0',
       });
       expect(resultPlaceholder.success).toBe(false);
       if (!resultPlaceholder.success) {
         const issue = resultPlaceholder.error.issues.find((i) => i.path.includes('MONGODB_URI'));
         expect(issue).toBeDefined();
-        expect(issue?.message).toContain('MONGODB_URI contains placeholder or weak default credentials in production');
+        expect(issue?.message).toContain(
+          'MONGODB_URI contains placeholder or weak default credentials in production'
+        );
       }
 
       const resultDefaultPass = envSchema.safeParse({
@@ -283,7 +294,9 @@ describe('POT-004: Production Compose Datastore Security & Port Isolation Policy
 
     it('prohibits hardcoded localhost:27017 replica set member host in development compose (POT-009)', () => {
       // Must not initiate replica set with hardcoded localhost:27017 which breaks inter-container communication
-      expect(devContent).not.toMatch(/members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/);
+      expect(devContent).not.toMatch(
+        /members:\s*\[\{\s*_id:\s*0,\s*host:\s*['"]localhost:27017['"]\s*\}\]/
+      );
       // Must support service hostname targetHost defaulting to mongodb:27017
       expect(devContent).toContain('MONGO_REPLICA_HOST');
       expect(devContent).toContain('mongodb:27017');

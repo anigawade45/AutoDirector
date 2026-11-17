@@ -103,139 +103,21 @@ const store = create<AuthState>((set, get, storeApi) => {
 
     clearError: () => set({ error: null }),
 
-  setUser: (user) => {
-    AuthStorage.setUser(user);
-    set({ user, isAuthenticated: !!user });
-  },
+    setUser: (user) => {
+      AuthStorage.setUser(user);
+      set({ user, isAuthenticated: !!user });
+    },
 
-  login: async (credentials: LoginRequest & { rememberMe?: boolean }) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await api.login(credentials);
-      AuthStorage.setSession(response.token, response.user, {
-        rememberMe: credentials.rememberMe,
-      });
-      set({
-        user: response.user,
-        token: response.token,
-        isAuthenticated: true,
-        isInitialized: true,
-        isBootstrapping: false,
-        authStatus: 'authenticated',
-        isLoading: false,
-        error: null,
-      });
-      toast.success(`Welcome back, ${response.user.name}! Session authenticated.`, 'Signed In');
-      return true;
-    } catch (err: any) {
-      const message =
-        err?.status === 401 || err?.code === 'INVALID_CREDENTIALS'
-          ? 'Invalid email or password. Please verify your credentials.'
-          : err?.message || 'Login failed. Please check your credentials.';
-      set({
-        error: message,
-        isLoading: false,
-        isInitialized: true,
-        isBootstrapping: false,
-        authStatus: 'unauthenticated',
-      });
-      toast.error(message, 'Authentication Error');
-      return false;
-    }
-  },
-
-  register: async (data: RegisterRequest) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await api.register(data);
-      AuthStorage.setSession(response.token, response.user);
-      set({
-        user: response.user,
-        token: response.token,
-        isAuthenticated: true,
-        isInitialized: true,
-        isBootstrapping: false,
-        authStatus: 'authenticated',
-        isLoading: false,
-        error: null,
-      });
-      toast.success(
-        `Welcome to AutoDirector Studio, ${response.user.name}! ${response.user.tier.toUpperCase()} workspace ready.`,
-        'Account Created'
-      );
-      return true;
-    } catch (err: any) {
-      const message =
-        err?.status === 409 || err?.code === 'USER_EXISTS'
-          ? `An account with this email already exists. Please sign in instead.`
-          : err?.message || 'Registration failed. Please check your inputs.';
-      set({
-        error: message,
-        isLoading: false,
-        isInitialized: true,
-        isBootstrapping: false,
-        authStatus: 'unauthenticated',
-      });
-      toast.error(message, 'Registration Error');
-      return false;
-    }
-  },
-
-  logout: () => {
-    // Notify server to clear HttpOnly session cookie (SEC-010)
-    api.logout().catch(() => {});
-    AuthStorage.clear();
-    set({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      isInitialized: true,
-      isBootstrapping: false,
-      authStatus: 'unauthenticated',
-      error: null,
-    });
-    toast.info('You have safely signed out of AutoDirector Studio.', 'Logged Out');
-  },
-
-  checkSession: async () => {
-    // Read fresh from storage via AuthStorage safely
-    let token: string | null = null;
-    try {
-      token = AuthStorage.getToken();
-    } catch {
-      token = null;
-    }
-
-    if (!token) {
-      set({
-        isAuthenticated: false,
-        user: null,
-        token: null,
-        isInitialized: true,
-        isBootstrapping: false,
-        authStatus: 'unauthenticated',
-        isLoading: false,
-      });
-      return;
-    }
-
-    // Actively bootstrapping & verifying session with backend
-    set({
-      token,
-      isBootstrapping: true,
-      isInitialized: false,
-      authStatus: 'bootstrapping',
-      isLoading: true,
-      error: null,
-    });
-
-    try {
-      const response = await api.getMe();
-      if (response && response.user) {
-        AuthStorage.setUser(response.user);
+    login: async (credentials: LoginRequest & { rememberMe?: boolean }) => {
+      set({ isLoading: true, error: null });
+      try {
+        const response = await api.login(credentials);
+        AuthStorage.setSession(response.token, response.user, {
+          rememberMe: credentials.rememberMe,
+        });
         set({
           user: response.user,
-          token,
+          token: response.token,
           isAuthenticated: true,
           isInitialized: true,
           isBootstrapping: false,
@@ -243,7 +125,138 @@ const store = create<AuthState>((set, get, storeApi) => {
           isLoading: false,
           error: null,
         });
-      } else {
+        toast.success(`Welcome back, ${response.user.name}! Session authenticated.`, 'Signed In');
+        return true;
+      } catch (err: any) {
+        const message =
+          err?.status === 401 || err?.code === 'INVALID_CREDENTIALS'
+            ? 'Invalid email or password. Please verify your credentials.'
+            : err?.message || 'Login failed. Please check your credentials.';
+        set({
+          error: message,
+          isLoading: false,
+          isInitialized: true,
+          isBootstrapping: false,
+          authStatus: 'unauthenticated',
+        });
+        toast.error(message, 'Authentication Error');
+        return false;
+      }
+    },
+
+    register: async (data: RegisterRequest) => {
+      set({ isLoading: true, error: null });
+      try {
+        const response = await api.register(data);
+        AuthStorage.setSession(response.token, response.user);
+        set({
+          user: response.user,
+          token: response.token,
+          isAuthenticated: true,
+          isInitialized: true,
+          isBootstrapping: false,
+          authStatus: 'authenticated',
+          isLoading: false,
+          error: null,
+        });
+        toast.success(
+          `Welcome to AutoDirector Studio, ${response.user.name}! ${response.user.tier.toUpperCase()} workspace ready.`,
+          'Account Created'
+        );
+        return true;
+      } catch (err: any) {
+        const message =
+          err?.status === 409 || err?.code === 'USER_EXISTS'
+            ? `An account with this email already exists. Please sign in instead.`
+            : err?.message || 'Registration failed. Please check your inputs.';
+        set({
+          error: message,
+          isLoading: false,
+          isInitialized: true,
+          isBootstrapping: false,
+          authStatus: 'unauthenticated',
+        });
+        toast.error(message, 'Registration Error');
+        return false;
+      }
+    },
+
+    logout: () => {
+      // Notify server to clear HttpOnly session cookie (SEC-010)
+      api.logout().catch(() => {});
+      AuthStorage.clear();
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isInitialized: true,
+        isBootstrapping: false,
+        authStatus: 'unauthenticated',
+        error: null,
+      });
+      toast.info('You have safely signed out of AutoDirector Studio.', 'Logged Out');
+    },
+
+    checkSession: async () => {
+      // Read fresh from storage via AuthStorage safely
+      let token: string | null = null;
+      try {
+        token = AuthStorage.getToken();
+      } catch {
+        token = null;
+      }
+
+      if (!token) {
+        set({
+          isAuthenticated: false,
+          user: null,
+          token: null,
+          isInitialized: true,
+          isBootstrapping: false,
+          authStatus: 'unauthenticated',
+          isLoading: false,
+        });
+        return;
+      }
+
+      // Actively bootstrapping & verifying session with backend
+      set({
+        token,
+        isBootstrapping: true,
+        isInitialized: false,
+        authStatus: 'bootstrapping',
+        isLoading: true,
+        error: null,
+      });
+
+      try {
+        const response = await api.getMe();
+        if (response && response.user) {
+          AuthStorage.setUser(response.user);
+          set({
+            user: response.user,
+            token,
+            isAuthenticated: true,
+            isInitialized: true,
+            isBootstrapping: false,
+            authStatus: 'authenticated',
+            isLoading: false,
+            error: null,
+          });
+        } else {
+          AuthStorage.clear();
+          set({
+            user: null,
+            token: null,
+            isAuthenticated: false,
+            isInitialized: true,
+            isBootstrapping: false,
+            authStatus: 'unauthenticated',
+            isLoading: false,
+          });
+        }
+      } catch (err: any) {
+        // If 401 Unauthorized, network error, or verification failure: token is invalid/revoked
         AuthStorage.clear();
         set({
           user: null,
@@ -255,20 +268,7 @@ const store = create<AuthState>((set, get, storeApi) => {
           isLoading: false,
         });
       }
-    } catch (err: any) {
-      // If 401 Unauthorized, network error, or verification failure: token is invalid/revoked
-      AuthStorage.clear();
-      set({
-        user: null,
-        token: null,
-        isAuthenticated: false,
-        isInitialized: true,
-        isBootstrapping: false,
-        authStatus: 'unauthenticated',
-        isLoading: false,
-      });
-    }
-  },
+    },
   };
 });
 
