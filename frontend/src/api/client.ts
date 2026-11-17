@@ -270,10 +270,13 @@ export const api = {
       method: 'POST',
     }),
 
-  deleteProject: (projectId: string) =>
-    request<{ deleted: boolean; publicId: string }>(`/projects/${projectId}`, {
-      method: 'DELETE',
-    }),
+  deleteProject: (projectId: string, purge: boolean = true) =>
+    request<{ deleted: boolean; publicId: string }>(
+      `/projects/${projectId}${purge ? '?purge=true' : ''}`,
+      {
+        method: 'DELETE',
+      }
+    ),
 
   // Prompts & AI Planning
   getChatHistory: (projectId: string) =>

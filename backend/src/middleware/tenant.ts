@@ -29,10 +29,16 @@ export async function requireProjectOwner(
   }
 
   try {
+    const isPurgeOp = Boolean(
+      req.path?.endsWith('/purge') ||
+        req.query?.purge === 'true' ||
+        req.query?.permanent === 'true'
+    );
+
     const project = await ProjectModel.findOne({
       publicId: projectIdParam,
       userId: req.user._id,
-      deletedAt: null,
+      ...(isPurgeOp ? {} : { deletedAt: null }),
     });
 
     if (!project) {
