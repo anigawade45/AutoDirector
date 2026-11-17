@@ -83,6 +83,15 @@ export const VideoPlayer: React.FC = () => {
     Boolean(preview.isRendered) &&
     preview.planVersion === effectivePlan?.version;
 
+  // When the video is fully baked for the current plan version, play the baked preview.url.
+  // In Live Approximation mode (plan modified / draft), play the clean baseProxyUrl so that live overlays
+  // (subtitles, canvas titles, CSS color grades) don't double up over pre-rendered effects.
+  const effectiveVideoSrc = isVideoBaked
+    ? preview.url || preview.baseProxyUrl
+    : preview.baseProxyUrl || preview.url;
+
+  const isVideoSourcePreRendered = Boolean(preview.isRendered) && effectiveVideoSrc === preview.url;
+
   // Active Speed Layer calculation (Live video speed scaling when not baked by FFmpeg)
   const speedLayer = effectivePlan?.layers.find((l) => l.enabled && l.layer === 'speed') as any;
 
@@ -374,7 +383,7 @@ export const VideoPlayer: React.FC = () => {
 
     // 3. Derive Vignette from Color Layer
     const colorLayer = effectivePlan.layers.find((l) => l.enabled && l.layer === 'color') as any;
-    if (colorLayer && !isVideoBaked) {
+    if (colorLayer && !isVideoBaked && !isVideoSourcePreRendered) {
       const resolved = resolveColorParams(colorLayer.params);
       if (resolved.vignette > 0) {
         const v = resolved.vignette;
@@ -434,7 +443,7 @@ export const VideoPlayer: React.FC = () => {
     const subtitleLayer = effectivePlan.layers.find(
       (l) => l.enabled && l.layer === 'subtitle'
     ) as any;
-    if (subtitleLayer && !isVideoBaked) {
+    if (subtitleLayer && !isVideoBaked && !isVideoSourcePreRendered) {
       const p = subtitleLayer.params;
       const cues = project?.analysisSummary?.cues;
       // Hold cue visible for +500ms after endMs so final words remain readable on screen
@@ -571,14 +580,22 @@ export const VideoPlayer: React.FC = () => {
         ctx.restore();
       }
     }
-  }, [playback.currentTime, effectivePlan, project, showSafeGuides, isVideoBaked]);
+  }, [
+    playback.currentTime,
+    effectivePlan,
+    project,
+    showSafeGuides,
+    isVideoBaked,
+    isVideoSourcePreRendered,
+  ]);
 
   // Compute CSS filter for live video color grade approximation from ColorLayer
   const colorLayer = effectivePlan?.layers.find((l) => l.enabled && l.layer === 'color') as any;
   const colorFilterResult = colorLayer ? computeColorCssFilter(colorLayer.params) : null;
   const filterStyle = colorFilterResult ? colorFilterResult.cssFilter : 'none';
 
-  const activeFilter = colorLayer && !isVideoBaked ? filterStyle : 'none';
+  const activeFilter =
+    colorLayer && !isVideoBaked && !isVideoSourcePreRendered ? filterStyle : 'none';
 
   const formatTime = (sec: number) => {
     const mins = Math.floor(sec / 60);
@@ -599,7 +616,7 @@ export const VideoPlayer: React.FC = () => {
         {/* Master Video Element */}
         <video
           ref={videoRef}
-          src={preview.url || undefined}
+          src={effectiveVideoSrc || undefined}
           playsInline
           muted={playback.muted}
           style={{
@@ -626,6 +643,9 @@ export const VideoPlayer: React.FC = () => {
             if (Number.isFinite(dur) && dur > 0) {
               setDuration(dur);
             }
+            if (playback.currentTime > 0) {
+              e.currentTarget.currentTime = playback.currentTime;
+            }
             const vw = e.currentTarget.videoWidth;
             const vh = e.currentTarget.videoHeight;
             if (vw > 0 && vh > 0) {
@@ -643,6 +663,7 @@ export const VideoPlayer: React.FC = () => {
         {/* Real-time CSS Vignette Overlay */}
         {colorLayer &&
           !isVideoBaked &&
+          !isVideoSourcePreRendered &&
           (() => {
             const resolved = resolveColorParams(colorLayer.params);
             if (resolved.vignette <= 0) return null;

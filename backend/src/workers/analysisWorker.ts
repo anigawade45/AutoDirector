@@ -465,6 +465,9 @@ export function startAnalysisWorker() {
       concurrency: QUEUE_CONFIGS.analysis.concurrency,
       lockDuration: QUEUE_CONFIGS.analysis.lockDurationMs,
       maxStalledCount: 1,
+      stalledInterval: 300000, // 5 minutes (prevents burning Upstash request quota on idle checks)
+      drainDelay: 10000, // 10s wait when queue is empty instead of default 5ms
+      skipVersionCheck: true,
     }
   );
 

@@ -3,14 +3,21 @@ import { env } from './env.js';
 
 export function createRedisConnection(): Redis {
   const isTls = env.REDIS_TLS || env.REDIS_HOST.includes('upstash.io');
+  const cleanPassword = env.REDIS_PASSWORD
+    ? env.REDIS_PASSWORD.trim().replace(/@$/, '')
+    : undefined;
 
   const client = new Redis({
-    host: env.REDIS_HOST,
+    host: env.REDIS_HOST.trim(),
     port: env.REDIS_PORT,
-    password: env.REDIS_PASSWORD || undefined,
+    password: cleanPassword,
     tls: isTls ? {} : undefined,
-    maxRetriesPerRequest: null, // Required by BullMQ
+    maxRetriesPerRequest: null,
     lazyConnect: true,
+    retryStrategy(times) {
+      // Backoff strategy (1s, 2s... max 10s) to prevent spamming Upstash command quota on failures
+      return Math.min(times * 1000, 10000);
+    },
   });
 
   client.on('error', (err) => {

@@ -281,6 +281,9 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
       concurrency: queueConfig.concurrency,
       lockDuration: queueConfig.lockDurationMs,
       maxStalledCount: 1,
+      stalledInterval: 300000, // 5 minutes (prevents burning Upstash request quota on idle checks)
+      drainDelay: 10000, // 10s wait when queue is empty instead of default 5ms
+      skipVersionCheck: true,
     }
   );
 

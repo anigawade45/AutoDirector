@@ -51,6 +51,7 @@ export const QUEUE_CONFIGS: Record<'analysis' | 'preview' | 'render', QueueConfi
 
 export const analysisQueue = new Queue('analysis', {
   connection: redisConnection,
+  skipVersionCheck: true,
   defaultJobOptions: {
     attempts: QUEUE_CONFIGS.analysis.attempts,
     backoff: QUEUE_CONFIGS.analysis.backoff,
@@ -61,6 +62,7 @@ export const analysisQueue = new Queue('analysis', {
 
 export const previewQueue = new Queue('preview', {
   connection: redisConnection,
+  skipVersionCheck: true,
   defaultJobOptions: {
     attempts: QUEUE_CONFIGS.preview.attempts,
     backoff: QUEUE_CONFIGS.preview.backoff,
@@ -71,6 +73,7 @@ export const previewQueue = new Queue('preview', {
 
 export const renderQueue = new Queue('render', {
   connection: redisConnection,
+  skipVersionCheck: true,
   defaultJobOptions: {
     attempts: QUEUE_CONFIGS.render.attempts,
     backoff: QUEUE_CONFIGS.render.backoff,
