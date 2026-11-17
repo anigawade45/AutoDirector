@@ -61,6 +61,15 @@ vi.mock('../models/CaptionSet.js', () => ({
   },
 }));
 
+vi.mock('../models/ChatMessage.js', () => ({
+  ChatMessageModel: {
+    find: vi.fn().mockReturnValue({
+      sort: vi.fn().mockResolvedValue([]),
+    }),
+    create: vi.fn(),
+  },
+}));
+
 vi.mock('../services/storage/s3Service.js', () => ({
   S3Service: {
     fileExists: vi.fn().mockResolvedValue(false),

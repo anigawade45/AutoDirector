@@ -216,20 +216,20 @@ export class ProjectsController {
       let chatMessages: any[] = [];
       try {
         const msgs = await ChatMessageModel.find({
-          projectId: project._id,
+          projectId: project._id || project.publicId,
           $or: [{ userId: req.user!._id }, { userId: { $exists: false } }],
         }).sort({ createdAt: 1 });
 
         chatMessages = msgs.map((m) => ({
-          id: m._id.toString(),
+          id: m._id ? m._id.toString() : `msg_${Date.now()}`,
           projectId: project.publicId || project._id.toString(),
           role: m.role,
           text: m.text,
           planId: m.planId?.toString(),
           versionResult: m.versionResult,
           planVersion: m.versionResult,
-          timestamp: m.createdAt.toISOString(),
-          createdAt: m.createdAt.toISOString(),
+          timestamp: m.createdAt ? m.createdAt.toISOString() : new Date().toISOString(),
+          createdAt: m.createdAt ? m.createdAt.toISOString() : new Date().toISOString(),
         }));
       } catch (chatErr) {
         console.warn('[ProjectsController] Chat messages load warning:', chatErr);

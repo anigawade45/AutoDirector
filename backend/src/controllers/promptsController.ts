@@ -133,7 +133,7 @@ export class PromptsController {
 
       // Record user chat message
       await ChatMessageModel.create({
-        projectId: project._id,
+        projectId: project._id || project.publicId,
         userId: rawUserId,
         role: 'user',
         text: prompt,
@@ -232,7 +232,7 @@ export class PromptsController {
       }
 
       await ChatMessageModel.create({
-        projectId: project._id,
+        projectId: project._id || project.publicId,
         userId: rawUserId,
         role: 'assistant',
         text: assistantText,
@@ -396,7 +396,7 @@ export class PromptsController {
       }
 
       const messages = await ChatMessageModel.find({
-        projectId: project._id,
+        projectId: project._id || project.publicId,
         $or: [{ userId: rawUserId }, { userId: { $exists: false } }],
       }).sort({ createdAt: 1 });
 
@@ -448,7 +448,7 @@ export class PromptsController {
       }
 
       const msg = await ChatMessageModel.create({
-        projectId: project._id,
+        projectId: project._id || project.publicId,
         userId: rawUserId,
         role: ['user', 'assistant', 'system'].includes(role) ? role : 'user',
         text: text.trim(),

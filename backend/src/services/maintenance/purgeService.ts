@@ -75,7 +75,8 @@ export class PurgeService {
     await TimelineModel.deleteMany({ projectId: project._id });
     await TimelineVersionModel.deleteMany({ projectId: project._id });
     await RenderJobModel.deleteMany({ projectId: project._id });
-    await ChatMessageModel.deleteMany({ projectId: project._id });
+    const projectKeys = [project._id, project.publicId].filter(Boolean);
+    await ChatMessageModel.deleteMany({ projectId: { $in: projectKeys } });
     await ProjectModel.deleteOne({ _id: project._id });
 
     StructuredLogger.info(
@@ -125,7 +126,8 @@ export class PurgeService {
       await EditPlanModel.deleteMany({ projectId: { $in: projectIds } });
       await TimelineModel.deleteMany({ projectId: { $in: projectIds } });
       await TimelineVersionModel.deleteMany({ projectId: { $in: projectIds } });
-      await ChatMessageModel.deleteMany({ projectId: { $in: projectIds } });
+      const allProjectKeys = [...projectIds, ...userProjects.map((p) => p.publicId)].filter(Boolean);
+      await ChatMessageModel.deleteMany({ projectId: { $in: allProjectKeys } });
       await ProjectModel.deleteMany({ _id: { $in: projectIds } });
     }
 
