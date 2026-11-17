@@ -40,7 +40,16 @@ export function isJwtExpired(token: string): boolean {
       base64 += '=';
     }
     const decodedJson =
-      typeof atob === 'function' ? atob(base64) : Buffer.from(base64, 'base64').toString('utf-8');
+      typeof Buffer !== 'undefined'
+        ? Buffer.from(base64, 'base64').toString('utf-8')
+        : typeof atob === 'function'
+          ? decodeURIComponent(
+              atob(base64)
+                .split('')
+                .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+            )
+          : '';
     const payload = JSON.parse(decodedJson);
 
     if (payload.exp && typeof payload.exp === 'number') {

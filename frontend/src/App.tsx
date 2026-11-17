@@ -43,10 +43,23 @@ export function parseRoute(pathname: string, hash: string = ''): RouteState {
 }
 
 export const App: React.FC = () => {
-  const { isAuthenticated, isInitialized, checkSession } = useAuthStore();
+  const { isAuthenticated, isInitialized, isBootstrapping, authStatus, checkSession } = useAuthStore();
   const [mobileTab, setMobileTab] = useState<'chat' | 'timeline' | 'inspector' | 'project'>('chat');
-  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'editor'>('landing');
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [currentView, setCurrentView] = useState<'landing' | 'dashboard' | 'editor'>(() => {
+    // If already validated and authenticated, honor the URL route; otherwise default strictly to landing
+    if (useAuthStore.getState().isAuthenticated && typeof window !== 'undefined') {
+      const parsed = parseRoute(window.location.pathname, window.location.hash);
+      return parsed.view;
+    }
+    return 'landing';
+  });
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(() => {
+    if (useAuthStore.getState().isAuthenticated && typeof window !== 'undefined') {
+      const parsed = parseRoute(window.location.pathname, window.location.hash);
+      return parsed.projectId;
+    }
+    return null;
+  });
   const { setProject, setPlan, setPreviewUrl } = useEditorStore();
 
   // Validate session on boot
@@ -114,14 +127,17 @@ export const App: React.FC = () => {
   }, []);
 
   // Strict Authentication Guard & Initial Deep-Link Resolution:
-  // Only synchronizes view AFTER initial session verification has resolved (isInitialized === true)
+  // Only synchronizes view AFTER initial session verification has resolved (isInitialized && !isBootstrapping)
   // Guarantees zero privileged-view flash or race condition if stored credentials are invalid or expired.
   useEffect(() => {
-    if (!isInitialized) return;
+    if (isBootstrapping || !isInitialized) return;
 
     if (!isAuthenticated) {
       if (currentView !== 'landing') {
         navigateTo('landing', null, true);
+      } else if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+        // Clear any protected URL (/dashboard, /projects/...) back to /
+        window.history.replaceState({ view: 'landing', projectId: null }, '', '/');
       }
     } else {
       // Direct deep link or refresh resolution
@@ -137,7 +153,7 @@ export const App: React.FC = () => {
         navigateTo('dashboard', null, true);
       }
     }
-  }, [isInitialized, isAuthenticated, currentView, navigateTo]);
+  }, [isInitialized, isBootstrapping, isAuthenticated, currentView, navigateTo]);
 
   // Query server project data with TanStack Query
   const { data: projectResponse, isLoading: isProjectLoading } = useQuery({
@@ -199,12 +215,16 @@ export const App: React.FC = () => {
     }
   }, [projectResponse, setProject, setPlan, setPreviewUrl]);
 
-  // Initial Session Verification Gate:
-  // While actively validating a stored session with the backend, render an unprivileged dark luxury splash.
-  // This guarantees zero privileged-view flash or race conditions if the stored token is invalid.
-  if (!isInitialized) {
+  // 1. Initial Session Bootstrapping Gate:
+  // While actively verifying stored credentials with the server (isBootstrapping || !isInitialized),
+  // render an unprivileged dark luxury splash screen.
+  // Guarantees zero privileged-view flash or race conditions if stored credentials are invalid or expired.
+  if (isBootstrapping || !isInitialized || authStatus === 'bootstrapping') {
     return (
-      <div className="flex flex-col h-screen w-screen bg-[#18191B] items-center justify-center text-[#FFF5F5] font-sans">
+      <div
+        data-testid="auth-bootstrapping-splash"
+        className="flex flex-col h-screen w-screen bg-[#18191B] items-center justify-center text-[#FFF5F5] font-sans"
+      >
         <ToastContainer />
         <div className="relative w-12 h-12 flex items-center justify-center mb-4">
           <div className="absolute inset-0 rounded-full border-2 border-[#E3B5BE]/20 animate-ping" />
@@ -217,8 +237,11 @@ export const App: React.FC = () => {
     );
   }
 
-  // Landing Page View
-  if (currentView === 'landing') {
+  // 2. Strict Authentication & Protected Views Gate:
+  // Studio Dashboard and Sequence Editor strictly require an authenticated session.
+  // If not authenticated, force unprivileged Landing Page immediately during render,
+  // preventing any transient DOM paint of protected studio views before useEffect runs.
+  if (!isAuthenticated || currentView === 'landing') {
     return (
       <>
         <ToastContainer />
@@ -227,12 +250,15 @@ export const App: React.FC = () => {
     );
   }
 
-  // Dashboard View (or when no project selected)
+  // 3. Dashboard View (or when no project selected) - strictly requires isAuthenticated
   if (currentView === 'dashboard' || !selectedProjectId) {
     return (
       <>
         <ToastContainer />
-        <ProjectDashboard onSelectProject={(pid) => navigateTo('editor', pid)} />
+        <ProjectDashboard
+          onSelectProject={(pid) => navigateTo('editor', pid)}
+          onBackToHome={() => navigateTo('landing')}
+        />
       </>
     );
   }
