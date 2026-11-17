@@ -14,6 +14,7 @@ function getStorage(type: 'localStorage' | 'sessionStorage'): Storage | null {
   if (typeof window === 'undefined') return null;
   try {
     const storage = window[type];
+    if (!storage) return null;
     const testKey = '__storage_test__';
     storage.setItem(testKey, testKey);
     storage.removeItem(testKey);
@@ -152,11 +153,22 @@ export const AuthStorage = {
 
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && (parsed.id || parsed._id)) {
-        inMemoryUser = parsed as UserProfile;
-        return parsed as UserProfile;
+      const userId = parsed && typeof parsed === 'object' ? (parsed.id || parsed._id) : null;
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        typeof userId === 'string' &&
+        userId.trim().length > 0
+      ) {
+        const userProfile: UserProfile = {
+          ...parsed,
+          id: userId,
+        };
+        inMemoryUser = userProfile;
+        return userProfile;
       }
-      // Malformed object structure
+      // Malformed object structure or invalid ID type
       this.clearUser();
       return null;
     } catch {
@@ -238,6 +250,14 @@ export const AuthStorage = {
     try {
       getStorage('localStorage')?.removeItem(USER_KEY);
     } catch {}
+  },
+
+  /**
+   * Resets in-memory cached token and user without touching persistent storage.
+   */
+  clearMemoryCache(): void {
+    inMemoryToken = null;
+    inMemoryUser = null;
   },
 
   /**

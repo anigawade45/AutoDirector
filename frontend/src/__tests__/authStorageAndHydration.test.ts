@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthStorage, isJwtExpired } from '../utils/authStorage';
-import { useAuthStore } from '../stores/authStore';
+import { useAuthStore, getInitialAuthState } from '../stores/authStore';
 import { api } from '../api/client';
 
 vi.mock('../api/client', () => ({
@@ -238,6 +238,156 @@ describe('AuthStorage & Safe Hydration Suite', () => {
       expect(state.user).toBeNull();
       expect(state.token).toBeNull();
       expect(AuthStorage.hasToken()).toBe(false);
+    });
+  });
+
+  describe('5. POT-008: Store Hydration Resilience & Defensive Exception Protection', () => {
+    it('hydrates store safely when localStorage[auth_user] contains malformed/corrupted JSON', () => {
+      localStorageMap.set('auth_user', '{"id": "usr_broken", "name": incomplete json');
+
+      expect(() => {
+        useAuthStore.getState().hydrateFromStorage();
+      }).not.toThrow();
+
+      const state = useAuthStore.getState();
+      expect(state.user).toBeNull();
+      expect(state.token).toBeNull();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.isInitialized).toBe(true);
+      expect(state.isBootstrapping).toBe(false);
+      expect(state.authStatus).toBe('unauthenticated');
+      expect(localStorageMap.has('auth_user')).toBe(false);
+    });
+
+    it('rejects non-object and non-valid user profiles during store hydration and cleans up keys', () => {
+      // 1. Array
+      localStorageMap.set('auth_user', JSON.stringify([{ id: 'usr_arr' }]));
+      useAuthStore.getState().hydrateFromStorage();
+      expect(useAuthStore.getState().user).toBeNull();
+      expect(localStorageMap.has('auth_user')).toBe(false);
+
+      // 2. Numeric scalar
+      localStorageMap.set('auth_user', '98765');
+      useAuthStore.getState().hydrateFromStorage();
+      expect(useAuthStore.getState().user).toBeNull();
+      expect(localStorageMap.has('auth_user')).toBe(false);
+
+      // 3. Object with non-string id
+      localStorageMap.set('auth_user', JSON.stringify({ id: 12345, name: 'Numeric ID' }));
+      useAuthStore.getState().hydrateFromStorage();
+      expect(useAuthStore.getState().user).toBeNull();
+      expect(localStorageMap.has('auth_user')).toBe(false);
+
+      // 4. Object with empty whitespace id
+      localStorageMap.set('auth_user', JSON.stringify({ id: '   ', name: 'Blank ID' }));
+      useAuthStore.getState().hydrateFromStorage();
+      expect(useAuthStore.getState().user).toBeNull();
+      expect(localStorageMap.has('auth_user')).toBe(false);
+    });
+
+    it('purges corrupted auth_user while preserving valid auth_token and bootstrapping session', async () => {
+      const futureSec = Math.floor(Date.now() / 1000) + 3600;
+      const payload = Buffer.from(
+        JSON.stringify({ sub: 'usr_pot008_01', email: 'pot008@studio.ai', exp: futureSec })
+      ).toString('base64url');
+      const validToken = `eyJhbGciOiJIUzI1NiJ9.${payload}.validSig`;
+
+      localStorageMap.set('auth_token', validToken);
+      localStorageMap.set('auth_user', '{ invalid: JSON: missing bracket');
+
+      useAuthStore.getState().hydrateFromStorage();
+
+      const state = useAuthStore.getState();
+      expect(state.token).toBe(validToken);
+      expect(state.user).toBeNull();
+      expect(state.isBootstrapping).toBe(true);
+      expect(state.authStatus).toBe('bootstrapping');
+      expect(localStorageMap.has('auth_user')).toBe(false);
+
+      // When checkSession runs, it re-fetches the user profile and completes authentication
+      (api.getMe as any).mockResolvedValueOnce({
+        user: {
+          id: 'usr_pot008_01',
+          name: 'Recovered User',
+          email: 'pot008@studio.ai',
+          tier: 'pro',
+          createdAt: '2026-11-16T12:00:00Z',
+        },
+      });
+
+      await useAuthStore.getState().checkSession();
+
+      const recoveredState = useAuthStore.getState();
+      expect(recoveredState.isAuthenticated).toBe(true);
+      expect(recoveredState.user?.name).toBe('Recovered User');
+      expect(localStorageMap.has('auth_user')).toBe(true);
+    });
+
+    it('survives DOMException or SecurityError when accessing storage (e.g. private browsing or sandboxed iframe)', () => {
+      // Create throwing storage mock simulating SecurityError
+      const throwingStorage = {
+        getItem: () => {
+          throw new Error('SecurityError: The operation is insecure.');
+        },
+        setItem: () => {
+          throw new Error('SecurityError: The operation is insecure.');
+        },
+        removeItem: () => {
+          throw new Error('SecurityError: The operation is insecure.');
+        },
+        clear: () => {
+          throw new Error('SecurityError: The operation is insecure.');
+        },
+      };
+
+      (global as any).window.localStorage = throwingStorage;
+      (global as any).window.sessionStorage = throwingStorage;
+
+      expect(() => {
+        const initial = getInitialAuthState();
+        expect(initial.token).toBeNull();
+        expect(initial.user).toBeNull();
+        expect(initial.hasInitialToken).toBe(false);
+      }).not.toThrow();
+
+      expect(() => {
+        useAuthStore.getState().hydrateFromStorage();
+      }).not.toThrow();
+
+      const state = useAuthStore.getState();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.user).toBeNull();
+      expect(state.token).toBeNull();
+      expect(state.authStatus).toBe('unauthenticated');
+    });
+
+    it('clears in-memory cache without modifying persistent storage via clearMemoryCache()', () => {
+      const validUser = {
+        id: 'usr_cache_test',
+        name: 'Cache User',
+        email: 'cache@studio.ai',
+        tier: 'free' as const,
+        createdAt: '2026-11-16T12:00:00Z',
+      };
+      const futureSec = Math.floor(Date.now() / 1000) + 3600;
+      const payload = Buffer.from(
+        JSON.stringify({ sub: 'usr_cache_test', exp: futureSec })
+      ).toString('base64url');
+      const validToken = `eyJhbGciOiJIUzI1NiJ9.${payload}.validSig`;
+
+      AuthStorage.setSession(validToken, validUser);
+      expect(AuthStorage.getToken()).toBe(validToken);
+      expect(AuthStorage.getUser()?.name).toBe('Cache User');
+
+      // Clear only in-memory cache
+      AuthStorage.clearMemoryCache();
+
+      // Persistent storage items remain intact
+      expect(localStorageMap.has('auth_token')).toBe(true);
+      expect(localStorageMap.has('auth_user')).toBe(true);
+
+      // Calling getUser re-hydrates fresh from storage
+      expect(AuthStorage.getUser()?.name).toBe('Cache User');
     });
   });
 });

@@ -23,11 +23,53 @@ interface AuthState {
   checkSession: () => Promise<void>;
   clearError: () => void;
   setUser: (user: UserProfile | null) => void;
+  hydrateFromStorage: () => void;
 }
 
-const initialToken = AuthStorage.getToken();
-const initialUser = initialToken ? AuthStorage.getUser() : null;
-const hasInitialToken = !!initialToken;
+/**
+ * Safely computes initial authentication state with defensive try/catch blocks.
+ * Protects against corrupted localStorage/sessionStorage JSON, malformed tokens,
+ * or restricted browser environments (private mode / sandboxed iframes) throwing on startup.
+ */
+export function getInitialAuthState(): {
+  token: string | null;
+  user: UserProfile | null;
+  hasInitialToken: boolean;
+} {
+  try {
+    const token = AuthStorage.getToken();
+    // Always attempt to safely read/sanitize stored user; if corrupted or malformed,
+    // AuthStorage.getUser() purges it immediately via internal try/catch
+    const user = AuthStorage.getUser();
+
+    // If there is no valid token, any stored user is orphaned/stale, so clear it
+    if (!token && user) {
+      AuthStorage.clearUser();
+    }
+
+    const validUser = token ? user : null;
+    return {
+      token,
+      user: validUser,
+      hasInitialToken: !!token,
+    };
+  } catch {
+    // If any unexpected storage or parsing exception occurs during initial hydration:
+    // clear corrupted storage artifacts and fall back to safe unauthenticated state
+    try {
+      AuthStorage.clear();
+    } catch {
+      // Ignore
+    }
+    return {
+      token: null,
+      user: null,
+      hasInitialToken: false,
+    };
+  }
+}
+
+const initialAuth = getInitialAuthState();
 
 const store = create<AuthState>((set, get, storeApi) => {
   // In React 18 SSR / renderToStaticMarkup, useSyncExternalStore delegates to api.getServerState || api.getInitialState.
@@ -36,16 +78,30 @@ const store = create<AuthState>((set, get, storeApi) => {
 
   return {
     // Safe hydration: AuthStorage validates expiry, catches malformed JSON, and prevents app crash
-    user: initialUser,
-    token: initialToken,
+    user: initialAuth.user,
+    token: initialAuth.token,
     isAuthenticated: false,
-    isInitialized: !hasInitialToken,
-    isBootstrapping: hasInitialToken,
-    authStatus: hasInitialToken ? 'bootstrapping' : 'unauthenticated',
+    isInitialized: !initialAuth.hasInitialToken,
+    isBootstrapping: initialAuth.hasInitialToken,
+    authStatus: initialAuth.hasInitialToken ? 'bootstrapping' : 'unauthenticated',
     isLoading: false,
     error: null,
 
-  clearError: () => set({ error: null }),
+    hydrateFromStorage: () => {
+      const state = getInitialAuthState();
+      set({
+        token: state.token,
+        user: state.user,
+        isAuthenticated: false,
+        isInitialized: !state.hasInitialToken,
+        isBootstrapping: state.hasInitialToken,
+        authStatus: state.hasInitialToken ? 'bootstrapping' : 'unauthenticated',
+        isLoading: false,
+        error: null,
+      });
+    },
+
+    clearError: () => set({ error: null }),
 
   setUser: (user) => {
     AuthStorage.setUser(user);
@@ -138,13 +194,13 @@ const store = create<AuthState>((set, get, storeApi) => {
   },
 
   checkSession: async () => {
-    // Read fresh from storage to handle dynamic external token updates or tests
-    const token =
-      AuthStorage.getToken() ||
-      (typeof window !== 'undefined'
-        ? window.localStorage?.getItem('auth_token') ||
-          window.sessionStorage?.getItem('auth_token')
-        : null);
+    // Read fresh from storage via AuthStorage safely
+    let token: string | null = null;
+    try {
+      token = AuthStorage.getToken();
+    } catch {
+      token = null;
+    }
 
     if (!token) {
       set({
