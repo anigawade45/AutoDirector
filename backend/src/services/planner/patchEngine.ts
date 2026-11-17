@@ -13,13 +13,17 @@ export class PatchEngine {
     currentPlan: EditPlan,
     rawPatches: PatchOperation[]
   ): { patchedPlan: any; normalizedPatches: PatchOperation[] } {
-    if (!Array.isArray(rawPatches) || rawPatches.length === 0) {
-      throw new Error('Patch must be a non-empty array of RFC 6902 operations');
+    if (!Array.isArray(rawPatches)) {
+      throw new Error('Patch must be an array of RFC 6902 operations');
     }
 
     const clonedPlan = JSON.parse(JSON.stringify(currentPlan));
     clonedPlan.layers = Array.isArray(clonedPlan.layers) ? clonedPlan.layers : [];
     const normalizedPatches: PatchOperation[] = [];
+
+    if (rawPatches.length === 0) {
+      return { patchedPlan: clonedPlan, normalizedPatches: [] };
+    }
 
     for (const p of rawPatches) {
       if (!p || typeof p !== 'object' || !p.op || !p.path) {

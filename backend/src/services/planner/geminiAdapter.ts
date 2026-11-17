@@ -197,6 +197,46 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     if (currentPlan && !isReset) {
       const patches: Array<{ op: string; path: string; value?: unknown }> = [];
 
+      // Silence cuts / dead air removal
+      if (
+        instruction.includes('silence') ||
+        instruction.includes('silent') ||
+        instruction.includes('pause') ||
+        (instruction.includes('cut') && !instruction.includes('scene'))
+      ) {
+        let thresholdSec = 0.6;
+        const matchThreshold = instruction.match(/(?:longer than|over|>)\s*(\d+(?:\.\d+)?)\s*s/i);
+        if (matchThreshold && Number(matchThreshold[1])) {
+          thresholdSec = Number(matchThreshold[1]);
+        }
+
+        const silences = ctx.audioAnalysis?.silenceIntervalsSec || [];
+        const existingCuts = (currentPlan.layers || []).filter((l: any) => l.layer === 'cut');
+        let cutCounter = existingCuts.length + 1;
+
+        for (const s of silences) {
+          const sStart = typeof s.start === 'number' ? Number(s.start.toFixed(3)) : 0;
+          const sEnd = typeof s.end === 'number' ? Number(s.end.toFixed(3)) : 0;
+          if (sEnd - sStart >= thresholdSec && sStart < totalDurationSec) {
+            patches.push({
+              op: 'add',
+              path: '/layers/-',
+              value: {
+                id: `lyr_cut_silence_${cutCounter++}`,
+                layer: 'cut',
+                enabled: true,
+                timebase: 'source',
+                range: {
+                  start: Math.max(0, sStart),
+                  end: Math.min(totalDurationSec, sEnd),
+                },
+                params: { reason: 'silence', padding: 0.05 },
+              },
+            });
+          }
+        }
+      }
+
       // Subtitle adjustments
       if (instruction.includes('subtitle') || instruction.includes('caption')) {
         const subLayer = currentPlan.layers?.find((l: any) => l.layer === 'subtitle');
@@ -442,18 +482,16 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         }
       }
 
-      if (patches.length > 0) {
-        return {
-          provider: 'gemini',
-          model: 'rule-engine-v1',
-          structuredOutput: { patch: patches },
-          executionMode: 'heuristic_fallback',
-          isFallback: true,
-          requestedModel: resolvedTargetModel,
-          fallbackReason: reason,
-          usage: { inputTokens: 40, outputTokens: 80 },
-        };
-      }
+      return {
+        provider: 'gemini',
+        model: 'rule-engine-v1',
+        structuredOutput: { patch: patches },
+        executionMode: 'heuristic_fallback',
+        isFallback: true,
+        requestedModel: resolvedTargetModel,
+        fallbackReason: reason,
+        usage: { inputTokens: 40, outputTokens: 80 },
+      };
     }
 
     // Initial Plan Generation

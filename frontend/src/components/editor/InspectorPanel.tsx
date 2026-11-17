@@ -18,6 +18,10 @@ import {
   ArrowRight,
   Film,
   RefreshCw,
+  PlayCircle,
+  FileText,
+  Search,
+  Clock,
 } from 'lucide-react';
 import { compare, Operation, applyPatch } from 'fast-json-patch';
 import { rebasePlanPatch } from '../../utils/planRebase';
@@ -33,14 +37,189 @@ import {
 } from '@ai-video/shared';
 
 export const InspectorPanel: React.FC = () => {
-  const { project, plan, updateDraft, commitDraft, setPlan, timeline, selectLayer } =
-    useEditorStore();
+  const {
+    project,
+    plan,
+    updateDraft,
+    commitDraft,
+    setPlan,
+    timeline,
+    selectLayer,
+    updateCues,
+    setCurrentTime,
+    playback,
+  } = useEditorStore();
 
   const effectivePlan = useEditorStore(selectEffectivePlan);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'conflict' | 'error'>('saved');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Subtitle / Caption editing states
+  const [captionSaveStatus, setCaptionSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [subtitleSearch, setSubtitleSearch] = useState('');
+  const captionDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const formatCueTime = (ms: number) => {
+    const totalSec = ms / 1000;
+    const mins = Math.floor(totalSec / 60);
+    const secs = Math.floor(totalSec % 60);
+    const millis = Math.floor((totalSec % 1) * 10);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}.${millis}`;
+  };
+
+  const handleUpdateCueText = useCallback(
+    (index: number, newText: string) => {
+      if (!project) return;
+      const currentCues = project.analysisSummary?.cues || [];
+      const updatedCues = currentCues.map((c, i) => {
+        if (i !== index) return c;
+        const tokens = newText.trim().split(/\s+/).filter(Boolean);
+        const totalDur = c.endMs - c.startMs;
+        const perWordDur =
+          tokens.length > 0 ? Math.max(100, Math.floor(totalDur / tokens.length)) : 100;
+        const words = tokens.map((tok, tIdx) => ({
+          word: tok,
+          startMs: c.startMs + tIdx * perWordDur,
+          endMs: tIdx === tokens.length - 1 ? c.endMs : c.startMs + (tIdx + 1) * perWordDur,
+          score: 1,
+        }));
+        return {
+          ...c,
+          text: newText,
+          words,
+        };
+      });
+
+      updateCues(updatedCues);
+
+      setCaptionSaveStatus('saving');
+      if (captionDebounceRef.current) {
+        clearTimeout(captionDebounceRef.current);
+      }
+      captionDebounceRef.current = setTimeout(async () => {
+        try {
+          await api.updateCaptions(project.id, updatedCues);
+          setCaptionSaveStatus('saved');
+          setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+        } catch (err: any) {
+          console.error('Failed to sync captions:', err);
+          setCaptionSaveStatus('error');
+          toast.error(
+            'Failed to save subtitle edits: ' + (err.message || 'Unknown error'),
+            'Captions Sync'
+          );
+        }
+      }, 600);
+    },
+    [project, updateCues]
+  );
+
+  const handleUpdateCueTiming = useCallback(
+    (index: number, newStartSec: number, newEndSec: number) => {
+      if (!project) return;
+      const currentCues = project.analysisSummary?.cues || [];
+      const updatedCues = currentCues.map((c, i) => {
+        if (i !== index) return c;
+        const startMs = Math.max(0, Math.round(newStartSec * 1000));
+        const endMs = Math.max(startMs + 100, Math.round(newEndSec * 1000));
+        const tokens = (c.text || '').trim().split(/\s+/).filter(Boolean);
+        const totalDur = endMs - startMs;
+        const perWordDur =
+          tokens.length > 0 ? Math.max(100, Math.floor(totalDur / tokens.length)) : 100;
+        const words = tokens.map((tok, tIdx) => ({
+          word: tok,
+          startMs: startMs + tIdx * perWordDur,
+          endMs: tIdx === tokens.length - 1 ? endMs : startMs + (tIdx + 1) * perWordDur,
+          score: 1,
+        }));
+        return {
+          ...c,
+          startMs,
+          endMs,
+          words,
+        };
+      });
+
+      updateCues(updatedCues);
+
+      setCaptionSaveStatus('saving');
+      if (captionDebounceRef.current) {
+        clearTimeout(captionDebounceRef.current);
+      }
+      captionDebounceRef.current = setTimeout(async () => {
+        try {
+          await api.updateCaptions(project.id, updatedCues);
+          setCaptionSaveStatus('saved');
+          setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+        } catch (err: any) {
+          console.error('Failed to sync captions:', err);
+          setCaptionSaveStatus('error');
+        }
+      }, 600);
+    },
+    [project, updateCues]
+  );
+
+  const handleAddCueLine = useCallback(() => {
+    if (!project) return;
+    const currentCues = [...(project.analysisSummary?.cues || [])];
+    const playheadMs = Math.round(playback.currentTime * 1000);
+    const startMs = playheadMs;
+    const endMs = playheadMs + 2500;
+    const newCue = {
+      id: `cue_user_${Date.now()}`,
+      startMs,
+      endMs,
+      text: 'New subtitle text',
+      words: [
+        { word: 'New', startMs, endMs: startMs + 800, score: 1 },
+        { word: 'subtitle', startMs: startMs + 800, endMs: startMs + 1600, score: 1 },
+        { word: 'text', startMs: startMs + 1600, endMs, score: 1 },
+      ],
+    };
+
+    currentCues.push(newCue);
+    currentCues.sort((a, b) => a.startMs - b.startMs);
+
+    updateCues(currentCues);
+    toast.success('Added new subtitle line', 'Captions');
+
+    api
+      .updateCaptions(project.id, currentCues)
+      .then(() => {
+        setCaptionSaveStatus('saved');
+        setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+      })
+      .catch((err) => {
+        console.error('Failed to save added cue:', err);
+        setCaptionSaveStatus('error');
+      });
+  }, [project, playback.currentTime, updateCues]);
+
+  const handleDeleteCueLine = useCallback(
+    (index: number) => {
+      if (!project) return;
+      const currentCues = project.analysisSummary?.cues || [];
+      const updatedCues = currentCues.filter((_, i) => i !== index);
+
+      updateCues(updatedCues);
+      toast.info('Removed subtitle line', 'Captions');
+
+      api
+        .updateCaptions(project.id, updatedCues)
+        .then(() => {
+          setCaptionSaveStatus('saved');
+          setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+        })
+        .catch((err) => {
+          console.error('Failed to save deleted cue:', err);
+          setCaptionSaveStatus('error');
+        });
+    },
+    [project, updateCues]
+  );
 
   // Selected layer derived from timeline selection or default to first layer
   const selectedLayerId = timeline.selectedLayerIds[0] || effectivePlan?.layers[0]?.id;
@@ -822,6 +1001,174 @@ export const InspectorPanel: React.FC = () => {
                     }}
                     className="w-5 h-5 rounded cursor-pointer border border-[#393B3F] bg-transparent"
                   />
+                </div>
+              </div>
+
+              {/* Dialogue & Captions In-Place Editor */}
+              <div className="pt-3 border-t border-[#393B3F] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5">
+                    <FileText className="w-3.5 h-3.5 text-[#E3B5BE]" />
+                    <span className="font-semibold text-xs text-[#FFF5F5]">
+                      Dialogue & Captions ({project?.analysisSummary?.cues?.length || 0})
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {captionSaveStatus === 'saving' && (
+                      <span className="flex items-center space-x-1 text-[10px] text-[#E3B5BE]">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        <span>Saving...</span>
+                      </span>
+                    )}
+                    {captionSaveStatus === 'saved' && (
+                      <span className="flex items-center space-x-1 text-[10px] text-emerald-400">
+                        <Check className="w-2.5 h-2.5" />
+                        <span>Saved</span>
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleAddCueLine}
+                      className="px-2 py-0.5 rounded text-[10px] bg-[#E3B5BE]/15 hover:bg-[#E3B5BE]/25 text-[#F7D7D1] border border-[#E3B5BE]/40 flex items-center space-x-1 transition-colors"
+                      title="Add a subtitle line at current playhead position"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Line</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Search bar if multiple cues */}
+                {(project?.analysisSummary?.cues?.length || 0) > 3 && (
+                  <div className="relative">
+                    <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#FFF5F5]/40" />
+                    <input
+                      type="text"
+                      placeholder="Search subtitles..."
+                      value={subtitleSearch}
+                      onChange={(e) => setSubtitleSearch(e.target.value)}
+                      className="w-full bg-[#222326] border border-[#393B3F] rounded-lg pl-7 pr-2.5 py-1 text-[11px] text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE]"
+                    />
+                  </div>
+                )}
+
+                {/* Subtitle Cue Cards List */}
+                <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                  {!project?.analysisSummary?.cues || project.analysisSummary.cues.length === 0 ? (
+                    <div className="text-center py-4 px-3 bg-[#222326] rounded-lg border border-[#393B3F] space-y-1.5">
+                      <p className="text-[11px] text-[#FFF5F5]/70">No subtitle lines detected or added.</p>
+                      <button
+                        type="button"
+                        onClick={handleAddCueLine}
+                        className="px-3 py-1 rounded-lg text-xs bg-[#E3B5BE] text-[#18191B] font-medium hover:bg-[#E3B5BE]/90 transition-colors"
+                      >
+                        + Add First Subtitle Line
+                      </button>
+                    </div>
+                  ) : (
+                    project.analysisSummary.cues
+                      .map((cue, origIdx) => ({ cue, origIdx }))
+                      .filter(({ cue }) =>
+                        subtitleSearch
+                          ? cue.text.toLowerCase().includes(subtitleSearch.toLowerCase())
+                          : true
+                      )
+                      .map(({ cue, origIdx }) => {
+                        const curMs = Math.round(playback.currentTime * 1000);
+                        const isCurrent = curMs >= cue.startMs && curMs <= cue.endMs;
+
+                        return (
+                          <div
+                            key={cue.id || origIdx}
+                            className={`p-2 rounded-lg border transition-all ${
+                              isCurrent
+                                ? 'bg-[#E3B5BE]/10 border-[#E3B5BE] shadow-sm'
+                                : 'bg-[#222326] border-[#393B3F] hover:border-[#484949]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setCurrentTime(cue.startMs / 1000)}
+                                className={`flex items-center space-x-1 font-mono text-[10px] hover:underline ${
+                                  isCurrent ? 'text-[#F7D7D1] font-semibold' : 'text-[#FFF5F5]/60'
+                                }`}
+                                title="Click to seek player here"
+                              >
+                                <PlayCircle className="w-3 h-3 text-[#E3B5BE]" />
+                                <span>
+                                  {formatCueTime(cue.startMs)} - {formatCueTime(cue.endMs)}
+                                </span>
+                              </button>
+
+                              <div className="flex items-center space-x-1.5">
+                                {isCurrent && (
+                                  <span className="text-[9px] font-mono uppercase tracking-wider text-[#E3B5BE] px-1 py-0.2 rounded bg-[#E3B5BE]/20">
+                                    Playing
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCueLine(origIdx)}
+                                  className="text-[#FFF5F5]/30 hover:text-red-400 p-0.5 transition-colors"
+                                  title="Delete subtitle line"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <textarea
+                              rows={2}
+                              value={cue.text}
+                              onChange={(e) => handleUpdateCueText(origIdx, e.target.value)}
+                              placeholder="Subtitle text..."
+                              className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded p-1.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/30 resize-none focus:outline-none transition-colors"
+                            />
+
+                            {/* Timing Adjusters */}
+                            <div className="flex items-center justify-between mt-1 pt-1 border-t border-[#393B3F]/50 text-[10px] text-[#FFF5F5]/50 font-mono">
+                              <div className="flex items-center space-x-1">
+                                <span>Start:</span>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  value={(cue.startMs / 1000).toFixed(1)}
+                                  onChange={(e) =>
+                                    handleUpdateCueTiming(
+                                      origIdx,
+                                      parseFloat(e.target.value) || 0,
+                                      cue.endMs / 1000
+                                    )
+                                  }
+                                  className="w-12 bg-[#18191B] border border-[#393B3F] rounded px-1 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
+                                />
+                                <span>s</span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <span>End:</span>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0.1"
+                                  value={(cue.endMs / 1000).toFixed(1)}
+                                  onChange={(e) =>
+                                    handleUpdateCueTiming(
+                                      origIdx,
+                                      cue.startMs / 1000,
+                                      parseFloat(e.target.value) || 0.1
+                                    )
+                                  }
+                                  className="w-12 bg-[#18191B] border border-[#393B3F] rounded px-1 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
+                                />
+                                <span>s</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                  )}
                 </div>
               </div>
             </div>

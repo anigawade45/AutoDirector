@@ -282,6 +282,49 @@ describe('Phase 4: Plan Normalizer, Patch Engine & Planner Service', () => {
       expect(patchedPlan.layers.some((l: any) => l.layer === 'music')).toBe(true);
       expect(patchedPlan.layers.find((l: any) => l.layer === 'music').params.volume).toBe(0.25);
     });
+
+    it('handles empty patch array gracefully without throwing Patch must be a non-empty array', () => {
+      const { patchedPlan, normalizedPatches } = PatchEngine.apply(basePlan, []);
+      expect(patchedPlan).toBeDefined();
+      expect(normalizedPatches).toEqual([]);
+      expect(patchedPlan.layers.length).toBe(basePlan.layers.length);
+    });
+
+    it('generates silence cut patches when instructed to remove silent pauses longer than 0.6s', async () => {
+      const service = new PlannerService();
+      const result = await service.plan(
+        'Remove all silent pauses longer than 0.6s',
+        'prj_123',
+        'ast_456',
+        1,
+        {
+          durationMs: 60000,
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          silences: [
+            { startMs: 2000, endMs: 3500 }, // 1.5s silence
+            { startMs: 8000, endMs: 8200 }, // 0.2s silence (below 0.6s threshold)
+            { startMs: 15000, endMs: 16200 }, // 1.2s silence
+          ],
+          sceneCuts: [],
+          beats: { bpm: 120, grid: [] },
+          loudness: { integratedLufs: -16, truePeakDb: -1.5 },
+          transcriptExcerpt: [],
+        },
+        dummyCatalog,
+        basePlan
+      );
+
+      expect(result.plan).toBeDefined();
+      expect(result.plan.version).toBe(2);
+      const cutLayers = result.plan.layers.filter((l) => l.layer === 'cut');
+      expect(cutLayers.length).toBe(2);
+      expect(cutLayers[0].range?.start).toBe(2);
+      expect(cutLayers[0].range?.end).toBe(3.5);
+      expect(cutLayers[1].range?.start).toBe(15);
+      expect(cutLayers[1].range?.end).toBe(16.2);
+    });
   });
 
   describe('PlannerService', () => {

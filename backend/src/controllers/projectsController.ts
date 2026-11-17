@@ -157,15 +157,23 @@ export class ProjectsController {
           lookupIds.push(baseAsset.publicId);
         }
 
+        const captionQuery = CaptionSetModel.findOne({
+          $or: [
+            { projectId: { $in: [project._id, project.publicId] } },
+            { assetId: { $in: lookupIds } },
+          ],
+        });
+        const captionPromise =
+          typeof (captionQuery as any)?.sort === 'function'
+            ? (captionQuery as any).sort({ updatedAt: -1 })
+            : captionQuery;
+
         const [analysis, captionSet] = await Promise.all([
           AnalysisResultModel.findOne({ assetId: { $in: lookupIds } }),
-          CaptionSetModel.findOne({
-            projectId: { $in: [project._id, project.publicId] },
-            assetId: { $in: lookupIds },
-          }),
+          captionPromise,
         ]);
 
-        if (analysis) {
+        if (analysis || captionSet) {
           const cues = captionSet?.cues || [];
           const totalWords = cues.reduce((sum: number, c: any) => sum + (c.words?.length || 0), 0);
           const snippet = cues
@@ -174,17 +182,18 @@ export class ProjectsController {
             .join(' ');
 
           analysisSummary = {
-            durationMs: baseAsset.media?.durationMs || 0,
-            silencesCount: analysis.silences?.length || 0,
-            sceneCutsCount: analysis.sceneCuts?.length || 0,
-            bpm: analysis.beats?.bpm || 120,
-            integratedLufs: analysis.loudness?.integratedLufs ?? -16.0,
-            truePeakDb: analysis.loudness?.truePeakDb ?? -1.0,
-            status: analysis.status,
+            durationMs: baseAsset.media?.durationMs || (project.durationSec ? project.durationSec * 1000 : 0),
+            silencesCount: analysis?.silences?.length || 0,
+            sceneCutsCount: analysis?.sceneCuts?.length || 0,
+            bpm: analysis?.beats?.bpm || 120,
+            integratedLufs: analysis?.loudness?.integratedLufs ?? -16.0,
+            truePeakDb: analysis?.loudness?.truePeakDb ?? -1.0,
+            status: analysis?.status || 'ready',
             cuesCount: cues.length,
             wordCount: totalWords,
             transcriptSnippet: snippet || undefined,
-            cues: cues.map((c: any) => ({
+            cues: cues.map((c: any, cIdx: number) => ({
+              id: c.id || `cue_${cIdx + 1}`,
               startMs: c.startMs,
               endMs: c.endMs,
               text: c.text,
@@ -192,7 +201,7 @@ export class ProjectsController {
                 word: w.w || w.word || '',
                 startMs: w.s !== undefined ? w.s : w.startMs || 0,
                 endMs: w.e !== undefined ? w.e : w.endMs || 0,
-                score: w.conf,
+                score: w.conf ?? w.score ?? 1,
               })),
             })),
           };
@@ -494,11 +503,13 @@ export class ProjectsController {
       const { cues, language } = req.body;
       const rawUserId = req.user?._id;
 
-      const project = await ProjectModel.findOne({
-        publicId: id,
-        userId: rawUserId,
-        deletedAt: null,
-      });
+      const project =
+        (req as any).project ||
+        (await ProjectModel.findOne({
+          publicId: id,
+          userId: rawUserId,
+          deletedAt: null,
+        }));
 
       if (!project) {
         throw new AppError(404, 'PROJECT_NOT_FOUND', `Project ${id} not found or unauthorized`);
@@ -508,22 +519,86 @@ export class ProjectsController {
         throw new AppError(400, 'INVALID_CUES', 'cues must be an array of caption cues');
       }
 
+      const normalizedCues = cues.map((cue: any, idx: number) => {
+        const text = String(cue.text || '').trim();
+        const startMs = Math.max(0, Math.round(Number(cue.startMs) || 0));
+        const endMs = Math.max(startMs + 100, Math.round(Number(cue.endMs) || startMs + 1000));
+        const tokens = text.split(/\s+/).filter(Boolean);
+
+        let words: Array<{ w: string; s: number; e: number; conf: number }> = [];
+
+        if (Array.isArray(cue.words) && cue.words.length === tokens.length && tokens.length > 0) {
+          words = cue.words.map((w: any, wIdx: number) => ({
+            w: String(w.w || w.word || tokens[wIdx] || ''),
+            s: Math.max(0, Math.round(Number(w.s !== undefined ? w.s : w.startMs !== undefined ? w.startMs : startMs))),
+            e: Math.max(0, Math.round(Number(w.e !== undefined ? w.e : w.endMs !== undefined ? w.endMs : endMs))),
+            conf: Number(w.conf ?? w.score ?? 1),
+          }));
+        } else if (tokens.length > 0) {
+          const totalDur = endMs - startMs;
+          const perWordDur = Math.max(100, Math.floor(totalDur / tokens.length));
+          words = tokens.map((token, tIdx) => {
+            const s = startMs + tIdx * perWordDur;
+            const e = tIdx === tokens.length - 1 ? endMs : s + perWordDur;
+            return {
+              w: token,
+              s,
+              e: Math.max(s + 50, e),
+              conf: 1,
+            };
+          });
+        }
+
+        return {
+          id: String(cue.id || `cue_${idx + 1}`),
+          startMs,
+          endMs,
+          text,
+          speaker: cue.speaker || null,
+          words,
+        };
+      });
+
       const captionSet = await CaptionSetModel.findOneAndUpdate(
-        { projectId: { $in: [project._id, project.publicId] } },
+        {
+          $or: [
+            { projectId: { $in: [project._id, project.publicId] } },
+            ...(project.baseAssetId ? [{ assetId: project.baseAssetId }] : []),
+          ],
+        },
         {
           $set: {
-            cues,
+            projectId: project._id,
+            ...(project.baseAssetId ? { assetId: project.baseAssetId } : {}),
+            cues: normalizedCues,
             origin: 'manual',
             ...(language ? { language } : {}),
-            contentHash: crypto.createHash('sha256').update(JSON.stringify(cues)).digest('hex'),
+            contentHash: crypto.createHash('sha256').update(JSON.stringify(normalizedCues)).digest('hex'),
           },
         },
         { new: true, upsert: true }
       );
 
+      // Return both raw doc and normalized frontend cues
+      const formattedCues = normalizedCues.map((c) => ({
+        id: c.id,
+        startMs: c.startMs,
+        endMs: c.endMs,
+        text: c.text,
+        words: c.words.map((w) => ({
+          word: w.w,
+          startMs: w.s,
+          endMs: w.e,
+          score: w.conf,
+        })),
+      }));
+
       res.status(200).json({
         success: true,
-        data: captionSet,
+        data: {
+          ...captionSet.toObject(),
+          formattedCues,
+        },
         requestId: req.id,
       });
     } catch (err) {

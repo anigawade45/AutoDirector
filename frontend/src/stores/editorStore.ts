@@ -24,9 +24,11 @@ export interface TrackVM {
 }
 
 export interface TranscriptCue {
+  id?: string;
   startMs: number;
   endMs: number;
   text: string;
+  speaker?: string | null;
   words?: Array<{
     word: string;
     startMs: number;
@@ -157,6 +159,7 @@ export interface EditorStoreState {
   clearChat: () => void;
   setChatPending: (pending: boolean) => void;
   updateJob: (jobId: string, update: Partial<EditorStoreState['jobs'][string]>) => void;
+  updateCues: (cues: TranscriptCue[]) => void;
   setPreviewUrl: (
     url: string,
     planVersion: number,
@@ -553,6 +556,32 @@ export const useEditorStore = create<EditorStoreState>()(
           ...(state.jobs[jobId] || { type: 'preview', percent: 0, state: 'queued' }),
           ...update,
         };
+      }),
+
+    updateCues: (cues) =>
+      set((state) => {
+        if (state.project) {
+          if (!state.project.analysisSummary) {
+            state.project.analysisSummary = {
+              durationMs: (state.project.durationSec || 60) * 1000,
+              silencesCount: 0,
+              sceneCutsCount: 0,
+              bpm: 120,
+              integratedLufs: -16,
+              cues: [],
+            };
+          }
+          state.project.analysisSummary.cues = cues;
+          state.project.analysisSummary.cuesCount = cues.length;
+          state.project.analysisSummary.wordCount = cues.reduce(
+            (sum, c) => sum + (c.words?.length || c.text?.split(/\s+/).filter(Boolean).length || 0),
+            0
+          );
+          state.project.analysisSummary.transcriptSnippet = cues
+            .slice(0, 3)
+            .map((c) => c.text)
+            .join(' ');
+        }
       }),
 
     setPreviewUrl: (url, planVersion, isRendered = false, baseProxyUrl) =>
