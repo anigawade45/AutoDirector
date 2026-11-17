@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#18191B"/>
+  
+  <!-- Subtle warm radial glow -->
+  <circle cx="600" cy="200" r="450" fill="#F7D7D1" fill-opacity="0.06"/>
+  <circle cx="950" cy="400" r="300" fill="#E3B5BE" fill-opacity="0.05"/>
+
+  <!-- Subtle border grid -->
+  <rect x="40" y="40" width="1120" height="550" rx="24" stroke="#393B3F" stroke-width="2"/>
+  
+  <!-- Brand Header -->
+  <g transform="translate(80, 80)">
+    <!-- Clapper Icon -->
+    <rect width="48" height="48" rx="12" fill="#2A2C2F" stroke="#E3B5BE" stroke-width="1.5"/>
+    <path d="M12 20L36 14L34 20L12 20Z" fill="#F7D7D1"/>
+    <rect x="12" y="22" width="24" height="16" rx="2" fill="#18191B" stroke="#E3B5BE" stroke-width="1.5"/>
+    <polygon points="22,26 28,30 22,34" fill="#E3B5BE"/>
+    
+    <text x="64" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="bold" fill="#FFF5F5">AutoDirector</text>
+    <text x="215" y="32" font-family="monospace" font-size="14" font-weight="bold" fill="#F7D7D1" letter-spacing="2">STUDIO</text>
+  </g>
+
+  <!-- Tagline Pill -->
+  <g transform="translate(80, 160)">
+    <rect width="360" height="32" rx="16" fill="#222326" stroke="#393B3F" stroke-width="1"/>
+    <circle cx="20" cy="16" r="4" fill="#E3B5BE"/>
+    <text x="36" y="21" font-family="monospace" font-size="12" fill="#F7D7D1" letter-spacing="1">THE EDITORIAL VIDEO SUITE</text>
+  </g>
+
+  <!-- Headline -->
+  <text x="80" y="250" font-family="system-ui, -apple-system, sans-serif" font-size="52" font-weight="bold" fill="#FFF5F5">
+    Direct video edits with
+  </text>
+  <text x="80" y="315" font-family="Georgia, serif" font-style="italic" font-size="56" fill="#F7D7D1">
+    editorial precision.
+  </text>
+
+  <!-- Subheading -->
+  <text x="80" y="380" font-family="system-ui, -apple-system, sans-serif" font-size="20" fill="#FFF5F5" fill-opacity="0.75">
+    Conversational cutting room • 5-Pass FFmpeg compiler • Whisper word-sync kinetic subtitles
+  </text>
+
+  <!-- Feature Grid Pills -->
+  <g transform="translate(80, 440)">
+    <!-- Pill 1 -->
+    <rect x="0" y="0" width="220" height="70" rx="12" fill="#222326" stroke="#393B3F"/>
+    <text x="20" y="30" font-family="monospace" font-size="11" fill="#E3B5BE" font-weight="bold">ARCHITECTURE</text>
+    <text x="20" y="52" font-family="system-ui, sans-serif" font-size="15" fill="#FFF5F5" font-weight="600">Deterministic 5-Pass</text>
+
+    <!-- Pill 2 -->
+    <rect x="240" y="0" width="220" height="70" rx="12" fill="#222326" stroke="#393B3F"/>
+    <text x="260" y="30" font-family="monospace" font-size="11" fill="#F7D7D1" font-weight="bold">SUBTITLES</text>
+    <text x="260" y="52" font-family="system-ui, sans-serif" font-size="15" fill="#FFF5F5" font-weight="600">Whisper Word-Pop</text>
+
+    <!-- Pill 3 -->
+    <rect x="480" y="0" width="220" height="70" rx="12" fill="#222326" stroke="#393B3F"/>
+    <text x="500" y="30" font-family="monospace" font-size="11" fill="#E3B5BE" font-weight="bold">COLOR SCIENCE</text>
+    <text x="500" y="52" font-family="system-ui, sans-serif" font-size="15" fill="#FFF5F5" font-weight="600">35mm Film LUT Matrix</text>
+
+    <!-- Pill 4 -->
+    <rect x="720" y="0" width="220" height="70" rx="12" fill="#222326" stroke="#393B3F"/>
+    <text x="740" y="30" font-family="monospace" font-size="11" fill="#F7D7D1" font-weight="bold">TIMELINE SAFETY</text>
+    <text x="740" y="52" font-family="system-ui, sans-serif" font-size="15" fill="#FFF5F5" font-weight="600">Branching Version Tree</text>
+  </g>
+
+  <!-- URL Branding Bottom -->
+  <text x="80" y="555" font-family="monospace" font-size="14" fill="#E3B5BE">
+    https://ai-video-frontend-57bk.onrender.com
+  </text>
+  <text x="1080" y="555" text-anchor="end" font-family="monospace" font-size="14" fill="#FFF5F5" fill-opacity="0.5">
+    1080P / 4K UHD MASTER EXPORT
+  </text>
+</svg>

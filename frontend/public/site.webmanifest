@@ -1,0 +1,17 @@
+{
+  "name": "AutoDirector • The Editorial Video Suite",
+  "short_name": "AutoDirector",
+  "description": "Direct video edits with editorial precision. Conversational cutting room with 5-pass FFmpeg rendering, Whisper word-sync kinetic subtitles, and reversible version trees.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#18191B",
+  "theme_color": "#18191B",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ import {
   LogIn,
   User,
   LogOut,
+  HelpCircle,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { AuthModal } from '../auth/AuthModal';
@@ -110,6 +111,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
           </a>
           <a href="#editions" className="hover:text-[#FFF5F5] transition-colors">
             Editions
+          </a>
+          <a href="#faq" className="hover:text-[#FFF5F5] transition-colors">
+            FAQ
           </a>
           <a href="#access" className="hover:text-[#FFF5F5] text-[#F7D7D1] transition-colors">
             Sign In / Register
@@ -757,6 +761,108 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             >
               Contact Studio Sales
             </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Frequently Asked Questions (FAQ) Section - High Search-Intent Answers */}
+      <section
+        id="faq"
+        className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto border-t border-[#393B3F]/70"
+      >
+        <div className="max-w-2xl mx-auto text-center mb-12 sm:mb-16">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#2A2C2F] border border-[#393B3F] text-[#F7D7D1] text-[11px] font-mono tracking-wide mb-3">
+            <HelpCircle className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span>Video Creation &amp; Pipeline Answers</span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-[#FFF5F5] mb-3">
+            Frequently Asked Questions
+          </h2>
+          <p className="text-xs sm:text-sm text-[#FFF5F5]/70">
+            Everything you need to know about conversational cutting, 5-pass FFmpeg compilation,
+            Whisper speech alignment, and export resolutions.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+          {/* FAQ Item 1 */}
+          <div className="p-6 rounded-2xl bg-[#222326] border border-[#393B3F] hover:border-[#E3B5BE]/60 transition-colors">
+            <h3 className="text-sm sm:text-base font-bold text-[#FFF5F5] mb-2.5 flex items-center space-x-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE] shrink-0" />
+              <span>What is conversational video editing in AutoDirector?</span>
+            </h3>
+            <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
+              AutoDirector allows editors to describe their creative intentions using plain natural
+              language (e.g., &ldquo;remove silent pauses longer than 0.6 seconds and apply a warm
+              35mm film grade&rdquo;). The AI director converts instructions into deterministic,
+              reversible JSON timeline operations compiled natively via FFmpeg.
+            </p>
+          </div>
+
+          {/* FAQ Item 2 */}
+          <div className="p-6 rounded-2xl bg-[#222326] border border-[#393B3F] hover:border-[#E3B5BE]/60 transition-colors">
+            <h3 className="text-sm sm:text-base font-bold text-[#FFF5F5] mb-2.5 flex items-center space-x-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F7D7D1] shrink-0" />
+              <span>How does the 5-pass FFmpeg rendering pipeline work?</span>
+            </h3>
+            <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
+              The pipeline compiles edits sequentially across 5 non-destructive passes: 1. Keep
+              segments and ripple silence excision, 2. Color grading and LUT matrix transforms, 3.
+              Crossfade transitions, 4. Advanced SubStation Alpha (ASS) kinetic subtitles, and 5.
+              Sidechain audio ducking normalized to -14 LUFS standards.
+            </p>
+          </div>
+
+          {/* FAQ Item 3 */}
+          <div className="p-6 rounded-2xl bg-[#222326] border border-[#393B3F] hover:border-[#E3B5BE]/60 transition-colors">
+            <h3 className="text-sm sm:text-base font-bold text-[#FFF5F5] mb-2.5 flex items-center space-x-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE] shrink-0" />
+              <span>How accurate is Whisper kinetic subtitle synchronization?</span>
+            </h3>
+            <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
+              AutoDirector utilizes OpenAI Whisper speech recognition models with word-level
+              phonetic timestamping. Subtitle word highlights pop in real time on the exact spoken
+              syllable with sub-100ms precision.
+            </p>
+          </div>
+
+          {/* FAQ Item 4 */}
+          <div className="p-6 rounded-2xl bg-[#222326] border border-[#393B3F] hover:border-[#E3B5BE]/60 transition-colors">
+            <h3 className="text-sm sm:text-base font-bold text-[#FFF5F5] mb-2.5 flex items-center space-x-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F7D7D1] shrink-0" />
+              <span>What resolutions and export formats are supported?</span>
+            </h3>
+            <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
+              AutoDirector provides real-time 480p proxy canvas scrubbing for instantaneous editor
+              response, and exports full 1080p FHD and 4K UHD masters at 60fps in H.264, ProRes, and
+              MP4 containers.
+            </p>
+          </div>
+
+          {/* FAQ Item 5 */}
+          <div className="p-6 rounded-2xl bg-[#222326] border border-[#393B3F] hover:border-[#E3B5BE]/60 transition-colors">
+            <h3 className="text-sm sm:text-base font-bold text-[#FFF5F5] mb-2.5 flex items-center space-x-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE] shrink-0" />
+              <span>Can I fine-tune cuts, transitions, and color grades manually?</span>
+            </h3>
+            <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
+              Yes. AutoDirector combines conversational AI guidance with traditional editing
+              precision. The multi-track timeline, visual inspector, and waveform monitors allow
+              fine-grained manual overrides down to individual frames and milliseconds.
+            </p>
+          </div>
+
+          {/* FAQ Item 6 */}
+          <div className="p-6 rounded-2xl bg-[#222326] border border-[#393B3F] hover:border-[#E3B5BE]/60 transition-colors">
+            <h3 className="text-sm sm:text-base font-bold text-[#FFF5F5] mb-2.5 flex items-center space-x-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#F7D7D1] shrink-0" />
+              <span>Is my video footage and media storage secure?</span>
+            </h3>
+            <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
+              All raw footage, audio, and exported masters are encrypted with AES-256 server-side
+              encryption in isolated tenant Amazon S3 buckets. Media access is strictly regulated
+              via short-lived, presigned URLs.
+            </p>
           </div>
         </div>
       </section>

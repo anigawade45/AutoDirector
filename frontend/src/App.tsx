@@ -16,6 +16,7 @@ import { EditPlan } from '@ai-video/shared';
 import { Loader2, Sparkles, Film, Sliders, FileText } from 'lucide-react';
 import { ToastContainer } from './components/common/ToastContainer';
 import { AuthStorage } from './utils/authStorage';
+import { updateDocumentSeo } from './utils/seo';
 
 export interface RouteState {
   view: 'landing' | 'dashboard' | 'editor';
@@ -67,6 +68,25 @@ export const App: React.FC = () => {
   useEffect(() => {
     checkSession();
   }, [checkSession]);
+
+  // Synchronize dynamic document title, canonical, and robots directives (SEC/SEO)
+  useEffect(() => {
+    if (currentView === 'landing' || !isAuthenticated) {
+      updateDocumentSeo({ isPrivate: false });
+    } else if (currentView === 'dashboard') {
+      updateDocumentSeo({
+        title: 'Studio Dashboard • AutoDirector',
+        isPrivate: true,
+      });
+    } else if (currentView === 'editor') {
+      const projectTitle =
+        useEditorStore.getState().project?.title || selectedProjectId || 'Sequence';
+      updateDocumentSeo({
+        title: `${projectTitle} • AutoDirector Studio`,
+        isPrivate: true,
+      });
+    }
+  }, [currentView, isAuthenticated, selectedProjectId]);
 
   // Synchronized browser navigation helper (HTML5 History API)
   const navigateTo = useCallback(

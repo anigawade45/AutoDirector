@@ -1,0 +1,19 @@
+# AutoDirector Robots Exclusion Standard
+# https://ai-video-frontend-57bk.onrender.com/robots.txt
+
+User-agent: *
+Allow: /
+Allow: /assets/
+Allow: /*.svg$
+Allow: /*.png$
+Allow: /*.ico$
+Allow: /*.json$
+
+# Block indexing of authenticated studio views and dynamic user project editors
+Disallow: /dashboard
+Disallow: /projects/
+Disallow: /editor/
+Disallow: /api/
+
+# Primary XML Sitemap
+Sitemap: https://ai-video-frontend-57bk.onrender.com/sitemap.xml

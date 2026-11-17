@@ -2,20 +2,228 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AutoDirector • The Editorial Video Suite</title>
-    <!-- Editorial & Modern Grotesque Fonts -->
+    <meta name="theme-color" content="#18191B" />
+
+    <!-- Primary SEO Metadata -->
+    <title>AutoDirector • AI Video Editor &amp; Conversational Cutting Room</title>
+    <meta
+      name="description"
+      content="AutoDirector is an AI-native video editing suite and conversational cutting room. Edit video with natural language, 5-pass deterministic FFmpeg rendering, Whisper word-pop subtitles, silence removal, and cinematic color grading."
+    />
+    <meta
+      name="keywords"
+      content="ai video editor, conversational video editing, ffmpeg video editor, automatic silence removal, whisper subtitles, video cutting room, editorial video software"
+    />
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+    />
+    <link rel="canonical" href="https://ai-video-frontend-57bk.onrender.com/" />
+
+    <!-- Favicon & PWA App Manifest -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Open Graph Protocol (Facebook, LinkedIn, Discord, Slack) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="AutoDirector Studio" />
+    <meta
+      property="og:title"
+      content="AutoDirector • AI Video Editor &amp; Conversational Cutting Room"
+    />
+    <meta
+      property="og:description"
+      content="Direct video edits with editorial precision. Conversational cutting room with 5-pass FFmpeg rendering, Whisper word-sync kinetic subtitles, and reversible version trees."
+    />
+    <meta property="og:url" content="https://ai-video-frontend-57bk.onrender.com/" />
+    <meta
+      property="og:image"
+      content="https://ai-video-frontend-57bk.onrender.com/og-image.png"
+    />
+    <meta
+      property="og:image:secure_url"
+      content="https://ai-video-frontend-57bk.onrender.com/og-image.png"
+    />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="AutoDirector Studio - AI Video Editor Interface Preview"
+    />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="AutoDirector • AI Video Editor &amp; Conversational Cutting Room"
+    />
+    <meta
+      name="twitter:description"
+      content="Direct video edits with editorial precision. Conversational cutting room with 5-pass FFmpeg rendering, Whisper word-sync kinetic subtitles, and reversible version trees."
+    />
+    <meta
+      name="twitter:image"
+      content="https://ai-video-frontend-57bk.onrender.com/og-image.png"
+    />
+    <meta
+      name="twitter:image:alt"
+      content="AutoDirector Studio - AI Video Editor Interface Preview"
+    />
+
+    <!-- Google Fonts Optimization: Preconnect & Pruned Font Weights (Plus Jakarta Sans, Instrument Serif, JetBrains Mono) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Montserrat:wght@600;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
+
+    <!-- JSON-LD Structured Data: SoftwareApplication, Organization, WebSite & FAQPage -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://ai-video-frontend-57bk.onrender.com/#software",
+            "name": "AutoDirector Studio",
+            "url": "https://ai-video-frontend-57bk.onrender.com/",
+            "applicationCategory": "MultimediaApplication",
+            "applicationSubCategory": "VideoEditingApplication",
+            "operatingSystem": "Web Browser (All modern operating systems)",
+            "description": "Conversational AI video editor featuring 5-pass FFmpeg rendering, voice activity silence excision, Whisper kinetic word-pop subtitles, and cinematic color grading.",
+            "softwareVersion": "1.0.0",
+            "offers": [
+              {
+                "@type": "Offer",
+                "name": "Free Studio Tier",
+                "price": "0",
+                "priceCurrency": "USD",
+                "category": "Free",
+                "description": "100 AI prompts/day, 60 render minutes/month, 5 GB storage, 1080p FHD exports"
+              },
+              {
+                "@type": "Offer",
+                "name": "Director Pro",
+                "price": "29",
+                "priceCurrency": "USD",
+                "category": "Subscription",
+                "description": "500 AI prompts/day, 300 render minutes/month, 20 GB storage, 4K UHD master exports, custom color grading"
+              },
+              {
+                "@type": "Offer",
+                "name": "Studio House",
+                "price": "99",
+                "priceCurrency": "USD",
+                "category": "Subscription",
+                "description": "1,000 AI prompts/day, 1,200 render minutes/month, 100 GB storage, dedicated FFmpeg worker cluster"
+              }
+            ],
+            "featureList": [
+              "Conversational AI video director with RFC 6902 JSON patch engine",
+              "Deterministic 5-pass FFmpeg compilation pipeline",
+              "Whisper phonetic word-pop kinetic subtitle typography",
+              "Heuristic Voice Activity Detection silence excision",
+              "Cinematic color science & 35mm film LUT matrix transforms",
+              "Sidechain intelligent audio ducking to -14 LUFS standard",
+              "Non-destructive branching version trees with instant rollback",
+              "Sub-100ms scrubbing latency with dual 480p proxy & 4K UHD masters"
+            ]
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://ai-video-frontend-57bk.onrender.com/#organization",
+            "name": "AutoDirector Studio",
+            "url": "https://ai-video-frontend-57bk.onrender.com/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://ai-video-frontend-57bk.onrender.com/favicon.svg",
+              "width": 64,
+              "height": 64
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://ai-video-frontend-57bk.onrender.com/#website",
+            "name": "AutoDirector",
+            "url": "https://ai-video-frontend-57bk.onrender.com/",
+            "publisher": {
+              "@id": "https://ai-video-frontend-57bk.onrender.com/#organization"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://ai-video-frontend-57bk.onrender.com/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What is conversational video editing in AutoDirector?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "AutoDirector allows editors to describe their creative intentions using plain natural language (e.g., 'remove silent pauses longer than 0.6 seconds and apply a warm 35mm film grade'). The AI director converts instructions into deterministic, reversible JSON timeline operations compiled natively via FFmpeg."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How does AutoDirector's 5-pass FFmpeg rendering pipeline work?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "The pipeline compiles edits sequentially across 5 non-destructive passes: 1. Keep segments and ripple silence excision, 2. Color grading and LUT matrix transforms, 3. Crossfade transitions, 4. Advanced SubStation Alpha (ASS) kinetic subtitles, and 5. Sidechain audio ducking normalized to -14 LUFS standards."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How accurate is Whisper kinetic subtitle synchronization?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "AutoDirector utilizes OpenAI Whisper speech recognition models with word-level phonetic timestamping. Subtitle word highlights pop in real time on the exact spoken syllable with sub-100ms precision."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What resolutions and export formats are supported?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "AutoDirector provides real-time 480p proxy canvas scrubbing for instantaneous editor response, and exports full 1080p FHD and 4K UHD masters at 60fps in H.264, ProRes, and MP4 containers."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is my video footage and media storage secure?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "All raw footage, audio, and exported masters are encrypted with AES-256 server-side encryption in isolated tenant Amazon S3 buckets. Media access is strictly regulated via short-lived, presigned URLs."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body class="bg-[#18191B] text-[#FFF5F5] antialiased min-h-screen selection:bg-[#E3B5BE] selection:text-[#18191B]">
+    <noscript>
+      <div style="padding: 2rem; max-width: 800px; margin: 0 auto; font-family: sans-serif; line-height: 1.6; color: #FFF5F5; background: #18191B;">
+        <h1 style="color: #E3B5BE; font-size: 2rem;">AutoDirector • The Editorial Video Suite</h1>
+        <p>Direct video edits with editorial precision. A conversational cutting room built on deterministic 5-pass FFmpeg rendering, Whisper word-sync kinetic subtitles, and reversible version trees.</p>
+        <h2>Key Capabilities</h2>
+        <ul>
+          <li><strong>Voice Activity Excision:</strong> Automatically remove silent pauses with millisecond safety margins.</li>
+          <li><strong>Kinetic Subtitle Typography:</strong> Word-by-word synchronized subtitles powered by Whisper speech models.</li>
+          <li><strong>Color Science &amp; LUTs:</strong> Warm 35mm film, teal &amp; orange, noir mono, and custom matrix curves.</li>
+          <li><strong>Intelligent Audio Ducking:</strong> Automated speech sidechain ducking to -14 LUFS broadcast standards.</li>
+          <li><strong>Lossless Time Travel:</strong> Immutable JSON version trees allowing instant undo and redo.</li>
+        </ul>
+        <h2>Studio Editions</h2>
+        <p><strong>Free Studio:</strong> 100 AI prompts/day, 60 render minutes/month, 5 GB storage, 1080p FHD exports.</p>
+        <p><strong>Director Pro ($29/mo):</strong> 500 AI prompts/day, 300 render minutes/month, 20 GB storage, 4K UHD master exports.</p>
+        <p>Please enable JavaScript to launch the full interactive studio workspace.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

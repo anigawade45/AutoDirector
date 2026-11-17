@@ -146,6 +146,14 @@ export function createApp(options?: { corsOrigins?: string[] }) {
     });
   });
 
+  // SEO & Web Crawler Exclusion Policy for Backend API Control Plane
+  app.get('/robots.txt', (req, res) => {
+    res.type('text/plain');
+    res.send(
+      '# AutoDirector API Control Plane\nUser-agent: *\nDisallow: /api/\nDisallow: /internal/\n'
+    );
+  });
+
   // Rate Limiting & Mount API routers
   app.use('/api', generalApiRateLimiter);
   app.use('/api', apiRouter);
