@@ -22,9 +22,24 @@ import {
   FileText,
   Search,
   Clock,
+  ChevronDown,
+  ChevronUp,
+  Minus,
 } from 'lucide-react';
 import { compare, Operation, applyPatch } from 'fast-json-patch';
 import { rebasePlanPatch } from '../../utils/planRebase';
+import {
+  computeNaturalWordTimings,
+  nudgeWordTiming,
+  detectCueOverlaps,
+  resolveCueOverlaps,
+  shiftAllCues,
+  syncCueToPlayhead,
+  computeSpeechIntervals,
+  alignCuesToSpeechIntervals,
+  distributeCuesAcrossSpeech,
+  normalizeCuesTimebase,
+} from '../../utils/subtitleTiming';
 import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
@@ -48,6 +63,7 @@ export const InspectorPanel: React.FC = () => {
     updateCues,
     setCurrentTime,
     playback,
+    updateLayerRange,
   } = useEditorStore();
 
   const effectivePlan = useEditorStore(selectEffectivePlan);
@@ -61,14 +77,15 @@ export const InspectorPanel: React.FC = () => {
     'idle'
   );
   const [subtitleSearch, setSubtitleSearch] = useState('');
+  const [expandedWordCueIndex, setExpandedWordCueIndex] = useState<number | null>(null);
   const captionDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatCueTime = (ms: number) => {
-    const totalSec = ms / 1000;
+    const totalSec = Math.max(0, ms) / 1000;
     const mins = Math.floor(totalSec / 60);
-    const secs = Math.floor(totalSec % 60);
-    const millis = Math.floor((totalSec % 1) * 10);
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}.${millis}`;
+    const secs = totalSec % 60;
+    const secStr = secs < 10 ? '0' + secs.toFixed(1) : secs.toFixed(1);
+    return `${mins}:${secStr}`;
   };
 
   const handleUpdateCueText = useCallback(
@@ -78,15 +95,8 @@ export const InspectorPanel: React.FC = () => {
       const updatedCues = currentCues.map((c, i) => {
         if (i !== index) return c;
         const tokens = newText.trim().split(/\s+/).filter(Boolean);
-        const totalDur = c.endMs - c.startMs;
-        const perWordDur =
-          tokens.length > 0 ? Math.max(100, Math.floor(totalDur / tokens.length)) : 100;
-        const words = tokens.map((tok, tIdx) => ({
-          word: tok,
-          startMs: c.startMs + tIdx * perWordDur,
-          endMs: tIdx === tokens.length - 1 ? c.endMs : c.startMs + (tIdx + 1) * perWordDur,
-          score: 1,
-        }));
+        // Use speech-aware syllable & punctuation duration weighting to naturally match human speech
+        const words = computeNaturalWordTimings(tokens, c.startMs, c.endMs, c.words as any);
         return {
           ...c,
           text: newText,
@@ -122,20 +132,30 @@ export const InspectorPanel: React.FC = () => {
     (index: number, newStartSec: number, newEndSec: number) => {
       if (!project) return;
       const currentCues = project.analysisSummary?.cues || [];
+      let startMs = Math.max(0, Math.round(newStartSec * 1000));
+      let endMs = Math.max(startMs + 100, Math.round(newEndSec * 1000));
+
+      // Guard: prevent user edit from overlapping with the next cue
+      if (index < currentCues.length - 1) {
+        const nextStart = currentCues[index + 1].startMs;
+        if (endMs > nextStart - 30) {
+          endMs = Math.max(startMs + 100, nextStart - 30);
+        }
+      }
+      // Guard: prevent user edit from overlapping with the previous cue
+      if (index > 0) {
+        const prevEnd = currentCues[index - 1].endMs;
+        if (startMs < prevEnd + 30) {
+          startMs = prevEnd + 30;
+          if (endMs <= startMs) endMs = startMs + 100;
+        }
+      }
+
       const updatedCues = currentCues.map((c, i) => {
         if (i !== index) return c;
-        const startMs = Math.max(0, Math.round(newStartSec * 1000));
-        const endMs = Math.max(startMs + 100, Math.round(newEndSec * 1000));
         const tokens = (c.text || '').trim().split(/\s+/).filter(Boolean);
-        const totalDur = endMs - startMs;
-        const perWordDur =
-          tokens.length > 0 ? Math.max(100, Math.floor(totalDur / tokens.length)) : 100;
-        const words = tokens.map((tok, tIdx) => ({
-          word: tok,
-          startMs: startMs + tIdx * perWordDur,
-          endMs: tIdx === tokens.length - 1 ? endMs : startMs + (tIdx + 1) * perWordDur,
-          score: 1,
-        }));
+        // Proportionally scale and shift existing acoustic word timings without flattening them
+        const words = computeNaturalWordTimings(tokens, startMs, endMs, c.words as any);
         return {
           ...c,
           startMs,
@@ -162,6 +182,73 @@ export const InspectorPanel: React.FC = () => {
       }, 600);
     },
     [project, updateCues]
+  );
+
+  const handleNudgeWord = useCallback(
+    (cueIdx: number, wordIdx: number, deltaMs: number) => {
+      if (!project) return;
+      const currentCues = project.analysisSummary?.cues || [];
+      const cue = currentCues[cueIdx];
+      if (!cue) return;
+
+      const tokens = (cue.text || '').trim().split(/\s+/).filter(Boolean);
+      const words = (
+        cue.words && cue.words.length > 0
+          ? cue.words
+          : computeNaturalWordTimings(tokens, cue.startMs, cue.endMs)
+      ) as any[];
+
+      const nudged = nudgeWordTiming(words as any, wordIdx, deltaMs, cue.startMs, cue.endMs);
+      const updatedCues = currentCues.map((c, i) => (i === cueIdx ? { ...c, words: nudged } : c));
+
+      updateCues(updatedCues);
+      setCaptionSaveStatus('saving');
+      if (captionDebounceRef.current) clearTimeout(captionDebounceRef.current);
+      captionDebounceRef.current = setTimeout(async () => {
+        try {
+          await api.updateCaptions(project.id, updatedCues);
+          setCaptionSaveStatus('saved');
+          setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+        } catch (err: any) {
+          setCaptionSaveStatus('error');
+        }
+      }, 500);
+    },
+    [project, updateCues]
+  );
+
+  const handleSyncWordToPlayhead = useCallback(
+    (cueIdx: number, wordIdx: number) => {
+      if (!project) return;
+      const currentCues = project.analysisSummary?.cues || [];
+      const cue = currentCues[cueIdx];
+      if (!cue) return;
+
+      const playheadMs = Math.round(playback.currentTime * 1000);
+      const tokens = (cue.text || '').trim().split(/\s+/).filter(Boolean);
+      const words = (
+        cue.words && cue.words.length > 0
+          ? cue.words
+          : computeNaturalWordTimings(tokens, cue.startMs, cue.endMs)
+      ) as any[];
+
+      const targetWord = words[wordIdx];
+      if (!targetWord) return;
+
+      const currentStart = targetWord.startMs ?? targetWord.s ?? cue.startMs;
+      const delta = playheadMs - currentStart;
+      const nudged = nudgeWordTiming(words as any, wordIdx, delta, cue.startMs, cue.endMs);
+      const updatedCues = currentCues.map((c, i) => (i === cueIdx ? { ...c, words: nudged } : c));
+
+      updateCues(updatedCues);
+      toast.success(
+        `Synced "${targetWord.word || targetWord.w}" to ${(playheadMs / 1000).toFixed(2)}s`,
+        'Word Synced'
+      );
+
+      api.updateCaptions(project.id, updatedCues).catch(() => {});
+    },
+    [project, playback.currentTime, updateCues]
   );
 
   const handleAddCueLine = useCallback(() => {
@@ -222,6 +309,200 @@ export const InspectorPanel: React.FC = () => {
     },
     [project, updateCues]
   );
+
+  const cues = project?.analysisSummary?.cues || [];
+  const videoDurationSec = playback.duration || project?.durationSec || 0;
+  const videoDurationMs = videoDurationSec > 0 ? Math.round(videoDurationSec * 1000) : 0;
+  const maxCueMs = cues.length > 0 ? Math.max(...cues.map((c) => c.endMs || 0)) : 0;
+  const hasDurationDrift = videoDurationMs > 5000 && maxCueMs > videoDurationMs + 2000;
+  const isCollapsed =
+    videoDurationMs > 15000 && maxCueMs > 0 && maxCueMs < videoDurationMs * 0.25 && cues.length >= 3;
+  const overlappingCues = detectCueOverlaps(cues);
+  const hasOverlaps = overlappingCues.length > 0;
+
+  const handleDistributeAcrossSpeech = useCallback(() => {
+    if (!project || !cues.length || !videoDurationMs) return;
+    const rawSilences = project.analysisSummary?.silences || [];
+    const speechSegments = computeSpeechIntervals(
+      videoDurationMs,
+      rawSilences.map((s) => ({ startMs: s.startMs, endMs: s.endMs }))
+    );
+    const distributed = distributeCuesAcrossSpeech(cues, speechSegments, videoDurationMs);
+    updateCues(distributed);
+    toast.success('Paced and synchronized all dialogue cues across video speech', 'Captions Pacing');
+
+    setCaptionSaveStatus('saving');
+    api
+      .updateCaptions(project.id, distributed)
+      .then(() => {
+        setCaptionSaveStatus('saved');
+        setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+      })
+      .catch((err) => {
+        console.error('Failed to save distributed cues:', err);
+        setCaptionSaveStatus('error');
+        toast.error('Failed to save paced subtitles: ' + (err.message || 'Unknown error'));
+      });
+  }, [project, cues, videoDurationMs, updateCues]);
+
+  const handleResolveOverlaps = useCallback(() => {
+    if (!project || !cues.length) return;
+    const resolved = resolveCueOverlaps(cues, 30);
+    updateCues(resolved);
+    toast.success('Cleanly separated overlapping subtitle lines', 'Captions Overlaps');
+
+    setCaptionSaveStatus('saving');
+    api
+      .updateCaptions(project.id, resolved)
+      .then(() => {
+        setCaptionSaveStatus('saved');
+        setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+      })
+      .catch((err) => {
+        console.error('Failed to save resolved overlaps:', err);
+        setCaptionSaveStatus('error');
+        toast.error('Failed to save resolved subtitles: ' + (err.message || 'Unknown error'));
+      });
+  }, [project, cues, updateCues]);
+
+  const handleCalibrateTimingsToVideo = useCallback(() => {
+    if (!project || !videoDurationMs || maxCueMs <= 0) return;
+    const scale = videoDurationMs / maxCueMs;
+    const currentCues = project.analysisSummary?.cues || [];
+    const calibratedCues = currentCues.map((c) => {
+      const startMs = Math.round(c.startMs * scale);
+      const endMs = Math.min(videoDurationMs, Math.max(startMs + 100, Math.round(c.endMs * scale)));
+      const words = (c.words || []).map((w: any) => {
+        const s = Math.round((w.s ?? w.startMs ?? c.startMs) * scale);
+        const rawE = Math.round((w.e ?? w.endMs ?? c.endMs) * scale);
+        const e = Math.min(videoDurationMs, Math.max(s + 50, rawE));
+        return {
+          ...w,
+          s,
+          e,
+          startMs: s,
+          endMs: e,
+        };
+      });
+      return {
+        ...c,
+        startMs,
+        endMs,
+        words,
+      };
+    });
+
+    const nonOverlappingCues = resolveCueOverlaps(calibratedCues, 30);
+
+    updateCues(nonOverlappingCues);
+    toast.success(
+      `Synchronized subtitles to video duration (${formatCueTime(videoDurationMs)})`,
+      'Captions Calibrated'
+    );
+
+    setCaptionSaveStatus('saving');
+    api
+      .updateCaptions(project.id, nonOverlappingCues)
+      .then(() => {
+        setCaptionSaveStatus('saved');
+        setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+      })
+      .catch((err) => {
+        console.error('Failed to save calibrated cues:', err);
+        setCaptionSaveStatus('error');
+        toast.error('Failed to save calibrated subtitles: ' + (err.message || 'Unknown error'));
+      });
+  }, [project, videoDurationMs, maxCueMs, updateCues]);
+
+  const handleShiftAllCues = useCallback(
+    (deltaSec: number) => {
+      if (!project || !cues.length) return;
+      const deltaMs = Math.round(deltaSec * 1000);
+      const shifted = shiftAllCues(cues, deltaMs, videoDurationMs);
+      updateCues(shifted);
+      toast.success(
+        `Shifted all subtitles by ${deltaSec > 0 ? '+' : ''}${deltaSec.toFixed(1)}s`,
+        'Captions Timing'
+      );
+
+      setCaptionSaveStatus('saving');
+      api
+        .updateCaptions(project.id, shifted)
+        .then(() => {
+          setCaptionSaveStatus('saved');
+          setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+        })
+        .catch((err) => {
+          console.error('Failed to save shifted cues:', err);
+          setCaptionSaveStatus('error');
+          toast.error('Failed to save shifted subtitles: ' + (err.message || 'Unknown error'));
+        });
+    },
+    [project, cues, videoDurationMs, updateCues]
+  );
+
+  const handleSyncCueToPlayhead = useCallback(
+    (targetIdx: number, shiftFollowing: boolean = false) => {
+      if (!project || !cues.length || targetIdx < 0 || targetIdx >= cues.length) return;
+      const playheadMs = Math.round(playback.currentTime * 1000);
+      const synced = syncCueToPlayhead(cues, targetIdx, playheadMs, shiftFollowing);
+      updateCues(synced);
+      toast.success(
+        shiftFollowing
+          ? `Synced line ${targetIdx + 1} & all following lines to ${formatCueTime(playheadMs)}`
+          : `Synced line ${targetIdx + 1} to playhead (${formatCueTime(playheadMs)})`,
+        'Captions Synced'
+      );
+
+      setCaptionSaveStatus('saving');
+      api
+        .updateCaptions(project.id, synced)
+        .then(() => {
+          setCaptionSaveStatus('saved');
+          setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+        })
+        .catch((err) => {
+          console.error('Failed to save synced cue:', err);
+          setCaptionSaveStatus('error');
+          toast.error('Failed to save synced subtitles: ' + (err.message || 'Unknown error'));
+        });
+    },
+    [project, cues, playback.currentTime, updateCues]
+  );
+
+  const handleAcousticSnap = useCallback(() => {
+    if (!project || !cues.length) return;
+    const rawSilences = project.analysisSummary?.silences || [];
+    const speechSegments = computeSpeechIntervals(
+      videoDurationMs || 60000,
+      rawSilences.map((s) => ({ startMs: s.startMs, endMs: s.endMs }))
+    );
+
+    if (speechSegments.length === 0) {
+      toast.info('No distinct silence intervals detected in audio track', 'Acoustic Alignment');
+      return;
+    }
+
+    const aligned = alignCuesToSpeechIntervals(cues, speechSegments);
+    updateCues(aligned);
+    toast.success(
+      'Acoustically aligned all subtitles to physical vocal speech',
+      'Acoustic Alignment'
+    );
+
+    setCaptionSaveStatus('saving');
+    api
+      .updateCaptions(project.id, aligned)
+      .then(() => {
+        setCaptionSaveStatus('saved');
+        setTimeout(() => setCaptionSaveStatus('idle'), 2500);
+      })
+      .catch((err) => {
+        console.error('Failed to save acoustically aligned cues:', err);
+        setCaptionSaveStatus('error');
+        toast.error('Failed to save aligned subtitles: ' + (err.message || 'Unknown error'));
+      });
+  }, [project, cues, videoDurationMs, updateCues]);
 
   // Selected layer derived from timeline selection or default to first layer
   const selectedLayerId = timeline.selectedLayerIds[0] || effectivePlan?.layers[0]?.id;
@@ -766,6 +1047,90 @@ export const InspectorPanel: React.FC = () => {
               const resolvedColor = resolveColorParams(activeLayer.params);
               return (
                 <div className="space-y-3.5">
+                  {/* Color Grade Segment Timing Controls */}
+                  <div className="bg-[#18191B] p-2.5 rounded-lg border border-[#393B3F] space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-[#FFF5F5]/60">
+                      <span>Timeline Boundaries</span>
+                      <span className="text-[#F7D7D1]">
+                        Duration: {((activeLayer.range?.end ?? playback.duration ?? 60) - (activeLayer.range?.start ?? 0)).toFixed(2)}s
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="bg-[#222326] p-2 rounded border border-[#393B3F] space-y-1">
+                        <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">Start (sec)</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0"
+                          max={activeLayer.range?.end ?? (playback.duration || 60)}
+                          value={Number((activeLayer.range?.start ?? 0).toFixed(2))}
+                          onChange={(e) => {
+                            const val = Math.max(0, parseFloat(e.target.value) || 0);
+                            const endVal = activeLayer.range?.end ?? (playback.duration || 60);
+                            updateLayerRange(activeLayer.id, val, Math.max(val + 0.1, endVal));
+                          }}
+                          className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = Number(playback.currentTime.toFixed(2));
+                            const endVal = activeLayer.range?.end ?? (playback.duration || 60);
+                            updateLayerRange(activeLayer.id, cur, Math.max(cur + 0.1, endVal));
+                            toast.success(`Set color start to ${cur.toFixed(2)}s (Pink Line)`, 'Color Grade Updated');
+                          }}
+                          className="w-full text-left text-[10px] text-[#E3B5BE] hover:underline flex items-center gap-1 font-mono pt-0.5"
+                          title="Align color start to pink playhead"
+                        >
+                          <Clock className="w-2.5 h-2.5" />
+                          <span>Set Pink Line ({playback.currentTime.toFixed(2)}s)</span>
+                        </button>
+                      </div>
+
+                      <div className="bg-[#222326] p-2 rounded border border-[#393B3F] space-y-1">
+                        <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">End (sec)</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          min={activeLayer.range?.start ?? 0}
+                          value={Number((activeLayer.range?.end ?? (playback.duration || 60)).toFixed(2))}
+                          onChange={(e) => {
+                            const startVal = activeLayer.range?.start ?? 0;
+                            const val = Math.max(startVal + 0.1, parseFloat(e.target.value) || startVal + 1);
+                            updateLayerRange(activeLayer.id, startVal, val);
+                          }}
+                          className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = Number(playback.currentTime.toFixed(2));
+                            const startVal = activeLayer.range?.start ?? 0;
+                            updateLayerRange(activeLayer.id, Math.min(startVal, Math.max(0, cur - 0.1)), cur);
+                            toast.success(`Set color end to ${cur.toFixed(2)}s (Pink Line)`, 'Color Grade Updated');
+                          }}
+                          className="w-full text-left text-[10px] text-[#E3B5BE] hover:underline flex items-center gap-1 font-mono pt-0.5"
+                          title="Align color end to pink playhead"
+                        >
+                          <Clock className="w-2.5 h-2.5" />
+                          <span>Set Pink Line ({playback.currentTime.toFixed(2)}s)</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateLayerRange(activeLayer.id, 0, playback.duration || 60);
+                        toast.success('Applied color grade to full video (0s to end)', 'Color Grade');
+                      }}
+                      className="w-full py-1 rounded bg-[#2A2C2F] hover:bg-[#34373B] text-[10px] font-mono text-[#FFF5F5]/70 hover:text-[#FFF5F5] transition-colors"
+                    >
+                      Reset to Full Video (0s - {(playback.duration || 60).toFixed(1)}s)
+                    </button>
+                  </div>
+
                   <div>
                     <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1.5 font-medium font-mono">
                       LUT Preset
@@ -1037,8 +1402,116 @@ export const InspectorPanel: React.FC = () => {
                       <Plus className="w-3 h-3" />
                       <span>Add Line</span>
                     </button>
+                    {cues.length > 0 && videoDurationMs > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleCalibrateTimingsToVideo}
+                        className="px-2 py-0.5 rounded text-[10px] bg-[#393B3F] hover:bg-[#484949] text-[#FFF5F5]/80 border border-[#484949] flex items-center space-x-1 transition-colors"
+                        title="Synchronize all subtitle timestamps to fit video duration"
+                      >
+                        <RefreshCw className="w-2.5 h-2.5 text-[#E3B5BE]" />
+                        <span>Fit Video</span>
+                      </button>
+                    )}
+                    {hasOverlaps && (
+                      <button
+                        type="button"
+                        onClick={handleResolveOverlaps}
+                        className="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 flex items-center space-x-1 transition-colors"
+                        title="Fix overlapping subtitle start/end times"
+                      >
+                        <Scissors className="w-2.5 h-2.5 text-rose-400" />
+                        <span>Fix Overlaps</span>
+                      </button>
+                    )}
+                    {cues.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleAcousticSnap}
+                        className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1 transition-colors"
+                        title="Acoustically snap all subtitles to physical vocal speech intervals"
+                      >
+                        <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                        <span>Waveform Align</span>
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Timestamp Drift Warning & 1-Click Auto-Calibration */}
+                {hasDurationDrift && (
+                  <div className="p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5 text-amber-300 text-xs font-semibold">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>Timestamp Drift Detected</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCalibrateTimingsToVideo}
+                        className="px-2.5 py-1 rounded text-[11px] font-bold bg-amber-500 text-black hover:bg-amber-400 transition-colors shadow-sm"
+                      >
+                        Auto-Calibrate to Video ({formatCueTime(videoDurationMs)})
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-amber-200/90 leading-relaxed">
+                      Subtitles extend to {formatCueTime(maxCueMs)}, but your video is{' '}
+                      {formatCueTime(videoDurationMs)}. Click Auto-Calibrate to synchronously scale
+                      all subtitles and words to fit your speech.
+                    </p>
+                  </div>
+                )}
+
+                {/* Subtitle Overlaps Warning & 1-Click Auto-Fix */}
+                {hasOverlaps && (
+                  <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5 text-rose-300 text-xs font-semibold">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        <span>Timing Overlaps Detected ({overlappingCues.length})</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResolveOverlaps}
+                        className="px-2.5 py-1 rounded text-[11px] font-bold bg-rose-500 text-white hover:bg-rose-600 transition-colors shadow-sm"
+                      >
+                        Auto-Fix Overlaps
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-rose-200/90 leading-relaxed">
+                      {overlappingCues.length} subtitle lines overlap in time (e.g.{' '}
+                      {formatCueTime(cues[overlappingCues[0].index].startMs)} ends at{' '}
+                      {formatCueTime(cues[overlappingCues[0].index].endMs)}, after line{' '}
+                      {overlappingCues[0].index + 2} starts at{' '}
+                      {formatCueTime(overlappingCues[0].nextStartMs)}). This causes double text on
+                      video. Click <strong>Auto-Fix Overlaps</strong> to separate them.
+                    </p>
+                  </div>
+                )}
+
+                {/* Collapsed Subtitles Warning (spanned < 25% of video) & 1-Click Speech Calibration */}
+                {isCollapsed && (
+                  <div className="p-2.5 rounded-lg bg-indigo-500/15 border border-indigo-500/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-1.5 text-indigo-300 text-xs font-semibold">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                        <span>Timing Mismatch Detected (Collapsed Subtitles)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDistributeAcrossSpeech}
+                        className="px-2.5 py-1 rounded text-[11px] font-bold bg-indigo-500 text-white hover:bg-indigo-400 transition-colors shadow-sm"
+                      >
+                        Sync to Spoken Voice
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-indigo-200/90 leading-relaxed">
+                      Your {cues.length} subtitle cues only span {formatCueTime(maxCueMs)}, while your video is{' '}
+                      {formatCueTime(videoDurationMs)}. Click <strong>Sync to Spoken Voice</strong> to automatically
+                      align and pace all dialogue lines and words across your video's audio waveform.
+                    </p>
+                  </div>
+                )}
 
                 {/* Search bar if multiple cues */}
                 {(project?.analysisSummary?.cues?.length || 0) > 3 && (
@@ -1051,6 +1524,50 @@ export const InspectorPanel: React.FC = () => {
                       onChange={(e) => setSubtitleSearch(e.target.value)}
                       className="w-full bg-[#222326] border border-[#393B3F] rounded-lg pl-7 pr-2.5 py-1 text-[11px] text-[#FFF5F5] placeholder-[#FFF5F5]/40 focus:outline-none focus:border-[#E3B5BE]"
                     />
+                  </div>
+                )}
+
+                {/* Global Timing Sync & Slip Toolbar */}
+                {cues.length > 0 && (
+                  <div className="flex items-center justify-between bg-[#1D1E20] border border-[#393B3F] rounded-lg px-2.5 py-1.5 text-[10px]">
+                    <div className="flex items-center space-x-1.5 text-[#FFF5F5]/70">
+                      <Clock className="w-3 h-3 text-[#E3B5BE]" />
+                      <span className="font-medium">Nudge Timing:</span>
+                    </div>
+                    <div className="flex items-center space-x-1 font-mono">
+                      <button
+                        type="button"
+                        onClick={() => handleShiftAllCues(-0.5)}
+                        className="px-1.5 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#393B3F] text-[#FFF5F5]/90 border border-[#393B3F] transition-colors"
+                        title="Shift all subtitles 0.5s earlier (if text appears after voice)"
+                      >
+                        -0.5s
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleShiftAllCues(-0.1)}
+                        className="px-1.5 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#393B3F] text-[#FFF5F5]/90 border border-[#393B3F] transition-colors"
+                        title="Shift all subtitles 0.1s earlier"
+                      >
+                        -0.1s
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleShiftAllCues(0.1)}
+                        className="px-1.5 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#393B3F] text-[#FFF5F5]/90 border border-[#393B3F] transition-colors"
+                        title="Shift all subtitles 0.1s later"
+                      >
+                        +0.1s
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleShiftAllCues(0.5)}
+                        className="px-1.5 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#393B3F] text-[#FFF5F5]/90 border border-[#393B3F] transition-colors"
+                        title="Shift all subtitles 0.5s later (if text appears before voice)"
+                      >
+                        +0.5s
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1080,30 +1597,44 @@ export const InspectorPanel: React.FC = () => {
                       .map(({ cue, origIdx }) => {
                         const curMs = Math.round(playback.currentTime * 1000);
                         const isCurrent = curMs >= cue.startMs && curMs <= cue.endMs;
+                        const nextCue = project?.analysisSummary?.cues?.[origIdx + 1];
+                        const hasOverlapWithNext = nextCue && cue.endMs > nextCue.startMs;
+                        const overlapSec = hasOverlapWithNext
+                          ? ((cue.endMs - nextCue.startMs) / 1000).toFixed(1)
+                          : '0.0';
 
                         return (
                           <div
                             key={cue.id || origIdx}
                             className={`p-2 rounded-lg border transition-all ${
-                              isCurrent
-                                ? 'bg-[#E3B5BE]/10 border-[#E3B5BE] shadow-sm'
-                                : 'bg-[#222326] border-[#393B3F] hover:border-[#484949]'
+                              hasOverlapWithNext
+                                ? 'bg-[#222326] border-rose-500/50 hover:border-rose-500/80'
+                                : isCurrent
+                                  ? 'bg-[#E3B5BE]/10 border-[#E3B5BE] shadow-sm'
+                                  : 'bg-[#222326] border-[#393B3F] hover:border-[#484949]'
                             }`}
                           >
                             <div className="flex items-center justify-between mb-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setCurrentTime(cue.startMs / 1000)}
-                                className={`flex items-center space-x-1 font-mono text-[10px] hover:underline ${
-                                  isCurrent ? 'text-[#F7D7D1] font-semibold' : 'text-[#FFF5F5]/60'
-                                }`}
-                                title="Click to seek player here"
-                              >
-                                <PlayCircle className="w-3 h-3 text-[#E3B5BE]" />
-                                <span>
-                                  {formatCueTime(cue.startMs)} - {formatCueTime(cue.endMs)}
-                                </span>
-                              </button>
+                              <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setCurrentTime(cue.startMs / 1000)}
+                                  className={`flex items-center space-x-1 font-mono text-[10px] hover:underline ${
+                                    isCurrent ? 'text-[#F7D7D1] font-semibold' : 'text-[#FFF5F5]/60'
+                                  }`}
+                                  title="Click to seek player here"
+                                >
+                                  <PlayCircle className="w-3 h-3 text-[#E3B5BE]" />
+                                  <span>
+                                    {formatCueTime(cue.startMs)} - {formatCueTime(cue.endMs)}
+                                  </span>
+                                </button>
+                                {hasOverlapWithNext && (
+                                  <span className="text-[9px] font-mono text-rose-300 px-1 py-0.2 rounded bg-rose-500/20 border border-rose-500/30">
+                                    Overlap +{overlapSec}s
+                                  </span>
+                                )}
+                              </div>
 
                               <div className="flex items-center space-x-1.5">
                                 {isCurrent && (
@@ -1124,7 +1655,7 @@ export const InspectorPanel: React.FC = () => {
 
                             <textarea
                               rows={2}
-                              value={cue.text}
+                              value={cue.text || (cue.words && cue.words.map((w: any) => w.word || w.w).join(' ')) || ''}
                               onChange={(e) => handleUpdateCueText(origIdx, e.target.value)}
                               placeholder="Subtitle text..."
                               className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded p-1.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/30 resize-none focus:outline-none transition-colors"
@@ -1146,7 +1677,7 @@ export const InspectorPanel: React.FC = () => {
                                       cue.endMs / 1000
                                     )
                                   }
-                                  className="w-12 bg-[#18191B] border border-[#393B3F] rounded px-1 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
+                                  className="w-16 min-w-[62px] bg-[#18191B] border border-[#393B3F] rounded px-1.5 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
                                 />
                                 <span>s</span>
                               </div>
@@ -1164,10 +1695,137 @@ export const InspectorPanel: React.FC = () => {
                                       parseFloat(e.target.value) || 0.1
                                     )
                                   }
-                                  className="w-12 bg-[#18191B] border border-[#393B3F] rounded px-1 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
+                                  className="w-16 min-w-[62px] bg-[#18191B] border border-[#393B3F] rounded px-1.5 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
                                 />
                                 <span>s</span>
                               </div>
+                              <div className="flex items-center space-x-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSyncCueToPlayhead(origIdx, false)}
+                                  className="px-1.5 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#E3B5BE]/20 text-[#E3B5BE] text-[9px] border border-[#E3B5BE]/30 transition-colors"
+                                  title="Snap this line's start time to current playhead position"
+                                >
+                                  Snap Here
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSyncCueToPlayhead(origIdx, true)}
+                                  className="px-1.5 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#E3B5BE]/20 text-[#FFF5F5]/70 hover:text-[#FFF5F5] text-[9px] border border-[#393B3F] transition-colors"
+                                  title="Snap this line to playhead and shift all subsequent lines by the same offset"
+                                >
+                                  Snap & All
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Fine-tune Word Timings Accordion */}
+                            <div className="mt-1.5 pt-1 border-t border-[#393B3F]/40">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedWordCueIndex(
+                                    expandedWordCueIndex === origIdx ? null : origIdx
+                                  )
+                                }
+                                className="flex items-center space-x-1 text-[10px] text-[#E3B5BE] hover:text-[#F7D7D1] transition-colors font-medium"
+                              >
+                                <Clock className="w-3 h-3" />
+                                <span>
+                                  {expandedWordCueIndex === origIdx ? 'Hide' : 'Fine-Tune'} Word
+                                  Pacing (
+                                  {cue.words?.length ||
+                                    (cue.text || '').trim().split(/\s+/).filter(Boolean)
+                                      .length}{' '}
+                                  words)
+                                </span>
+                                {expandedWordCueIndex === origIdx ? (
+                                  <ChevronUp className="w-3 h-3" />
+                                ) : (
+                                  <ChevronDown className="w-3 h-3" />
+                                )}
+                              </button>
+
+                              {expandedWordCueIndex === origIdx && (
+                                <div className="mt-2 space-y-1.5 bg-[#18191B]/90 p-2 rounded-lg border border-[#393B3F]/60">
+                                  <div className="flex items-center justify-between text-[9px] text-[#FFF5F5]/60 mb-1">
+                                    <span>
+                                      Click word to seek. Use +/- or Sync to match speech:
+                                    </span>
+                                    <span className="font-mono text-[#F7D7D1]">
+                                      Playhead: {playback.currentTime.toFixed(2)}s
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                                    {(cue.words && cue.words.length > 0
+                                      ? cue.words
+                                      : computeNaturalWordTimings(
+                                          (cue.text || '').trim().split(/\s+/).filter(Boolean),
+                                          cue.startMs,
+                                          cue.endMs
+                                        )
+                                    ).map((w: any, wIdx: number) => {
+                                      const wText = w.word || w.w || '';
+                                      const wStart =
+                                        (w.startMs !== undefined ? w.startMs : w.s || cue.startMs) /
+                                        1000;
+                                      const wStartMs = Math.round(wStart * 1000);
+                                      const curPlayheadMs = Math.round(playback.currentTime * 1000);
+                                      const isWordCurrentlyPlaying =
+                                        curPlayheadMs >= wStartMs &&
+                                        curPlayheadMs <=
+                                          (w.endMs !== undefined ? w.endMs : w.e || wStartMs + 300);
+
+                                      return (
+                                        <div
+                                          key={wIdx}
+                                          className={`flex items-center space-x-1 px-1.5 py-1 rounded border text-[10px] font-mono transition-colors ${
+                                            isWordCurrentlyPlaying
+                                              ? 'bg-[#E3B5BE]/25 border-[#E3B5BE] text-[#FFF5F5]'
+                                              : 'bg-[#222326] border-[#393B3F] text-[#FFF5F5]/80 hover:border-[#484949]'
+                                          }`}
+                                        >
+                                          <button
+                                            type="button"
+                                            onClick={() => setCurrentTime(wStart)}
+                                            className="font-semibold text-[#FFF5F5] hover:underline max-w-[85px] truncate"
+                                            title={`Click to jump video to "${wText}" (${wStart.toFixed(2)}s)`}
+                                          >
+                                            {wText}
+                                          </button>
+                                          <span className="text-[9px] text-[#F7D7D1]/70">
+                                            {wStart.toFixed(2)}s
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleNudgeWord(origIdx, wIdx, -50)}
+                                            className="p-0.5 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 hover:text-[#FFF5F5]"
+                                            title="Nudge word 50ms earlier"
+                                          >
+                                            <Minus className="w-2.5 h-2.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleNudgeWord(origIdx, wIdx, 50)}
+                                            className="p-0.5 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 hover:text-[#FFF5F5]"
+                                            title="Nudge word 50ms later"
+                                          >
+                                            <Plus className="w-2.5 h-2.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSyncWordToPlayhead(origIdx, wIdx)}
+                                            className="px-1 py-0.5 rounded bg-[#2A2C2F] hover:bg-[#E3B5BE] hover:text-[#18191B] text-[8px] text-[#E3B5BE] transition-colors font-sans uppercase font-bold"
+                                            title="Sync this word start to current video playhead"
+                                          >
+                                            Sync
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
@@ -1464,22 +2122,82 @@ export const InspectorPanel: React.FC = () => {
               <div className="flex items-center justify-between">
                 <span className="text-[#FFF5F5]/70 text-[11px]">Cut Reason</span>
                 <span className="px-2 py-0.5 rounded bg-red-950/40 text-red-300 border border-red-800/40 text-[10px] font-mono capitalize">
-                  {activeLayer.params?.reason || 'silence'}
+                  {activeLayer.params?.reason || 'user'}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F]">
-                  <span className="text-[#FFF5F5]/50 block text-[10px] font-mono">Start Cut</span>
-                  <span className="font-mono text-[#F7D7D1]">
-                    {(activeLayer.range?.start || 0).toFixed(2)}s
-                  </span>
+                <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F] space-y-1">
+                  <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">Start Cut (sec)</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max={activeLayer.range?.end ?? 60}
+                    value={Number((activeLayer.range?.start || 0).toFixed(2))}
+                    onChange={(e) => {
+                      const val = Math.max(0, parseFloat(e.target.value) || 0);
+                      updateLayerRange(activeLayer.id, val, activeLayer.range?.end ?? val + 1.0);
+                    }}
+                    className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = Number(playback.currentTime.toFixed(2));
+                      const endVal = activeLayer.range?.end ?? cur + 1.0;
+                      updateLayerRange(
+                        activeLayer.id,
+                        cur,
+                        Math.max(cur + 0.1, endVal)
+                      );
+                      toast.success(
+                        `Set cut start to ${cur.toFixed(2)}s (Pink Line)`,
+                        'Cut Updated'
+                      );
+                    }}
+                    className="w-full text-left text-[10px] text-[#E3B5BE] hover:underline flex items-center gap-1 font-mono pt-1"
+                    title="Align cut start to current pink playhead line"
+                  >
+                    <Clock className="w-2.5 h-2.5" />
+                    <span>Set to Pink Line ({playback.currentTime.toFixed(2)}s)</span>
+                  </button>
                 </div>
-                <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F]">
-                  <span className="text-[#FFF5F5]/50 block text-[10px] font-mono">End Cut</span>
-                  <span className="font-mono text-[#F7D7D1]">
-                    {(activeLayer.range?.end || 0).toFixed(2)}s
-                  </span>
+
+                <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F] space-y-1">
+                  <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">End Cut (sec)</span>
+                  <input
+                    type="number"
+                    step="0.05"
+                    min={activeLayer.range?.start ?? 0}
+                    value={Number((activeLayer.range?.end || 1.0).toFixed(2))}
+                    onChange={(e) => {
+                      const val = Math.max((activeLayer.range?.start || 0) + 0.05, parseFloat(e.target.value) || 1.0);
+                      updateLayerRange(activeLayer.id, activeLayer.range?.start || 0, val);
+                    }}
+                    className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cur = Number(playback.currentTime.toFixed(2));
+                      const startVal = activeLayer.range?.start ?? 0;
+                      updateLayerRange(
+                        activeLayer.id,
+                        Math.min(startVal, cur - 0.1),
+                        cur
+                      );
+                      toast.success(
+                        `Set cut end to ${cur.toFixed(2)}s (Pink Line)`,
+                        'Cut Updated'
+                      );
+                    }}
+                    className="w-full text-left text-[10px] text-[#E3B5BE] hover:underline flex items-center gap-1 font-mono pt-1"
+                    title="Align cut end to current pink playhead line"
+                  >
+                    <Clock className="w-2.5 h-2.5" />
+                    <span>Set to Pink Line ({playback.currentTime.toFixed(2)}s)</span>
+                  </button>
                 </div>
               </div>
             </div>

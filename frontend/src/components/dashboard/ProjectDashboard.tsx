@@ -122,7 +122,12 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   };
 
   // Strict Multi-Tenant Isolation: users only see their own projects fetched from the database
-  const displayProjects = projects;
+  // Filter out incomplete draft projects that have not completed initial video upload (no baseAssetId)
+  const displayProjects = projects.filter((project: any) => {
+    if (project.isDemo) return true;
+    if (project.status === 'draft' && !project.baseAssetId) return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-[#18191B] text-[#FFF5F5] flex flex-col font-sans">
@@ -221,7 +226,7 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               Precision video editing with natural creative direction
             </h1>
             <p className="text-[#FFF5F5]/70 text-xs sm:text-sm leading-relaxed mb-6 font-normal">
-              Deterministic multi-pass FFmpeg rendering, Whisper word-level subtitle alignment,
+              Deterministic multi-pass cloud rendering, kinetic word-level subtitle alignment,
               intelligent voice pause cuts, and non-destructive version trees.
             </p>
             <button
@@ -467,7 +472,10 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
       {/* Upload Modal */}
       {isUploadOpen && (
         <UploadModal
-          onClose={() => setIsUploadOpen(false)}
+          onClose={() => {
+            setIsUploadOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['projects'] });
+          }}
           onProjectCreated={(pid) => {
             setIsUploadOpen(false);
             queryClient.invalidateQueries({ queryKey: ['projects'] });

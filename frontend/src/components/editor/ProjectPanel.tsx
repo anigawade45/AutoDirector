@@ -22,6 +22,7 @@ import {
 import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
+import { computeNaturalWordTimings } from '../../utils/subtitleTiming';
 
 export const ProjectPanel: React.FC = () => {
   const { project, playback, setCurrentTime, selectLayer, updateCues } = useEditorStore();
@@ -31,17 +32,17 @@ export const ProjectPanel: React.FC = () => {
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatTime = (ms: number) => {
-    const totalSec = ms / 1000;
+    const totalSec = Math.max(0, ms) / 1000;
     const mins = Math.floor(totalSec / 60);
-    const secs = Math.floor(totalSec % 60);
-    const millis = Math.floor((totalSec % 1) * 10);
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}.${millis}`;
+    const secs = totalSec % 60;
+    const secStr = secs < 10 ? '0' + secs.toFixed(1) : secs.toFixed(1);
+    return `${mins}:${secStr}`;
   };
 
   const currentSec = playback.currentTime;
   const analysis = project?.analysisSummary;
 
-  // Real speech cues from backend Whisper audio analysis
+  // Real speech cues from backend audio analysis
   const cues = analysis?.cues || [];
 
   const handleUpdateCueText = (index: number, newText: string) => {
@@ -50,15 +51,7 @@ export const ProjectPanel: React.FC = () => {
     const updatedCues = currentCues.map((c, i) => {
       if (i !== index) return c;
       const tokens = newText.trim().split(/\s+/).filter(Boolean);
-      const totalDur = c.endMs - c.startMs;
-      const perWordDur =
-        tokens.length > 0 ? Math.max(100, Math.floor(totalDur / tokens.length)) : 100;
-      const words = tokens.map((tok, tIdx) => ({
-        word: tok,
-        startMs: c.startMs + tIdx * perWordDur,
-        endMs: tIdx === tokens.length - 1 ? c.endMs : c.startMs + (tIdx + 1) * perWordDur,
-        score: 1,
-      }));
+      const words = computeNaturalWordTimings(tokens, c.startMs, c.endMs, c.words as any);
       return {
         ...c,
         text: newText,
@@ -125,6 +118,29 @@ export const ProjectPanel: React.FC = () => {
 
     api.updateCaptions(project.id, updatedCues).catch((err) => {
       console.error('Failed to save deleted cue:', err);
+    });
+  };
+
+  const handleCleanEmptyCues = () => {
+    if (!project) return;
+    const currentCues = project.analysisSummary?.cues || [];
+    const cleaned = currentCues.filter((c) => {
+      const cleanText = (c.text || '').replace(/["'\s]/g, '');
+      const hasWords =
+        Array.isArray(c.words) &&
+        c.words.some(
+          (w: any) => ((w.w || w.word || '') as string).replace(/["'\s]/g, '').length > 0
+        );
+      return cleanText.length > 0 || hasWords;
+    });
+    if (cleaned.length === currentCues.length) {
+      toast.info('No empty subtitle cues to remove', 'Captions');
+      return;
+    }
+    updateCues(cleaned);
+    toast.success(`Removed ${currentCues.length - cleaned.length} empty cue(s)`, 'Clean Subtitles');
+    api.updateCaptions(project.id, cleaned).catch((err) => {
+      console.error('Failed to clean empty cues:', err);
     });
   };
 
@@ -252,6 +268,17 @@ export const ProjectPanel: React.FC = () => {
                 <span>Saved</span>
               </span>
             )}
+            {cues.some((c) => !(c.text || '').replace(/["'\s]/g, '')) && (
+              <button
+                type="button"
+                onClick={handleCleanEmptyCues}
+                className="px-1.5 py-0.5 rounded text-[10px] bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/40 flex items-center space-x-1 transition-colors"
+                title="Remove empty subtitle cues"
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+                <span>Clean</span>
+              </button>
+            )}
             {isEditing && (
               <button
                 type="button"
@@ -366,7 +393,16 @@ export const ProjectPanel: React.FC = () => {
                         isActive ? 'text-[#FFF5F5] font-medium' : 'text-[#FFF5F5]/70'
                       }`}
                     >
-                      "{cue.text}"
+                      {cue.text?.trim() ? (
+                        `"${cue.text.trim()}"`
+                      ) : cue.words &&
+                        cue.words.map((w: any) => w.word || w.w).join(' ').trim() ? (
+                        `"${cue.words.map((w: any) => w.word || w.w).join(' ').trim()}"`
+                      ) : (
+                        <span className="text-[#FFF5F5]/40 italic">
+                          (Empty cue — click to seek or Edit to change)
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>

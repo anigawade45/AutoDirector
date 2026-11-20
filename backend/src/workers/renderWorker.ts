@@ -54,7 +54,10 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
 
         const project = await ProjectModel.findOne({ publicId: projectId });
         if (!project) {
-          throw new Error(`Project ${projectId} not found in database`);
+          console.log(
+            `[RenderWorker:${queueName}] Project ${projectId} no longer exists in database (purged or deleted). Halting render job gracefully.`
+          );
+          return;
         }
 
         const planDoc = await EditPlanModel.findOne({
@@ -266,6 +269,19 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
 
         console.log(`[RenderWorker:${queueName}] Successfully completed job ${jobId}`);
       } catch (err: any) {
+        const isPurged =
+          err.name === 'DocumentNotFoundError' ||
+          err.message?.includes('No document found for query') ||
+          err.message?.includes('not found in database') ||
+          !(await ProjectModel.exists({ publicId: projectId }).catch(() => false));
+
+        if (isPurged) {
+          console.log(
+            `[RenderWorker:${queueName}] Project ${projectId} was purged or removed during rendering. Halting job gracefully.`
+          );
+          return;
+        }
+
         console.error(`[RenderWorker:${queueName}] Job ${jobId} failed:`, err);
         await RenderJobLifecycle.transition(jobId, 'failed', {
           error: err,

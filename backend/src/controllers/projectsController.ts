@@ -11,6 +11,7 @@ import { ChatMessageModel } from '../models/ChatMessage.js';
 import { S3Service } from '../services/storage/s3Service.js';
 import { StorageKeys } from '../config/s3.js';
 import { PurgeService } from '../services/maintenance/purgeService.js';
+import { TranscriptionService } from '../services/ai/transcriptionService.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { EditPlan } from '@ai-video/shared';
 
@@ -163,18 +164,64 @@ export class ProjectsController {
             { assetId: { $in: lookupIds } },
           ],
         });
-        const captionPromise =
+        const captionSorted =
           typeof (captionQuery as any)?.sort === 'function'
             ? (captionQuery as any).sort({ updatedAt: -1 })
             : captionQuery;
+        const captionPromise =
+          typeof (captionSorted as any)?.lean === 'function'
+            ? (captionSorted as any).lean()
+            : captionSorted;
+
+        const analysisQuery = AnalysisResultModel.findOne({ assetId: { $in: lookupIds } });
+        const analysisPromise =
+          typeof (analysisQuery as any)?.lean === 'function'
+            ? (analysisQuery as any).lean()
+            : analysisQuery;
 
         const [analysis, captionSet] = await Promise.all([
-          AnalysisResultModel.findOne({ assetId: { $in: lookupIds } }),
+          analysisPromise,
           captionPromise,
         ]);
 
         if (analysis || captionSet) {
-          const cues = captionSet?.cues || [];
+          let rawCues = (captionSet?.cues || []).map((c: any, cIdx: number) => {
+            const cueObj = c && typeof c.toObject === 'function' ? c.toObject() : { ...c };
+            const words = (cueObj.words || [])
+              .map((w: any) => ({
+                w: String(w.w || w.word || '').trim(),
+                s: Number(w.s !== undefined ? w.s : w.startMs !== undefined ? w.startMs : w.start) || 0,
+                e: Number(w.e !== undefined ? w.e : w.endMs !== undefined ? w.endMs : w.end) || 0,
+                conf: typeof w.conf === 'number' ? w.conf : typeof w.score === 'number' ? w.score : 0.95,
+              }))
+              .filter((w: any) => w.w.length > 0);
+
+            const text = String(
+              cueObj.text ||
+              cueObj.sentence ||
+              cueObj.caption ||
+              cueObj.transcript ||
+              words.map((w: any) => w.w).join(' ') ||
+              ''
+            ).trim();
+
+            return {
+              id: cueObj.id || `cue_${cIdx + 1}`,
+              startMs: Number(cueObj.startMs !== undefined ? cueObj.startMs : cueObj.start) || 0,
+              endMs: Number(cueObj.endMs !== undefined ? cueObj.endMs : cueObj.end) || 0,
+              text,
+              words,
+            };
+          });
+          const durationMs =
+            baseAsset.media?.durationMs ||
+            ((project as any).durationSec
+              ? (project as any).durationSec * 1000
+              : project.stats?.durationMs || 0);
+
+          const cues = rawCues.length > 0 && durationMs > 0
+            ? TranscriptionService.normalizeRawCues(rawCues, durationMs)
+            : rawCues;
           const totalWords = cues.reduce((sum: number, c: any) => sum + (c.words?.length || 0), 0);
           const snippet = cues
             .slice(0, 3)
@@ -182,12 +229,13 @@ export class ProjectsController {
             .join(' ');
 
           analysisSummary = {
-            durationMs:
-              baseAsset.media?.durationMs ||
-              ((project as any).durationSec
-                ? (project as any).durationSec * 1000
-                : project.stats?.durationMs || 0),
+            durationMs,
             silencesCount: analysis?.silences?.length || 0,
+            silences: (analysis?.silences || []).map((s: any) => ({
+              startMs: s.startMs,
+              endMs: s.endMs,
+              durationMs: s.endMs - s.startMs,
+            })),
             sceneCutsCount: analysis?.sceneCuts?.length || 0,
             bpm: analysis?.beats?.bpm || 120,
             integratedLufs: analysis?.loudness?.integratedLufs ?? -16.0,
@@ -196,18 +244,25 @@ export class ProjectsController {
             cuesCount: cues.length,
             wordCount: totalWords,
             transcriptSnippet: snippet || undefined,
-            cues: cues.map((c: any, cIdx: number) => ({
-              id: c.id || `cue_${cIdx + 1}`,
-              startMs: c.startMs,
-              endMs: c.endMs,
-              text: c.text,
-              words: (c.words || []).map((w: any) => ({
-                word: w.w || w.word || '',
-                startMs: w.s !== undefined ? w.s : w.startMs || 0,
-                endMs: w.e !== undefined ? w.e : w.endMs || 0,
-                score: w.conf ?? w.score ?? 1,
-              })),
-            })),
+            cues: cues.map((c: any, cIdx: number) => {
+              const cueText = String(
+                c.text ||
+                (c.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
+                ''
+              ).trim();
+              return {
+                id: c.id || `cue_${cIdx + 1}`,
+                startMs: c.startMs,
+                endMs: c.endMs,
+                text: cueText,
+                words: (c.words || []).map((w: any) => ({
+                  word: w.w || w.word || '',
+                  startMs: w.s !== undefined ? w.s : w.startMs || 0,
+                  endMs: w.e !== undefined ? w.e : w.endMs || 0,
+                  score: w.conf ?? w.score ?? 1,
+                })),
+              };
+            }),
           };
         }
       }
@@ -523,39 +578,73 @@ export class ProjectsController {
         throw new AppError(400, 'INVALID_CUES', 'cues must be an array of caption cues');
       }
 
+      const durationMs =
+        ((project as any).durationSec
+          ? (project as any).durationSec * 1000
+          : project.stats?.durationMs || 0);
+
+      const isSeconds = TranscriptionService.detectIfSeconds(cues, durationMs);
+
       const normalizedCues = cues.map((cue: any, idx: number) => {
         const text = String(cue.text || '').trim();
-        const startMs = Math.max(0, Math.round(Number(cue.startMs) || 0));
-        const endMs = Math.max(startMs + 100, Math.round(Number(cue.endMs) || startMs + 1000));
+        const rawStart = cue.startMs ?? cue.start_ms ?? cue.start ?? cue.startTime ?? cue.s;
+        const rawEnd = cue.endMs ?? cue.end_ms ?? cue.end ?? cue.endTime ?? cue.e;
+
+        const startMs = Math.max(0, TranscriptionService.parseTimestampToMs(rawStart, isSeconds));
+        const endMs = Math.max(
+          startMs + 100,
+          rawEnd !== undefined
+            ? TranscriptionService.parseTimestampToMs(rawEnd, isSeconds)
+            : startMs + 1000
+        );
         const tokens = text.split(/\s+/).filter(Boolean);
 
         let words: Array<{ w: string; s: number; e: number; conf: number }> = [];
 
         if (Array.isArray(cue.words) && cue.words.length === tokens.length && tokens.length > 0) {
-          words = cue.words.map((w: any, wIdx: number) => ({
-            w: String(w.w || w.word || tokens[wIdx] || ''),
-            s: Math.max(
-              0,
-              Math.round(
-                Number(w.s !== undefined ? w.s : w.startMs !== undefined ? w.startMs : startMs)
-              )
-            ),
-            e: Math.max(
-              0,
-              Math.round(Number(w.e !== undefined ? w.e : w.endMs !== undefined ? w.endMs : endMs))
-            ),
-            conf: Number(w.conf ?? w.score ?? 1),
-          }));
+          words = cue.words.map((w: any, wIdx: number) => {
+            const rawWs = w.s ?? w.start ?? w.startMs ?? w.start_ms ?? w.startTime;
+            const rawWe = w.e ?? w.end ?? w.endMs ?? w.end_ms ?? w.endTime;
+            const ws =
+              rawWs !== undefined
+                ? TranscriptionService.parseTimestampToMs(rawWs, isSeconds)
+                : startMs;
+            const we =
+              rawWe !== undefined
+                ? TranscriptionService.parseTimestampToMs(rawWe, isSeconds)
+                : endMs;
+            return {
+              w: String(w.w || w.word || tokens[wIdx] || ''),
+              s: Math.max(0, ws),
+              e: Math.max(ws + 50, we),
+              conf: Number(w.conf ?? w.score ?? 1),
+            };
+          });
         } else if (tokens.length > 0) {
           const totalDur = endMs - startMs;
-          const perWordDur = Math.max(100, Math.floor(totalDur / tokens.length));
+          const weights = tokens.map((token) => {
+            const cleanLen = token.replace(/[^a-zA-Z0-9]/g, '').length;
+            let weight = Math.max(2, cleanLen);
+            if (token.endsWith(',') || token.endsWith(';') || token.endsWith(':')) weight += 2.5;
+            else if (token.endsWith('.') || token.endsWith('!') || token.endsWith('?'))
+              weight += 4.5;
+            return weight;
+          });
+          const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+          let currentStart = startMs;
+
           words = tokens.map((token, tIdx) => {
-            const s = startMs + tIdx * perWordDur;
-            const e = tIdx === tokens.length - 1 ? endMs : s + perWordDur;
+            const isLast = tIdx === tokens.length - 1;
+            const tokenDur = isLast
+              ? endMs - currentStart
+              : Math.round((weights[tIdx] / totalWeight) * totalDur);
+            const s = currentStart;
+            const e = isLast ? endMs : Math.min(endMs, s + Math.max(80, tokenDur));
+            currentStart = e;
             return {
               w: token,
               s,
-              e: Math.max(s + 50, e),
+              e: Math.max(s + 60, e),
               conf: 1,
             };
           });
@@ -571,6 +660,13 @@ export class ProjectsController {
         };
       });
 
+      // Strictly resolve and clamp any overlapping cue boundaries before saving
+      const sanitizedCues = TranscriptionService.resolveCueOverlaps(
+        normalizedCues as any,
+        30,
+        durationMs > 0 ? durationMs : undefined
+      );
+
       const captionSet = await CaptionSetModel.findOneAndUpdate(
         {
           $or: [
@@ -582,12 +678,12 @@ export class ProjectsController {
           $set: {
             projectId: project._id,
             ...(project.baseAssetId ? { assetId: project.baseAssetId } : {}),
-            cues: normalizedCues,
+            cues: sanitizedCues,
             origin: 'manual',
             ...(language ? { language } : {}),
             contentHash: crypto
               .createHash('sha256')
-              .update(JSON.stringify(normalizedCues))
+              .update(JSON.stringify(sanitizedCues))
               .digest('hex'),
           },
         },
@@ -595,7 +691,7 @@ export class ProjectsController {
       );
 
       // Return both raw doc and normalized frontend cues
-      const formattedCues = normalizedCues.map((c) => ({
+      const formattedCues = sanitizedCues.map((c) => ({
         id: c.id,
         startMs: c.startMs,
         endMs: c.endMs,

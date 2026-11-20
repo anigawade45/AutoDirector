@@ -247,7 +247,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
       {showSecurityBadge && (
         <div className="mt-5 flex items-center justify-center space-x-2 text-[11px] font-mono text-[#FFF5F5]/50">
           <ShieldCheck className="w-3.5 h-3.5 text-[#E3B5BE]" />
-          <span>Encrypted Salted Scrypt + RFC 7519 JWT Auth</span>
+          <span>End-to-End Encrypted Secure Authentication</span>
         </div>
       )}
     </div>

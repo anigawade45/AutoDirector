@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { EditPlan, EditLayer } from '@ai-video/shared';
+import { computeNaturalWordTimings } from '../utils/subtitleTiming';
+import { api } from '../api/client';
 
 export interface ChatMessageItem {
   id: string;
@@ -154,12 +156,18 @@ export interface EditorStoreState {
   toggleSnap: () => void;
   selectLayer: (layerId: string | null, multi?: boolean) => void;
   deleteSelectedLayers: () => void;
+  updateLayerRange: (layerId: string, startSec: number, endSec: number) => void;
+  splitLayerAtTime: (timeSec: number, layerId?: string) => boolean;
+  splitSubtitleCueAtTime: (timeSec: number) => boolean;
   addChatMessage: (msg: Omit<ChatMessageItem, 'id' | 'timestamp'>) => void;
   setChatMessages: (messages: ChatMessageItem[]) => void;
   clearChat: () => void;
   setChatPending: (pending: boolean) => void;
   updateJob: (jobId: string, update: Partial<EditorStoreState['jobs'][string]>) => void;
   updateCues: (cues: TranscriptCue[]) => void;
+  updateCueText: (index: number, newText: string) => void;
+  updateCueTiming: (index: number, startSec: number, endSec: number) => void;
+  deleteCue: (index: number) => void;
   setPreviewUrl: (
     url: string,
     planVersion: number,
@@ -515,6 +523,22 @@ export const useEditorStore = create<EditorStoreState>()(
         const toDelete = new Set(state.timeline.selectedLayerIds);
         if (toDelete.size === 0) return;
 
+        // If any selected ID belongs to a cue, filter it out from project.analysisSummary.cues
+        if (state.project?.analysisSummary?.cues) {
+          const cues = state.project.analysisSummary.cues;
+          const remainingCues = cues.filter((c, idx) => {
+            const cueUniqueId = c.id || `cue_${idx + 1}`;
+            return !toDelete.has(cueUniqueId) && !toDelete.has(`cue_${idx}`);
+          });
+          if (remainingCues.length !== cues.length) {
+            state.project.analysisSummary.cues = remainingCues;
+            state.project.analysisSummary.cuesCount = remainingCues.length;
+            if (state.project.id) {
+              api.updateCaptions(state.project.id, remainingCues).catch(() => {});
+            }
+          }
+        }
+
         if (!state.plan.draft && state.plan.current) {
           state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
         }
@@ -524,6 +548,177 @@ export const useEditorStore = create<EditorStoreState>()(
         }
         state.timeline.selectedLayerIds = [];
       }),
+
+    updateLayerRange: (layerId, startSec, endSec) =>
+      set((state) => {
+        if (!state.plan.draft && state.plan.current) {
+          state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
+        }
+        if (state.plan.draft) {
+          const layer = state.plan.draft.layers.find((l) => l.id === layerId);
+          if (layer) {
+            const cleanStart = Math.max(0, Number(startSec.toFixed(3)));
+            const cleanEnd = Math.max(cleanStart + 0.05, Number(endSec.toFixed(3)));
+            if (!layer.range) {
+              layer.range = { start: cleanStart, end: cleanEnd };
+            } else {
+              layer.range.start = cleanStart;
+              layer.range.end = cleanEnd;
+            }
+            state.preview.stale = true;
+          }
+        }
+      }),
+
+    splitLayerAtTime: (timeSec, layerId) => {
+      let splitSuccess = false;
+      set((state) => {
+        if (!state.plan.draft && state.plan.current) {
+          state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
+        }
+        const draft = state.plan.draft;
+        if (!draft) return;
+
+        const totalDur = state.playback.duration || 60;
+        const targetId =
+          layerId ||
+          (state.timeline.selectedLayerIds.length > 0
+            ? state.timeline.selectedLayerIds[0]
+            : undefined);
+        let targetLayerIndex = -1;
+
+        if (targetId) {
+          targetLayerIndex = draft.layers.findIndex((l) => {
+            if (l.id !== targetId || !l.enabled) return false;
+            const start = l.range?.start ?? 0;
+            const end = l.range?.end ?? totalDur;
+            return timeSec > start + 0.05 && timeSec < end - 0.05;
+          });
+        }
+
+        if (targetLayerIndex === -1) {
+          // Find any cut, speed, text, color, or overlay layer that spans timeSec
+          targetLayerIndex = draft.layers.findIndex((l) => {
+            if (!l.enabled) return false;
+            const start = l.range?.start ?? 0;
+            const end = l.range?.end ?? totalDur;
+            return timeSec > start + 0.05 && timeSec < end - 0.05;
+          });
+        }
+
+        if (targetLayerIndex !== -1) {
+          const originalLayer = draft.layers[targetLayerIndex];
+          const origStart = originalLayer.range?.start ?? 0;
+          const originalEnd = originalLayer.range?.end ?? totalDur;
+          const splitPoint = Number(timeSec.toFixed(3));
+
+          // 1. Truncate original layer end
+          originalLayer.range = {
+            start: origStart,
+            end: splitPoint,
+          };
+
+          // 2. Clone new split layer starting at splitPoint
+          const newLayer = JSON.parse(JSON.stringify(originalLayer));
+          newLayer.id = `l_${Date.now()}_split`;
+          newLayer.range = {
+            start: splitPoint,
+            end: originalEnd,
+          };
+
+          // Insert right after original
+          draft.layers.splice(targetLayerIndex + 1, 0, newLayer);
+          state.timeline.selectedLayerIds = [newLayer.id];
+          state.preview.stale = true;
+          splitSuccess = true;
+        } else {
+          // If no existing layer spans timeSec, create a razor cut marker at timeSec
+          const splitPoint = Number(timeSec.toFixed(3));
+          const totalDur = state.playback.duration || 60;
+          const newCutEnd = Math.min(totalDur, splitPoint + 1.0);
+          const newCutLayer = {
+            id: `l_${Date.now()}_cut`,
+            layer: 'cut' as const,
+            enabled: true,
+            timebase: 'source' as const,
+            range: {
+              start: splitPoint,
+              end: Number(newCutEnd.toFixed(3)),
+            },
+            params: {
+              reason: 'user' as const,
+            },
+          };
+          draft.layers.push(newCutLayer);
+          state.timeline.selectedLayerIds = [newCutLayer.id];
+          state.preview.stale = true;
+          splitSuccess = true;
+        }
+      });
+      return splitSuccess;
+    },
+
+    splitSubtitleCueAtTime: (timeSec) => {
+      let splitSuccess = false;
+      const curMs = Math.round(timeSec * 1000);
+      const state = get();
+      const currentCues = state.project?.analysisSummary?.cues;
+      if (!currentCues || currentCues.length === 0) return false;
+
+      const cueIdx = currentCues.findIndex(
+        (c) => curMs >= c.startMs + 100 && curMs <= c.endMs - 100
+      );
+      if (cueIdx === -1) return false;
+
+      const cue = currentCues[cueIdx];
+      const cueTokens = (cue.text || '').trim().split(/\s+/).filter(Boolean);
+      if (cueTokens.length <= 1) return false;
+
+      // Split words into two halves based on timestamp
+      const allWords =
+        cue.words && cue.words.length > 0
+          ? cue.words
+          : computeNaturalWordTimings(cueTokens, cue.startMs, cue.endMs);
+
+      const firstWords = allWords.filter((w: any) => (w.endMs ?? w.e ?? 0) <= curMs);
+      const secondWords = allWords.filter((w: any) => (w.startMs ?? w.s ?? 0) > curMs);
+
+      // Fallback if boundary wasn't clean between words: split tokens by index proportion
+      let text1 = firstWords.map((w: any) => w.word || w.w || '').join(' ').trim();
+      let text2 = secondWords.map((w: any) => w.word || w.w || '').join(' ').trim();
+
+      if (!text1 || !text2) {
+        const midIdx = Math.max(1, Math.floor(cueTokens.length / 2));
+        text1 = cueTokens.slice(0, midIdx).join(' ');
+        text2 = cueTokens.slice(midIdx).join(' ');
+      }
+
+      const cue1 = {
+        ...cue,
+        id: cue.id || `cue_${cueIdx + 1}`,
+        endMs: curMs,
+        text: text1,
+        words: computeNaturalWordTimings(text1.split(/\s+/).filter(Boolean), cue.startMs, curMs) as any,
+      };
+
+      const cue2 = {
+        id: `cue_${Date.now()}_split`,
+        startMs: curMs + 30,
+        endMs: cue.endMs,
+        text: text2,
+        words: computeNaturalWordTimings(
+          text2.split(/\s+/).filter(Boolean),
+          curMs + 30,
+          cue.endMs
+        ) as any,
+      };
+
+      const newCues = [...currentCues];
+      newCues.splice(cueIdx, 1, cue1, cue2);
+
+      get().updateCues(newCues);
+      return true;
+    },
 
     addChatMessage: (msg) =>
       set((state) => {
@@ -582,6 +777,63 @@ export const useEditorStore = create<EditorStoreState>()(
             .map((c) => c.text)
             .join(' ');
         }
+      }),
+
+    updateCueText: (index, newText) =>
+      set((state) => {
+        if (!state.project?.analysisSummary?.cues) return;
+        const cues = state.project.analysisSummary.cues;
+        const target = cues[index];
+        if (!target) return;
+
+        const tokens = newText.trim().split(/\s+/).filter(Boolean);
+        const newWords = computeNaturalWordTimings(
+          tokens,
+          target.startMs,
+          target.endMs,
+          target.words as any
+        );
+
+        target.text = newText;
+        target.words = newWords as any;
+        state.project.analysisSummary.wordCount = cues.reduce(
+          (sum, c) => sum + (c.words?.length || c.text?.split(/\s+/).filter(Boolean).length || 0),
+          0
+        );
+      }),
+
+    updateCueTiming: (index, startSec, endSec) =>
+      set((state) => {
+        if (!state.project?.analysisSummary?.cues) return;
+        const cues = state.project.analysisSummary.cues;
+        const target = cues[index];
+        if (!target) return;
+
+        const newStartMs = Math.max(0, Math.round(startSec * 1000));
+        const newEndMs = Math.max(newStartMs + 100, Math.round(endSec * 1000));
+
+        const tokens = (target.text || '').trim().split(/\s+/).filter(Boolean);
+        const newWords = computeNaturalWordTimings(
+          tokens,
+          newStartMs,
+          newEndMs,
+          target.words as any
+        );
+
+        target.startMs = newStartMs;
+        target.endMs = newEndMs;
+        target.words = newWords as any;
+      }),
+
+    deleteCue: (index) =>
+      set((state) => {
+        if (!state.project?.analysisSummary?.cues) return;
+        state.project.analysisSummary.cues.splice(index, 1);
+        state.project.analysisSummary.cuesCount = state.project.analysisSummary.cues.length;
+        state.project.analysisSummary.wordCount = state.project.analysisSummary.cues.reduce(
+          (sum, c) => sum + (c.words?.length || c.text?.split(/\s+/).filter(Boolean).length || 0),
+          0
+        );
       }),
 
     setPreviewUrl: (url, planVersion, isRendered = false, baseProxyUrl) =>
@@ -647,6 +899,8 @@ export interface TrackClipVM {
     | 'transition';
   layerId?: string;
   layerRef?: EditLayer;
+  cueIndex?: number;
+  cueId?: string;
   color?: string;
 }
 
@@ -685,30 +939,65 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
     });
   }
 
-  // Base video source
+  // Base video source & cuts segmentation
   const introOffset = introLayer ? introLayer.params.duration || 3 : 0;
   const outroDur = outroLayer ? outroLayer.params.duration || 3 : 0;
-  videoClips.push({
-    id: 'base_video',
-    label: 'Main Video Source',
-    startSec: introOffset,
-    durSec: Math.max(1, totalDuration - introOffset - outroDur),
-    type: 'video',
-  });
+  const mainVideoStart = introOffset;
+  const mainVideoEnd = Math.max(introOffset, totalDuration - outroDur);
 
-  // Cuts overlay
-  for (const c of cutLayers) {
-    const s = c.range?.start || 0;
-    const e = c.range?.end || s + 1;
+  if (cutLayers.length === 0) {
     videoClips.push({
-      id: c.id,
-      label: `Cut: ${c.params?.reason || 'silence'}`,
-      startSec: s + introOffset,
-      durSec: Math.max(0.1, e - s),
-      type: 'cut',
-      layerId: c.id,
-      layerRef: c,
+      id: 'base_video',
+      label: 'Main Video Source',
+      startSec: mainVideoStart,
+      durSec: Math.max(0.1, mainVideoEnd - mainVideoStart),
+      type: 'video',
     });
+  } else {
+    // Sort cuts chronologically
+    const sortedCuts = [...cutLayers].sort(
+      (a, b) => (a.range?.start || 0) - (b.range?.start || 0)
+    );
+
+    let cursor = mainVideoStart;
+    let clipNum = 1;
+
+    for (const cut of sortedCuts) {
+      const cutStart = Math.max(mainVideoStart, cut.range?.start || 0);
+      const cutEnd = Math.min(mainVideoEnd, cut.range?.end || cutStart + 1.0);
+
+      if (cutStart > cursor + 0.05) {
+        videoClips.push({
+          id: `seg_${clipNum++}`,
+          label: `Footage (${cursor.toFixed(1)}s - ${cutStart.toFixed(1)}s)`,
+          startSec: cursor,
+          durSec: cutStart - cursor,
+          type: 'video',
+        });
+      }
+
+      videoClips.push({
+        id: cut.id,
+        label: `Cut: ${cut.params?.reason || 'user'} (${(cutEnd - cutStart).toFixed(2)}s)`,
+        startSec: cutStart,
+        durSec: Math.max(0.1, cutEnd - cutStart),
+        type: 'cut',
+        layerId: cut.id,
+        layerRef: cut,
+      });
+
+      cursor = Math.max(cursor, cutEnd);
+    }
+
+    if (cursor < mainVideoEnd - 0.05) {
+      videoClips.push({
+        id: `seg_${clipNum}`,
+        label: `Footage (${cursor.toFixed(1)}s - ${mainVideoEnd.toFixed(1)}s)`,
+        startSec: cursor,
+        durSec: mainVideoEnd - cursor,
+        type: 'video',
+      });
+    }
   }
 
   // Speed changes
@@ -749,22 +1038,46 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
   // Track 2: Subtitle Track
   const subtitleLayer = plan.layers.find((l) => l.enabled && l.layer === 'subtitle') as any;
   if (subtitleLayer) {
-    tracks.push({
-      id: 'trk_subtitle',
-      kind: 'subtitle',
-      name: 'T1: Subtitles',
-      clips: [
-        {
-          id: subtitleLayer.id,
-          label: `Captions: ${subtitleLayer.params.style || 'word_pop'} (${subtitleLayer.params.font || 'Montserrat'}, ${subtitleLayer.params.size || 48}px)`,
-          startSec: 0,
-          durSec: totalDuration,
-          type: 'subtitle',
-          layerId: subtitleLayer.id,
-          layerRef: subtitleLayer,
-        },
-      ],
-    });
+    const cues = state.project?.analysisSummary?.cues;
+    if (cues && cues.length > 0) {
+      tracks.push({
+        id: 'trk_subtitle',
+        kind: 'subtitle',
+        name: 'T1: Subtitles',
+        clips: cues.map((c, idx) => {
+          const cueUniqueId = c.id || `cue_${idx + 1}`;
+          const cleanText = (c.text || '').trim();
+          return {
+            id: cueUniqueId,
+            label: cleanText ? `"${cleanText}"` : `Cue ${idx + 1}`,
+            startSec: Number((c.startMs / 1000).toFixed(2)),
+            durSec: Math.max(0.15, Number(((c.endMs - c.startMs) / 1000).toFixed(2))),
+            type: 'subtitle',
+            layerId: cueUniqueId,
+            layerRef: subtitleLayer,
+            cueIndex: idx,
+            cueId: cueUniqueId,
+          };
+        }),
+      });
+    } else {
+      tracks.push({
+        id: 'trk_subtitle',
+        kind: 'subtitle',
+        name: 'T1: Subtitles',
+        clips: [
+          {
+            id: subtitleLayer.id,
+            label: `Captions: ${subtitleLayer.params.style || 'word_pop'} (${subtitleLayer.params.font || 'Montserrat'}, ${subtitleLayer.params.size || 48}px)`,
+            startSec: 0,
+            durSec: totalDuration,
+            type: 'subtitle',
+            layerId: subtitleLayer.id,
+            layerRef: subtitleLayer,
+          },
+        ],
+      });
+    }
   }
 
   // Track 3: Text Overlays Track
@@ -787,19 +1100,34 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
   }
 
   // Track 4: Audio Mix Track (Music & Speech Audio)
-  const musicLayer = plan.layers.find((l) => l.enabled && l.layer === 'music') as any;
-  const audioLayer = plan.layers.find((l) => l.enabled && l.layer === 'audio') as any;
-  if (musicLayer || audioLayer) {
+  const musicLayers = plan.layers.filter((l) => l.enabled && l.layer === 'music') as any[];
+  const audioLayers = plan.layers.filter((l) => l.enabled && l.layer === 'audio') as any[];
+  if (musicLayers.length > 0 || audioLayers.length > 0) {
     const audioClips: TrackClipVM[] = [];
-    if (musicLayer) {
+    for (const ml of musicLayers) {
+      const s = ml.range?.start ?? 0;
+      const e = ml.range?.end ?? totalDuration;
       audioClips.push({
-        id: musicLayer.id,
-        label: `Music: ${musicLayer.params.trackId || 'Background Soundtrack'} (${musicLayer.params.duckUnderSpeech ? 'Speech Ducking' : 'Full Vol'}, ${Math.round((musicLayer.params.volume ?? 0.8) * 100)}%)`,
-        startSec: 0,
-        durSec: totalDuration,
+        id: ml.id,
+        label: `Music: ${ml.params?.trackId || 'Background Soundtrack'} (${ml.params?.duckUnderSpeech ? 'Speech Ducking' : 'Full Vol'}, ${Math.round((ml.params?.volume ?? 0.8) * 100)}%)`,
+        startSec: s,
+        durSec: Math.max(0.5, e - s),
         type: 'music',
-        layerId: musicLayer.id,
-        layerRef: musicLayer,
+        layerId: ml.id,
+        layerRef: ml,
+      });
+    }
+    for (const al of audioLayers) {
+      const s = al.range?.start ?? 0;
+      const e = al.range?.end ?? totalDuration;
+      audioClips.push({
+        id: al.id,
+        label: `Audio: ${al.params?.name || 'Voice/FX Track'}`,
+        startSec: s,
+        durSec: Math.max(0.5, e - s),
+        type: 'music',
+        layerId: al.id,
+        layerRef: al,
       });
     }
     tracks.push({
@@ -811,22 +1139,24 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
   }
 
   // Track 5: FX Track (Color LUT, Overlays, Transitions)
-  const colorLayer = plan.layers.find((l) => l.enabled && l.layer === 'color') as any;
+  const colorLayers = plan.layers.filter((l) => l.enabled && l.layer === 'color') as any[];
   const overlayLayers = plan.layers.filter((l) => l.enabled && l.layer === 'overlay') as any[];
   const transitionLayers = plan.layers.filter(
     (l) => l.enabled && l.layer === 'transition'
   ) as any[];
-  if (colorLayer || overlayLayers.length > 0 || transitionLayers.length > 0) {
+  if (colorLayers.length > 0 || overlayLayers.length > 0 || transitionLayers.length > 0) {
     const fxClips: TrackClipVM[] = [];
-    if (colorLayer) {
+    for (const cl of colorLayers) {
+      const s = cl.range?.start ?? 0;
+      const e = cl.range?.end ?? totalDuration;
       fxClips.push({
-        id: colorLayer.id,
-        label: `Color Grade: ${colorLayer.params.preset || 'cinematic'} (contrast: ${colorLayer.params.contrast ?? 1}, sat: ${colorLayer.params.saturation ?? 1})`,
-        startSec: 0,
-        durSec: totalDuration,
+        id: cl.id,
+        label: `Color Grade: ${cl.params?.preset || 'cinematic'} (contrast: ${cl.params?.contrast ?? 1}, sat: ${cl.params?.saturation ?? 1})`,
+        startSec: s,
+        durSec: Math.max(0.2, e - s),
         type: 'color',
-        layerId: colorLayer.id,
-        layerRef: colorLayer,
+        layerId: cl.id,
+        layerRef: cl,
       });
     }
     for (const ov of overlayLayers) {

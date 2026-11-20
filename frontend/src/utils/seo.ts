@@ -12,7 +12,7 @@ export interface SeoMetadataOptions {
 
 const DEFAULT_TITLE = 'AutoDirector • AI Video Editor & Conversational Cutting Room';
 const DEFAULT_DESCRIPTION =
-  'AutoDirector is an AI-native video editing suite and conversational cutting room. Edit video with natural language, 5-pass deterministic FFmpeg rendering, Whisper word-pop subtitles, silence removal, and cinematic color grading.';
+  'AutoDirector is an AI-native video editing suite and conversational cutting room. Edit video with natural language, 5-pass deterministic rendering, kinetic word-pop subtitles, silence removal, and cinematic color grading.';
 const PRIMARY_CANONICAL = 'https://ai-video-frontend-57bk.onrender.com/';
 
 export function updateDocumentSeo(options: SeoMetadataOptions = {}): void {

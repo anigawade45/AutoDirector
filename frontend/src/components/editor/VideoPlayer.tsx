@@ -12,9 +12,15 @@ import {
   ChevronRight,
   Gauge,
   Grid,
+  Type,
+  Check,
+  Pencil,
 } from 'lucide-react';
 import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
 import { computeColorCssFilter, resolveColorParams } from '@ai-video/shared';
+import { computeNaturalWordTimings } from '../../utils/subtitleTiming';
+import { api } from '../../api/client';
+import { toast } from '../../stores/toastStore';
 
 export const VideoPlayer: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -34,6 +40,8 @@ export const VideoPlayer: React.FC = () => {
     project,
     registerVideoElement,
     togglePlayback,
+    updateCues,
+    selectLayer,
   } = useEditorStore();
 
   const effectivePlan = useEditorStore(selectEffectivePlan);
@@ -42,6 +50,10 @@ export const VideoPlayer: React.FC = () => {
   const [showRateMenu, setShowRateMenu] = useState(false);
   const [objectFitMode, setObjectFitMode] = useState<'contain' | 'cover'>('contain');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isEditingCanvasSubtitle, setIsEditingCanvasSubtitle] = useState(false);
+  const [canvasSubtitleText, setCanvasSubtitleText] = useState('');
+  const [editingCueIndex, setEditingCueIndex] = useState<number | null>(null);
+  const canvasInputRef = useRef<HTMLTextAreaElement>(null);
   const [videoDims, setVideoDims] = useState<{ width: number; height: number }>({
     width: project?.media?.width || 1280,
     height: project?.media?.height || 720,
@@ -92,7 +104,7 @@ export const VideoPlayer: React.FC = () => {
 
   const isVideoSourcePreRendered = Boolean(preview.isRendered) && effectiveVideoSrc === preview.url;
 
-  // Active Speed Layer calculation (Live video speed scaling when not baked by FFmpeg)
+  // Active Speed Layer calculation (Live video speed scaling when not baked into render)
   const speedLayer = effectivePlan?.layers.find((l) => l.enabled && l.layer === 'speed') as any;
 
   const currentSpeedFactor = (() => {
@@ -136,6 +148,84 @@ export const VideoPlayer: React.FC = () => {
       videoRef.current.muted = playback.muted;
     }
   }, [playback.volume, playback.muted]);
+
+  // Active cue and subtitle overlay calculation
+  const curMs = playback.currentTime * 1000;
+  const subtitleLayer = effectivePlan?.layers.find(
+    (l) => l.enabled && l.layer === 'subtitle'
+  ) as any;
+  const cues = project?.analysisSummary?.cues;
+  const activeCueIdx = cues
+    ? cues.findIndex((c, idx) => {
+        const nextStart = cues[idx + 1]?.startMs;
+        const boundedEnd =
+          nextStart !== undefined ? Math.min(c.endMs + 300, nextStart) : c.endMs + 300;
+        return curMs >= c.startMs && curMs < boundedEnd;
+      })
+    : -1;
+  const activeCue = activeCueIdx !== -1 && cues ? cues[activeCueIdx] : null;
+
+  const handleStartCanvasSubtitleEdit = useCallback(() => {
+    if (!activeCue || activeCueIdx === -1) return;
+    if (isPlaying && videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+      setPlaybackStatus('paused');
+    }
+    setEditingCueIndex(activeCueIdx);
+    setCanvasSubtitleText(activeCue.text || '');
+    setIsEditingCanvasSubtitle(true);
+    if (subtitleLayer) {
+      selectLayer(subtitleLayer.id);
+    }
+    setTimeout(() => {
+      canvasInputRef.current?.focus();
+      canvasInputRef.current?.select();
+    }, 50);
+  }, [activeCue, activeCueIdx, isPlaying, setPlaybackStatus, subtitleLayer, selectLayer]);
+
+  const handleSaveCanvasSubtitle = useCallback(async () => {
+    if (!project || editingCueIndex === null) return;
+    const currentCues = project.analysisSummary?.cues || [];
+    const cueToUpdate = currentCues[editingCueIndex];
+    if (!cueToUpdate) {
+      setIsEditingCanvasSubtitle(false);
+      return;
+    }
+
+    const trimmedText = canvasSubtitleText.trim();
+    const tokens = trimmedText.split(/\s+/).filter(Boolean);
+    const newWords = computeNaturalWordTimings(
+      tokens,
+      cueToUpdate.startMs,
+      cueToUpdate.endMs,
+      cueToUpdate.words as any
+    );
+
+    const updatedCues = currentCues.map((c, i) =>
+      i === editingCueIndex
+        ? {
+            ...c,
+            text: trimmedText,
+            words: newWords as any,
+          }
+        : c
+    );
+
+    updateCues(updatedCues);
+    setIsEditingCanvasSubtitle(false);
+    toast.success(
+      `Updated subtitle: "${trimmedText.length > 28 ? trimmedText.slice(0, 28) + '...' : trimmedText}"`,
+      'Canvas Subtitle'
+    );
+
+    try {
+      await api.updateCaptions(project.id, updatedCues);
+    } catch (err: any) {
+      console.error('Failed to sync canvas subtitle edit:', err);
+      toast.error('Failed to save to server: ' + (err.message || 'Network error'), 'Captions Sync');
+    }
+  }, [project, editingCueIndex, canvasSubtitleText, updateCues]);
 
   // Synchronize external seeks (from timeline ruler or transcript click)
   useEffect(() => {
@@ -446,8 +536,13 @@ export const VideoPlayer: React.FC = () => {
     if (subtitleLayer && !isVideoBaked && !isVideoSourcePreRendered) {
       const p = subtitleLayer.params;
       const cues = project?.analysisSummary?.cues;
-      // Hold cue visible for +500ms after endMs so final words remain readable on screen
-      const activeCue = cues?.find((c) => curMs >= c.startMs && curMs <= c.endMs + 500);
+      // Hold cue visible for brief read-time (up to +300ms) unless the next cue has already begun speaking
+      const activeCue = cues?.find((c, idx) => {
+        const nextStart = cues[idx + 1]?.startMs;
+        const boundedEnd =
+          nextStart !== undefined ? Math.min(c.endMs + 300, nextStart) : c.endMs + 300;
+        return curMs >= c.startMs && curMs < boundedEnd;
+      });
 
       const fontSize = p.size || 48;
       const fontFamily = p.font || 'Montserrat';
@@ -460,6 +555,10 @@ export const VideoPlayer: React.FC = () => {
       if (pos === 'top') yPos = canvas.height * 0.16;
       if (pos === 'center') yPos = canvas.height * 0.5;
 
+      if (isEditingCanvasSubtitle) {
+        return;
+      }
+
       ctx.save();
       ctx.font = `800 ${fontSize}px ${fontFamily}, -apple-system, sans-serif`;
       ctx.textAlign = 'center';
@@ -469,36 +568,19 @@ export const VideoPlayer: React.FC = () => {
       ctx.lineJoin = 'round';
 
       if (activeCue) {
-        // Extract words with fallback to splitting activeCue.text so no final words are ever lost
-        let allWords = activeCue.words && activeCue.words.length > 0 ? activeCue.words : [];
         const cueTokens = (activeCue.text || '').trim().split(/\s+/).filter(Boolean);
-
-        if (cueTokens.length > allWords.length) {
-          // Reconcile words array with complete cue text so words like "Diwali" always render
-          const lastItem = allWords.length > 0 ? (allWords[allWords.length - 1] as any) : null;
-          const baseStart = lastItem
-            ? lastItem.endMs || lastItem.s || activeCue.startMs
-            : activeCue.startMs;
-          const cueEnd = Math.max(baseStart + 400, activeCue.endMs);
-          const missingTokens = cueTokens.slice(allWords.length);
-          const perWordDur = Math.max(
-            250,
-            Math.floor((cueEnd - baseStart) / Math.max(1, missingTokens.length))
-          );
-
-          missingTokens.forEach((tok: string, mIdx: number) => {
-            const s = baseStart + mIdx * perWordDur;
-            const e = s + perWordDur;
-            (allWords as any).push({
-              word: tok,
-              w: tok,
-              startMs: s,
-              s,
-              endMs: e,
-              e,
-            });
-          });
-        }
+        // Use speech-aware natural word timings or existing aligned acoustic word timestamps
+        const allWords =
+          activeCue.words &&
+          activeCue.words.length === cueTokens.length &&
+          activeCue.words.length > 0
+            ? activeCue.words
+            : computeNaturalWordTimings(
+                cueTokens,
+                activeCue.startMs,
+                activeCue.endMs,
+                activeCue.words as any
+              );
 
         if (allWords.length > 0) {
           // Break words into lines based on maxWordsPerLine
@@ -699,6 +781,87 @@ export const VideoPlayer: React.FC = () => {
             objectFitMode === 'cover' ? 'object-cover' : 'object-contain'
           }`}
         />
+
+        {/* Interactive WYSIWYG Subtitle Overlay & Canvas In-Place Editor */}
+        {subtitleLayer && activeCue && !isVideoBaked && !isVideoSourcePreRendered && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              top:
+                subtitleLayer.params?.position === 'top'
+                  ? '16%'
+                  : subtitleLayer.params?.position === 'center'
+                    ? '50%'
+                    : '80%',
+            }}
+            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 max-w-[90%] sm:max-w-[80%] z-20 pointer-events-auto select-none"
+          >
+            {isEditingCanvasSubtitle ? (
+              <div className="bg-[#18191B]/95 backdrop-blur-xl border-2 border-[#E3B5BE] rounded-xl p-3 shadow-2xl flex flex-col gap-2 min-w-[280px] sm:min-w-[420px] max-w-[620px] animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between text-[11px] font-mono text-[#F7D7D1]">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <Type className="w-3.5 h-3.5 text-[#E3B5BE]" />
+                    <span>Canvas Subtitle Editor</span>
+                  </span>
+                  <span className="text-[#FFF5F5]/60 text-[10px]">
+                    {formatTime(activeCue.startMs / 1000)} - {formatTime(activeCue.endMs / 1000)}
+                  </span>
+                </div>
+                <textarea
+                  ref={canvasInputRef}
+                  value={canvasSubtitleText}
+                  onChange={(e) => setCanvasSubtitleText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSaveCanvasSubtitle();
+                    } else if (e.key === 'Escape') {
+                      setIsEditingCanvasSubtitle(false);
+                    }
+                  }}
+                  className="w-full bg-[#121314] text-[#FFF5F5] text-sm sm:text-base font-semibold rounded-lg p-2.5 border border-[#393B3F] focus:border-[#E3B5BE] focus:outline-none resize-none shadow-inner"
+                  rows={2}
+                  autoFocus
+                />
+                <div className="flex items-center justify-between gap-2 text-xs pt-1">
+                  <span className="text-[10px] text-[#FFF5F5]/40 font-mono hidden sm:inline">
+                    <kbd className="px-1 py-0.5 bg-[#2A2C2F] rounded text-[#FFF5F5]/70">Enter</kbd> save • <kbd className="px-1 py-0.5 bg-[#2A2C2F] rounded text-[#FFF5F5]/70">Esc</kbd> cancel
+                  </span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingCanvasSubtitle(false)}
+                      className="px-2.5 py-1 rounded text-[11px] text-[#FFF5F5]/70 hover:bg-[#2A2C2F] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveCanvasSubtitle}
+                      className="flex items-center space-x-1 px-3 py-1 rounded text-[11px] font-bold bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] shadow transition-all active:scale-95"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Apply</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={handleStartCanvasSubtitleEdit}
+                className="group/sub relative cursor-pointer px-3 py-2 rounded-lg border border-transparent hover:border-[#E3B5BE]/60 hover:bg-black/40 hover:backdrop-blur-sm transition-all flex items-center justify-center text-center"
+                title="Click to edit subtitle directly on canvas"
+              >
+                <div className="opacity-0 group-hover/sub:opacity-100 transition-opacity absolute -top-7 left-1/2 -translate-x-1/2 flex items-center space-x-1 bg-black/90 text-[#F7D7D1] border border-[#E3B5BE]/50 text-[10px] font-mono px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap">
+                  <Pencil className="w-2.5 h-2.5 text-[#E3B5BE]" />
+                  <span>Click to edit caption text</span>
+                </div>
+                {/* Visual placeholder area matching canvas bounds */}
+                <div className="h-8 min-w-[140px] pointer-events-none" />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Top Controls Overlay Header — Spans full width cleanly with zero badge collision */}
         <div className="absolute top-0 left-0 right-0 p-3 flex items-center justify-between pointer-events-none z-10 gap-2">

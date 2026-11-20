@@ -13,6 +13,8 @@ import {
   Trash2,
   Play,
   Pause,
+  Scissors,
+  Edit3,
 } from 'lucide-react';
 import {
   useEditorStore,
@@ -21,7 +23,9 @@ import {
   DerivedTrackVM,
   TrackClipVM,
 } from '../../stores/editorStore';
+import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
+import { COLOR_PRESETS } from '@ai-video/shared';
 
 export const TimelineView: React.FC = () => {
   const {
@@ -36,6 +40,13 @@ export const TimelineView: React.FC = () => {
     toggleSnap,
     selectLayer,
     deleteSelectedLayers,
+    updateLayerRange,
+    splitLayerAtTime,
+    splitSubtitleCueAtTime,
+    updateCueTiming,
+    updateCueText,
+    deleteCue,
+    updateDraft,
     project,
   } = useEditorStore();
 
@@ -50,6 +61,14 @@ export const TimelineView: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [activeSnapLine, setActiveSnapLine] = useState<number | null>(null);
+  const [activeTrim, setActiveTrim] = useState<{
+    layerId: string;
+    handle: 'left' | 'right';
+    initialStart: number;
+    initialEnd: number;
+    currentStart: number;
+    currentEnd: number;
+  } | null>(null);
 
   const zoom = timeline.zoom; // pixels per second
   const totalDuration = playback.duration || project?.durationSec || 60;
@@ -124,6 +143,150 @@ export const TimelineView: React.FC = () => {
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  // Handle razor split cut at playhead
+  const handleSplitAtPlayhead = useCallback(() => {
+    const curSec = playback.currentTime;
+    const selectedId = timeline.selectedLayerIds[0];
+    const success = splitLayerAtTime(curSec, selectedId);
+    if (success) {
+      toast.success(`Split cut at ${curSec.toFixed(2)}s`, 'Razor Split');
+    } else {
+      const cueSuccess = splitSubtitleCueAtTime(curSec);
+      if (cueSuccess) {
+        toast.success(`Split subtitle cue at ${curSec.toFixed(2)}s`, 'Subtitle Split');
+        if (project) {
+          const cues = useEditorStore.getState().project?.analysisSummary?.cues || [];
+          api.updateCaptions(project.id, cues).catch(() => {});
+        }
+      } else {
+        toast.info('No cut or layer under playhead to split', 'Split Cut');
+      }
+    }
+  }, [playback.currentTime, timeline.selectedLayerIds, splitLayerAtTime, splitSubtitleCueAtTime, project]);
+
+  // Handle interactive edge trimming (resizing clip start or end boundary)
+  const handleStartTrim = (
+    e: React.MouseEvent,
+    clip: TrackClipVM,
+    handle: 'left' | 'right'
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!clip.layerId && clip.cueIndex === undefined) return;
+
+    const initialStart = clip.startSec;
+    const initialEnd = clip.startSec + clip.durSec;
+    const startX = e.clientX;
+    const isCue = clip.cueIndex !== undefined;
+    const cueIdx = clip.cueIndex;
+
+    setActiveTrim({
+      layerId: clip.layerId || clip.id,
+      handle,
+      initialStart,
+      initialEnd,
+      currentStart: initialStart,
+      currentEnd: initialEnd,
+    });
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaSec = (moveEvent.clientX - startX) / zoom;
+      let newStart = initialStart;
+      let newEnd = initialEnd;
+
+      if (handle === 'left') {
+        newStart = Math.max(0, initialStart + deltaSec);
+        if (timeline.snap) {
+          const snapRadiusSec = 10 / zoom;
+          const nearest = snapBoundaries.current.find(
+            (pt) => Math.abs(pt - newStart) <= snapRadiusSec
+          );
+          if (nearest !== undefined) {
+            newStart = nearest;
+            setActiveSnapLine(nearest * zoom);
+          } else {
+            newStart = Math.round(newStart / frameDuration) * frameDuration;
+            setActiveSnapLine(null);
+          }
+        }
+        newStart = Math.min(newStart, initialEnd - 0.1);
+        if (isCue && cueIdx !== undefined) {
+          updateCueTiming(cueIdx, newStart, initialEnd);
+        } else if (clip.layerId) {
+          updateLayerRange(clip.layerId, newStart, initialEnd);
+        }
+        setCurrentTime(newStart);
+      } else {
+        newEnd = Math.min(totalDuration, initialEnd + deltaSec);
+        if (timeline.snap) {
+          const snapRadiusSec = 10 / zoom;
+          const nearest = snapBoundaries.current.find(
+            (pt) => Math.abs(pt - newEnd) <= snapRadiusSec
+          );
+          if (nearest !== undefined) {
+            newEnd = nearest;
+            setActiveSnapLine(nearest * zoom);
+          } else {
+            newEnd = Math.round(newEnd / frameDuration) * frameDuration;
+            setActiveSnapLine(null);
+          }
+        }
+        newEnd = Math.max(newEnd, initialStart + 0.1);
+        if (isCue && cueIdx !== undefined) {
+          updateCueTiming(cueIdx, initialStart, newEnd);
+        } else if (clip.layerId) {
+          updateLayerRange(clip.layerId, initialStart, newEnd);
+        }
+        setCurrentTime(newEnd);
+      }
+
+      setActiveTrim((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentStart: newStart,
+              currentEnd: newEnd,
+            }
+          : null
+      );
+    };
+
+    const handleMouseUp = () => {
+      if (isCue && project) {
+        const latestCues = useEditorStore.getState().project?.analysisSummary?.cues || [];
+        api.updateCaptions(project.id, latestCues).catch(() => {});
+      }
+      setActiveTrim(null);
+      setActiveSnapLine(null);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // State & Handlers for direct timeline subtitle text editing
+  const [editingTimelineCueIndex, setEditingTimelineCueIndex] = useState<number | null>(null);
+  const [editingTimelineCueText, setEditingTimelineCueText] = useState<string>('');
+
+  // State for direct timeline color preset picker
+  const [editingTimelineColorLayerId, setEditingTimelineColorLayerId] = useState<string | null>(null);
+
+  const handleStartTimelineCueEdit = (index: number, text: string) => {
+    setEditingTimelineCueIndex(index);
+    setEditingTimelineCueText(text);
+  };
+
+  const handleSaveTimelineCueText = (index: number) => {
+    if (!project) return;
+    updateCueText(index, editingTimelineCueText);
+    setEditingTimelineCueIndex(null);
+    toast.success('Updated subtitle on timeline', 'Timeline Subtitle');
+    const updatedCues = useEditorStore.getState().project?.analysisSummary?.cues || [];
+    api.updateCaptions(project.id, updatedCues).catch(() => {});
+  };
+
   // Playhead Auto-Scroll / Follow during playback
   useEffect(() => {
     if (playback.status === 'playing' && scrollContainerRef.current) {
@@ -188,11 +351,15 @@ export const TimelineView: React.FC = () => {
           handleDeleteSelected();
         }
       }
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        handleSplitAtPlayhead();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [timeline.selectedLayerIds, deleteSelectedLayers]);
+  }, [timeline.selectedLayerIds, deleteSelectedLayers, handleSplitAtPlayhead]);
 
   // Generate ruler tick marks based on zoom level
   const tickStep = zoom > 120 ? 1 : zoom > 50 ? 5 : 10;
@@ -319,6 +486,19 @@ export const TimelineView: React.FC = () => {
             </span>
           </button>
 
+          {/* Razor Split Tool */}
+          <button
+            onClick={handleSplitAtPlayhead}
+            className="flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-0.5 rounded text-[11px] font-mono transition-colors shrink-0 bg-[#2A2C2F] hover:bg-[#34373B] text-[#FFF5F5] border border-[#393B3F] hover:border-[#E3B5BE]/60 active:scale-95"
+            title="Split Cut / Layer at Playhead (S)"
+          >
+            <Scissors className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span>Split</span>
+            <span className="hidden sm:inline text-[9px] font-mono bg-[#18191B] px-1 py-0.2 rounded text-[#FFF5F5]/40 border border-[#393B3F]">
+              S
+            </span>
+          </button>
+
           {/* Delete selected layer button */}
           {selectedLayerIds.length > 0 && (
             <button
@@ -423,39 +603,270 @@ export const TimelineView: React.FC = () => {
               style={{ left: `${playback.currentTime * zoom}px` }}
               className="absolute top-0 bottom-0 w-0.5 bg-[#E3B5BE] z-30 pointer-events-none transition-[left] duration-75"
             >
-              <div className="w-3.5 h-3.5 bg-[#E3B5BE] rounded-full -ml-[6px] -mt-1 shadow-md shadow-[#E3B5BE]/60" />
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSplitAtPlayhead();
+                }}
+                className="w-4 h-4 bg-[#E3B5BE] hover:bg-[#F7D7D1] rounded-full -ml-[7px] -mt-1 shadow-md shadow-[#E3B5BE]/80 cursor-pointer pointer-events-auto hover:scale-125 active:scale-95 transition-all flex items-center justify-center group/playhead"
+                title={`Playhead at ${playback.currentTime.toFixed(2)}s (Click pink handle or press S to cut timeline here)`}
+              >
+                <Scissors className="w-2.5 h-2.5 text-[#18191B] opacity-0 group-hover/playhead:opacity-100 transition-opacity" />
+              </div>
             </div>
 
             {/* Render Each Derived Track Lane */}
-            {derivedTracks.map((track) => (
-              <div key={track.id} className="h-11 border-b border-[#393B3F]/60 relative py-1">
-                {track.clips.map((clip) => {
-                  const isSelected = !!clip.layerId && selectedLayerIds.includes(clip.layerId);
-                  const leftPx = clip.startSec * zoom;
-                  const widthPx = Math.max(12, clip.durSec * zoom);
+            <div
+              onMouseDown={(e) => {
+                if ((e.target as HTMLElement).closest('[data-clip="true"]')) return;
+                if (!scrollContainerRef.current) return;
+                setIsScrubbing(true);
+                const container = scrollContainerRef.current;
+                const rect = container.getBoundingClientRect();
+                const offsetX = e.clientX - rect.left + container.scrollLeft;
+                setCurrentTime(calculateSnappedTime(offsetX));
 
-                  return (
-                    <div
-                      key={clip.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (clip.layerId) {
-                          selectLayer(clip.layerId, e.shiftKey);
-                        }
-                      }}
-                      style={{
-                        left: `${leftPx}px`,
-                        width: `${widthPx}px`,
-                      }}
-                      className={`absolute top-1 bottom-1 ${getClipStyle(clip, isSelected)}`}
-                      title={`${clip.label} (${clip.startSec.toFixed(2)}s - ${(clip.startSec + clip.durSec).toFixed(2)}s)`}
-                    >
-                      <span className="truncate">{clip.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                const handleMouseMove = (moveEvent: MouseEvent) => {
+                  const moveOffsetX = moveEvent.clientX - rect.left + container.scrollLeft;
+                  setCurrentTime(calculateSnappedTime(moveOffsetX));
+                };
+
+                const handleMouseUp = () => {
+                  setIsScrubbing(false);
+                  setActiveSnapLine(null);
+                  window.removeEventListener('mousemove', handleMouseMove);
+                  window.removeEventListener('mouseup', handleMouseUp);
+                };
+
+                window.addEventListener('mousemove', handleMouseMove);
+                window.addEventListener('mouseup', handleMouseUp);
+              }}
+              className="flex flex-col relative select-none"
+            >
+              {derivedTracks.map((track) => (
+                <div key={track.id} className="h-11 border-b border-[#393B3F]/60 relative py-1">
+                  {track.clips.map((clip) => {
+                    const isSelected = !!clip.layerId && selectedLayerIds.includes(clip.layerId);
+                    const leftPx = clip.startSec * zoom;
+                    const widthPx = Math.max(12, clip.durSec * zoom);
+
+                    return (
+                      <div
+                        key={clip.id}
+                        data-clip="true"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (clip.layerId) {
+                            selectLayer(clip.layerId, e.shiftKey);
+                          }
+                          setCurrentTime(clip.startSec);
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          if (clip.cueIndex !== undefined) {
+                            const cue = project?.analysisSummary?.cues?.[clip.cueIndex];
+                            handleStartTimelineCueEdit(
+                              clip.cueIndex,
+                              cue?.text || clip.label.replace(/^"|"$/g, '')
+                            );
+                          } else if (clip.type === 'color' && clip.layerId) {
+                            selectLayer(clip.layerId);
+                            setEditingTimelineColorLayerId(
+                              editingTimelineColorLayerId === clip.layerId ? null : (clip.layerId || null)
+                            );
+                          }
+                        }}
+                        style={{
+                          left: `${leftPx}px`,
+                          width: `${widthPx}px`,
+                        }}
+                        className={`absolute top-1 bottom-1 group ${getClipStyle(clip, isSelected)}`}
+                        title={`${clip.label} (${clip.startSec.toFixed(2)}s - ${(clip.startSec + clip.durSec).toFixed(2)}s)`}
+                      >
+                        {/* Inline Timeline Subtitle Editor Popover */}
+                        {editingTimelineCueIndex === clip.cueIndex && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute -top-16 left-0 min-w-[260px] max-w-[400px] bg-[#18191B]/95 backdrop-blur-md border border-[#E3B5BE] rounded-lg p-2.5 shadow-2xl z-50 flex flex-col gap-1.5 animate-in fade-in zoom-in-95 pointer-events-auto"
+                          >
+                            <div className="flex items-center justify-between text-[10px] font-mono text-[#F7D7D1]">
+                              <span>Edit Subtitle on Timeline</span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingTimelineCueIndex(null)}
+                                className="text-[#FFF5F5]/60 hover:text-white"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={editingTimelineCueText}
+                              onChange={(e) => setEditingTimelineCueText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveTimelineCueText(clip.cueIndex!);
+                                } else if (e.key === 'Escape') {
+                                  setEditingTimelineCueIndex(null);
+                                }
+                              }}
+                              autoFocus
+                              className="w-full bg-[#121314] text-[#FFF5F5] text-xs font-semibold rounded px-2.5 py-1.5 border border-[#393B3F] focus:border-[#E3B5BE] focus:outline-none"
+                            />
+                            <div className="flex items-center justify-between text-[9px] text-[#FFF5F5]/40 font-mono">
+                              <span>Enter save • Esc cancel</span>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveTimelineCueText(clip.cueIndex!)}
+                                className="px-2.5 py-0.5 rounded bg-[#E3B5BE] text-[#18191B] font-bold text-[10px]"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Inline Timeline Color Grade LUT Preset Popover */}
+                        {editingTimelineColorLayerId === clip.layerId && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute -top-28 left-0 min-w-[280px] bg-[#18191B]/95 backdrop-blur-md border border-[#E3B5BE] rounded-lg p-2.5 shadow-2xl z-50 flex flex-col gap-2 animate-in fade-in zoom-in-95 pointer-events-auto"
+                          >
+                            <div className="flex items-center justify-between text-[10px] font-mono text-[#F7D7D1]">
+                              <span className="flex items-center gap-1">
+                                <Palette className="w-3 h-3 text-[#E3B5BE]" />
+                                <span>Switch LUT Preset on Timeline</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingTimelineColorLayerId(null)}
+                                className="text-[#FFF5F5]/60 hover:text-white"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {[
+                                { id: 'cinematic', label: 'Cinematic' },
+                                { id: 'warm', label: 'Warm 35mm' },
+                                { id: 'cool', label: 'Teal/Orange' },
+                                { id: 'bw', label: 'Noir B&W' },
+                                { id: 'vivid', label: 'Vivid Pop' },
+                                { id: 'faded', label: 'Faded Retro' },
+                              ].map((preset) => {
+                                const isActive =
+                                  (clip.layerRef as any)?.params?.preset === preset.id;
+                                return (
+                                  <button
+                                    key={preset.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const p = (COLOR_PRESETS as any)[preset.id];
+                                      updateDraft((d) => {
+                                        const c = d.layers.find((l) => l.id === clip.layerId) as any;
+                                        if (c) {
+                                          c.params.preset = preset.id;
+                                          if (p) {
+                                            c.params.contrast = p.contrast;
+                                            c.params.saturation = p.saturation;
+                                            c.params.brightness = p.brightness;
+                                            c.params.vignette = p.vignette;
+                                          }
+                                        }
+                                      });
+                                      toast.success(
+                                        `Set LUT preset to ${preset.label}`,
+                                        'Color Grade'
+                                      );
+                                    }}
+                                    className={`px-1.5 py-1 rounded text-[10px] font-medium border text-center transition-all ${
+                                      isActive
+                                        ? 'bg-[#E3B5BE]/25 text-[#F7D7D1] border-[#E3B5BE] font-semibold'
+                                        : 'bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-[#393B3F]'
+                                    }`}
+                                  >
+                                    {preset.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Left Edge Trim Handle */}
+                        {clip.layerId && clip.durSec >= 0.2 && (
+                          <div
+                            onMouseDown={(e) => handleStartTrim(e, clip, 'left')}
+                            className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-[#E3B5BE] active:bg-[#F7D7D1] rounded-l flex items-center justify-center group/trim z-30 transition-colors pointer-events-auto"
+                            title="Drag to trim start boundary"
+                          >
+                            <div className="w-0.5 h-3 bg-white/40 group-hover/trim:bg-[#18191B] rounded-full" />
+                          </div>
+                        )}
+
+                        {/* Edit pencil button for subtitle cues */}
+                        {clip.cueIndex !== undefined && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const cue = project?.analysisSummary?.cues?.[clip.cueIndex!];
+                              handleStartTimelineCueEdit(
+                                clip.cueIndex!,
+                                cue?.text || clip.label.replace(/^"|"$/g, '')
+                              );
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/20 text-[#FFF5F5] mr-1 shrink-0 z-20 pointer-events-auto"
+                            title="Double-click or click pencil to edit text"
+                          >
+                            <Edit3 className="w-2.5 h-2.5 text-[#E3B5BE]" />
+                          </button>
+                        )}
+
+                        {/* Quick LUT preset button for color clips */}
+                        {clip.type === 'color' && clip.layerId && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selectLayer(clip.layerId!);
+                              setEditingTimelineColorLayerId(
+                                editingTimelineColorLayerId === clip.layerId ? null : (clip.layerId || null)
+                              );
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/20 text-[#FFF5F5] mr-1 shrink-0 z-20 pointer-events-auto"
+                            title="Click or double-click to switch LUT preset"
+                          >
+                            <Palette className="w-2.5 h-2.5 text-[#E3B5BE]" />
+                          </button>
+                        )}
+
+                        <span className="truncate px-1 pointer-events-none">{clip.label}</span>
+
+                        {/* Right Edge Trim Handle */}
+                        {clip.layerId && clip.durSec >= 0.2 && (
+                          <div
+                            onMouseDown={(e) => handleStartTrim(e, clip, 'right')}
+                            className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-[#E3B5BE] active:bg-[#F7D7D1] rounded-r flex items-center justify-center group/trim z-30 transition-colors pointer-events-auto"
+                            title="Drag to trim end boundary"
+                          >
+                            <div className="w-0.5 h-3 bg-white/40 group-hover/trim:bg-[#18191B] rounded-full" />
+                          </div>
+                        )}
+
+                        {/* Floating Trim Timecode Badge */}
+                        {activeTrim && activeTrim.layerId === (clip.layerId || clip.id) && (
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-black/95 text-[#F7D7D1] text-[10px] font-mono px-2 py-0.5 rounded shadow-xl border border-[#E3B5BE] z-50 pointer-events-none whitespace-nowrap">
+                            {activeTrim.currentStart.toFixed(2)}s - {activeTrim.currentEnd.toFixed(2)}s ({(activeTrim.currentEnd - activeTrim.currentStart).toFixed(2)}s)
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

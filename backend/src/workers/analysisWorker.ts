@@ -57,7 +57,10 @@ export function startAnalysisWorker() {
         const project = await ProjectModel.findOne({ publicId: projectId });
 
         if (!asset || !project) {
-          throw new Error(`Asset ${assetId} or Project ${projectId} not found in database`);
+          console.log(
+            `[AnalysisWorker] Asset ${assetId} or Project ${projectId} does not exist in database (purged or deleted). Halting analysis job cleanly.`
+          );
+          return;
         }
 
         // 1. Download raw media from S3
@@ -412,6 +415,20 @@ export function startAnalysisWorker() {
           `[AnalysisWorker] Successfully completed analysis and captioned preview for asset ${assetId}`
         );
       } catch (err: any) {
+        // If the project or asset was purged or deleted while the job was processing
+        const isPurged =
+          err.name === 'DocumentNotFoundError' ||
+          err.message?.includes('No document found for query') ||
+          err.message?.includes('not found in database') ||
+          !(await ProjectModel.exists({ publicId: projectId }).catch(() => false));
+
+        if (isPurged) {
+          console.log(
+            `[AnalysisWorker] Project ${projectId} or Asset ${assetId} was purged or removed during analysis. Halting pipeline gracefully.`
+          );
+          return;
+        }
+
         console.error(`[AnalysisWorker] Pipeline error on asset ${assetId}:`, err);
         const errorCode = err.code || 'ANALYSIS_FAILED';
         const isCorrupt = errorCode === 'INPUT_CORRUPT';

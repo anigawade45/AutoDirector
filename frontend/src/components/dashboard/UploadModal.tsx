@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, UploadCloud, AlertCircle, Loader2 } from 'lucide-react';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
@@ -12,9 +12,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [stepLabel, setStepLabel] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeProjectIdRef = useRef<string | null>(null);
+  const activeUploadIdRef = useRef<string | null>(null);
+  const isCancelledRef = useRef<boolean>(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -23,6 +29,44 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
       if (!title) {
         setTitle(selected.name.replace(/\.[^/.]+$/, ''));
       }
+    }
+  };
+
+  const handleCancelOrClose = async () => {
+    if (isCancelling) return;
+
+    if (!isUploading) {
+      onClose();
+      return;
+    }
+
+    // Gracefully abort and cleanup active upload and draft project
+    setIsCancelling(true);
+    isCancelledRef.current = true;
+    setStepLabel('Cancelling upload and cleaning up workspace...');
+
+    // 1. Abort in-flight network transfer
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    try {
+      // 2. Abort upload session on storage if active
+      if (activeUploadIdRef.current) {
+        await api.abortUpload(activeUploadIdRef.current).catch(() => {});
+      }
+
+      // 3. Purge draft project from database so it never lingers on dashboard
+      if (activeProjectIdRef.current) {
+        await api.deleteProject(activeProjectIdRef.current, true).catch(() => {});
+      }
+    } catch (cleanupErr) {
+      console.warn('[UploadModal] Cleanup notice during abort:', cleanupErr);
+    } finally {
+      setIsUploading(false);
+      setIsCancelling(false);
+      toast.info('Video upload cancelled and cleaned up', 'Upload Cancelled');
+      onClose();
     }
   };
 
@@ -36,16 +80,29 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
       return;
     }
     setIsUploading(true);
+    setIsCancelling(false);
+    isCancelledRef.current = false;
+    activeProjectIdRef.current = null;
+    activeUploadIdRef.current = null;
     setErrorMsg(null);
+
+    abortControllerRef.current = new AbortController();
+    const abortSignal = abortControllerRef.current.signal;
 
     try {
       // 1. Create project
       setStepLabel('Creating project workspace...');
       setProgressPercent(10);
       const project = await api.createProject({ title });
+      activeProjectIdRef.current = project.publicId;
+
+      if (isCancelledRef.current || abortSignal.aborted) {
+        await api.deleteProject(project.publicId, true).catch(() => {});
+        return;
+      }
 
       // 2. Request multipart upload session
-      setStepLabel('Requesting presigned S3 chunk URLs...');
+      setStepLabel('Preparing secure upload session...');
       setProgressPercent(20);
       const session = await api.createUploadSession({
         projectId: project.publicId,
@@ -53,9 +110,16 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
         contentType: file.type || 'video/mp4',
         sizeBytes: file.size,
       });
+      activeUploadIdRef.current = session.uploadId;
 
-      // 3. Upload chunks directly to S3 with exponential backoff retry (3 attempts)
-      setStepLabel(`Uploading ${session.parts.length} parts directly to S3...`);
+      if (isCancelledRef.current || abortSignal.aborted) {
+        await api.abortUpload(session.uploadId).catch(() => {});
+        await api.deleteProject(project.publicId, true).catch(() => {});
+        return;
+      }
+
+      // 3. Upload chunks directly to storage with exponential backoff retry (3 attempts)
+      setStepLabel(`Uploading ${session.parts.length} parts securely...`);
       const completedParts: Array<{ partNumber: number; etag: string }> = [];
 
       const uploadChunk = async (
@@ -67,6 +131,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
         let lastErr: any = null;
 
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          if (isCancelledRef.current || abortSignal.aborted) {
+            throw new DOMException('Upload aborted by user', 'AbortError');
+          }
+
           try {
             const putRes = await fetch(url, {
               method: 'PUT',
@@ -74,11 +142,12 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
               headers: {
                 'Content-Type': file.type || 'video/mp4',
               },
+              signal: abortSignal,
             });
 
             if (putRes.ok) {
               const rawEtag = putRes.headers.get('ETag');
-              // S3 ETags must be quoted string e.g. "etag"
+              // ETags must be quoted string e.g. "etag"
               const etag = rawEtag
                 ? rawEtag.startsWith('"')
                   ? rawEtag
@@ -87,16 +156,21 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
               return etag;
             }
 
-            lastErr = new Error(`S3 returned HTTP ${putRes.status}: ${putRes.statusText}`);
+            lastErr = new Error(
+              `Storage service returned HTTP ${putRes.status}: ${putRes.statusText}`
+            );
           } catch (err: any) {
+            if (err.name === 'AbortError' || isCancelledRef.current) {
+              throw err;
+            }
             lastErr = err;
           }
 
           // If attempts remain, wait with exponential backoff delay (500ms, 1000ms, 2000ms + jitter)
-          if (attempt < maxRetries) {
+          if (attempt < maxRetries && !isCancelledRef.current && !abortSignal.aborted) {
             const backoffMs = Math.pow(2, attempt - 1) * 500 + Math.floor(Math.random() * 200);
             setStepLabel(
-              `Part ${partNumber} transfer notice. Retrying S3 PUT (${attempt + 1}/${maxRetries}) in ${Math.round(
+              `Part ${partNumber} transfer notice. Retrying upload (${attempt + 1}/${maxRetries}) in ${Math.round(
                 backoffMs
               )}ms...`
             );
@@ -105,7 +179,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
         }
 
         throw new Error(
-          `Failed to upload part ${partNumber} directly to S3 after ${maxRetries} attempts: ${
+          `Failed to upload part ${partNumber} after ${maxRetries} attempts: ${
             lastErr?.message || 'Network failure'
           }`
         );
@@ -113,12 +187,16 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
 
       try {
         for (let i = 0; i < session.parts.length; i++) {
+          if (isCancelledRef.current || abortSignal.aborted) {
+            throw new DOMException('Upload aborted by user', 'AbortError');
+          }
+
           const partInfo = session.parts[i];
           const startByte = (partInfo.partNumber - 1) * session.partSizeBytes;
           const endByte = Math.min(startByte + session.partSizeBytes, file.size);
           const chunkBlob = file.slice(startByte, endByte);
 
-          setStepLabel(`Transferring part ${i + 1} of ${session.parts.length} to S3...`);
+          setStepLabel(`Transferring part ${i + 1} of ${session.parts.length}...`);
           const etag = await uploadChunk(partInfo.url, chunkBlob, partInfo.partNumber, 3);
           completedParts.push({ partNumber: partInfo.partNumber, etag });
 
@@ -126,13 +204,23 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
           setProgressPercent(pct);
         }
       } catch (uploadError: any) {
-        // Automatically abort uncompleted multipart upload on S3 to prevent orphaned storage
+        if (uploadError.name === 'AbortError' || isCancelledRef.current) {
+          return;
+        }
+        // Automatically abort uncompleted multipart upload and purge draft project on error
         await api.abortUpload(session.uploadId).catch(() => {});
+        if (activeProjectIdRef.current) {
+          await api.deleteProject(activeProjectIdRef.current, true).catch(() => {});
+        }
         throw uploadError;
       }
 
+      if (isCancelledRef.current || abortSignal.aborted) {
+        return;
+      }
+
       // 4. Finalize upload & enqueue analysis
-      setStepLabel('Finalizing upload and enqueuing Whisper analysis...');
+      setStepLabel('Finalizing upload and initiating speech analysis...');
       setProgressPercent(90);
       await api.completeUpload(session.uploadId, { parts: completedParts });
 
@@ -146,6 +234,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
         onProjectCreated(project.publicId);
       }, 800);
     } catch (err: any) {
+      if (err.name === 'AbortError' || isCancelledRef.current) {
+        return;
+      }
       console.error('Upload error:', err);
       const errMsg = err.message || 'An error occurred during video upload';
       setErrorMsg(errMsg);
@@ -158,16 +249,19 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-[#222326] border border-[#393B3F] rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative my-auto text-[#FFF5F5]">
         <button
-          onClick={onClose}
-          disabled={isUploading}
-          className="absolute top-4 right-4 text-[#FFF5F5]/60 hover:text-[#FFF5F5]"
+          type="button"
+          onClick={handleCancelOrClose}
+          disabled={isCancelling}
+          className="absolute top-4 right-4 text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors p-1.5 rounded-lg hover:bg-[#2A2C2F] disabled:opacity-50"
+          title={isUploading ? 'Cancel upload' : 'Close'}
         >
           <X className="w-5 h-5" />
         </button>
 
         <h3 className="text-xl font-bold mb-1 text-[#FFF5F5]">Create New Video Project</h3>
         <p className="text-xs text-[#FFF5F5]/70 mb-6 font-mono">
-          Upload raw footage. Multi-part chunks are analyzed with Whisper word sync & VAD.
+          Upload raw footage. Multi-part chunks are analyzed with AI speech sync & voice activity
+          detection.
         </p>
 
         {errorMsg && (
@@ -245,18 +339,20 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
 
           <div className="pt-4 flex justify-end space-x-3">
             <button
-              onClick={onClose}
-              disabled={isUploading}
-              className="px-4 py-2 text-xs font-semibold text-[#FFF5F5]/70 hover:text-[#FFF5F5]"
+              type="button"
+              onClick={handleCancelOrClose}
+              disabled={isCancelling}
+              className="px-4 py-2 text-xs font-semibold text-[#FFF5F5]/70 hover:text-[#FFF5F5] disabled:opacity-50 transition-colors"
             >
-              Cancel
+              {isCancelling ? 'Cancelling...' : isUploading ? 'Cancel Upload' : 'Cancel'}
             </button>
             <button
+              type="button"
               onClick={handleStartUpload}
-              disabled={!file || !title || isUploading}
+              disabled={!file || !title || isUploading || isCancelling}
               className="bg-[#E3B5BE] hover:bg-[#F7D7D1] disabled:opacity-40 disabled:cursor-not-allowed text-[#18191B] font-bold uppercase tracking-wider px-5 py-2.5 rounded-lg text-xs transition-colors shadow-sm"
             >
-              Upload & Analyze
+              {isUploading ? 'Uploading...' : 'Upload & Analyze'}
             </button>
           </div>
         </div>

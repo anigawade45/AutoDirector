@@ -187,7 +187,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
               <div className="flex items-center justify-between text-xs">
                 <span className="text-[#FFF5F5] font-medium flex items-center space-x-2">
                   <Loader2 className="w-4 h-4 animate-spin text-[#E3B5BE]" />
-                  <span>5-Pass FFmpeg Encoding in progress...</span>
+                  <span>Deterministic multi-pass encoding in progress...</span>
                 </span>
                 <span className="font-mono text-[#F7D7D1] font-bold">{progress}%</span>
               </div>

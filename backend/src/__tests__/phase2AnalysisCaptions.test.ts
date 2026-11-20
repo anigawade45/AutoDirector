@@ -135,6 +135,172 @@ describe('Phase 2 — Media Analysis, Audio Intelligence & Captioned Preview', (
         expect(w.e - w.s).toBeGreaterThanOrEqual(120);
       });
     });
+
+    it('calibrates dilated AI timestamps to accurately match actual video duration', () => {
+      // Dilated timestamps up to 383.3s on a 263.9s video (user bug reproduction)
+      const dilatedCues = [
+        {
+          id: 'cue_1',
+          startMs: 0,
+          endMs: 14500,
+          text: 'Hello, my name is Aniket Lakshman Gawade.',
+          words: [
+            { w: 'Hello,', s: 0, e: 2900, conf: 0.95 },
+            { w: 'my', s: 2900, e: 4350, conf: 0.95 },
+            { w: 'name', s: 4350, e: 5800, conf: 0.95 },
+            { w: 'is', s: 5800, e: 7250, conf: 0.95 },
+            { w: 'Aniket', s: 7250, e: 10150, conf: 0.95 },
+            { w: 'Lakshman', s: 10150, e: 13050, conf: 0.95 },
+            { w: 'Gawade.', s: 13050, e: 14500, conf: 0.95 },
+          ],
+        },
+        {
+          id: 'cue_final',
+          startMs: 369300,
+          endMs: 383300,
+          text: 'Both project are implemented separately and each has the own',
+          words: [
+            { w: 'Both', s: 369300, e: 371000, conf: 0.95 },
+            { w: 'own', s: 381000, e: 383300, conf: 0.95 },
+          ],
+        },
+      ];
+
+      const videoDurationMs = 263900; // 4:23.9
+      const calibrated = TranscriptionService.calibrateCuesToDuration(dilatedCues, videoDurationMs);
+
+      expect(calibrated.length).toBe(2);
+      // Last cue end must not exceed video duration
+      expect(calibrated[1].endMs).toBeLessThanOrEqual(videoDurationMs);
+      // Final word must be within video duration
+      expect(calibrated[1].words[1].e).toBeLessThanOrEqual(videoDurationMs);
+      // Proportionally scaled: cue_final start should now be ~254s instead of 369.3s
+      expect(calibrated[1].startMs).toBeLessThan(videoDurationMs);
+      expect(calibrated[1].startMs).toBeGreaterThan(240000);
+      // First cue word pacing scaled proportionally
+      expect(calibrated[0].startMs).toBe(0);
+      expect(calibrated[0].endMs).toBeLessThan(14500);
+    });
+
+    it('enforces non-overlapping cue boundaries and eliminates double text', () => {
+      // Overlapping cues from user screenshot:
+      // Cue 1: 46100 - 62000 ms
+      // Cue 2: 59800 - 65500 ms (overlaps by 2200 ms)
+      const overlapping = [
+        {
+          id: 'cue_1',
+          startMs: 46100,
+          endMs: 62000,
+          text: 'So here I running the automation against the configuration URL, the...',
+          words: [
+            { w: 'So', s: 46100, e: 46600, conf: 0.95 },
+            { w: 'the...', s: 61500, e: 62000, conf: 0.95 },
+          ],
+        },
+        {
+          id: 'cue_2',
+          startMs: 59800,
+          endMs: 65500,
+          text: 'After interacting with the field, it verify that an expected value has...',
+          words: [
+            { w: 'After', s: 59800, e: 60500, conf: 0.95 },
+            { w: 'has...', s: 65000, e: 65500, conf: 0.95 },
+          ],
+        },
+      ];
+
+      const resolved = TranscriptionService.resolveCueOverlaps(overlapping, 30);
+
+      expect(resolved).toHaveLength(2);
+      // Cue 1 end must be clamped before Cue 2 start
+      expect(resolved[0].endMs).toBeLessThanOrEqual(resolved[1].startMs);
+      expect(resolved[0].endMs).toBeLessThanOrEqual(59770);
+      // Word inside Cue 1 must not exceed the new endMs
+      expect(resolved[0].words[1].e).toBeLessThanOrEqual(resolved[0].endMs);
+    });
+
+    it('parses timestamps in seconds and timecodes accurately into integer milliseconds', () => {
+      expect(TranscriptionService.parseTimestampToMs(0.4, true)).toBe(400);
+      expect(TranscriptionService.parseTimestampToMs(4.2, false)).toBe(4200); // Decimals auto-detected as seconds
+      expect(TranscriptionService.parseTimestampToMs('46.1', true)).toBe(46100);
+      expect(TranscriptionService.parseTimestampToMs('0:04.2')).toBe(4200);
+      expect(TranscriptionService.parseTimestampToMs('01:23.5')).toBe(83500);
+      expect(TranscriptionService.parseTimestampToMs(45000, false)).toBe(45000);
+    });
+
+    it('detects second timestamps in AI raw responses and avoids collapsing into milliseconds', () => {
+      const rawCuesInSeconds = [
+        {
+          id: 'cue_1',
+          start: 0.0,
+          end: 4.2,
+          text: 'Hello, my name is Aniket Laxman Gawde.',
+          words: [
+            { word: 'Hello', start: 0.0, end: 0.8 },
+            { word: 'Gawde', start: 3.0, end: 4.2 },
+          ],
+        },
+        {
+          id: 'cue_2',
+          start: 4.5,
+          end: 9.1,
+          text: 'As part of this internship assignment, I was given to automation task.',
+        },
+      ];
+
+      expect(TranscriptionService.detectIfSeconds(rawCuesInSeconds, 263000)).toBe(true);
+    });
+
+    it('distributes collapsed 0-16s cues across speech intervals of a multi-minute video', () => {
+      const collapsedCues = Array.from({ length: 32 }, (_, i) => ({
+        id: `cue_${i + 1}`,
+        startMs: i * 500,
+        endMs: i * 500 + 400,
+        text: `Spoken dialogue cue ${i + 1} with words`,
+        words: [],
+      }));
+
+      const speechSegments = [
+        { startMs: 1000, endMs: 45000 },
+        { startMs: 50000, endMs: 120000 },
+        { startMs: 130000, endMs: 200000 },
+        { startMs: 205000, endMs: 260000 },
+      ];
+
+      const distributed = TranscriptionService.distributeCuesAcrossSpeech(
+        collapsedCues,
+        speechSegments,
+        263000
+      );
+
+      expect(distributed).toHaveLength(32);
+      expect(distributed[0].startMs).toBeGreaterThanOrEqual(1000);
+      // Last cue must reach the final speech segment, spanning the full 4m23s duration
+      expect(distributed[31].endMs).toBeGreaterThan(200000);
+      expect(distributed[31].endMs).toBeLessThanOrEqual(263000);
+
+      // Verify no cues overlap
+      for (let i = 0; i < distributed.length - 1; i++) {
+        expect(distributed[i].endMs).toBeLessThanOrEqual(distributed[i + 1].startMs);
+      }
+    });
+
+    it('guarantees cues do not exceed video duration even with dilated timestamps', () => {
+      const totalDurationMs = 263000;
+      const dilatedCues = [
+        {
+          id: 'cue_1',
+          startMs: 369300,
+          endMs: 383300,
+          text: 'Both project are implemented separately and each has the own...',
+          words: [],
+        },
+      ];
+
+      const resolved = TranscriptionService.resolveCueOverlaps(dilatedCues, 30, totalDurationMs);
+      expect(resolved[0].endMs).toBeLessThanOrEqual(totalDurationMs);
+      expect(resolved[0].startMs).toBeLessThan(totalDurationMs);
+    });
   });
 
   describe('Task 4: Audio Intelligence & Visual Scene Cut Detection', () => {

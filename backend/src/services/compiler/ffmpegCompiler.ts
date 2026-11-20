@@ -138,9 +138,7 @@ export class FFmpegCompiler {
       } else {
         vChain += `,setpts=PTS-STARTPTS`;
       }
-      if (introLayer || outroLayer) {
-        vChain += `,scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${targetFps},format=yuv420p`;
-      }
+      vChain += `,scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${targetFps},format=yuv420p`;
       filterComplexParts.push(`${vChain}[${vLabel}]`);
 
       // Audio chain: atrim + asetpts + chained atempo (+ sample rate normalization)

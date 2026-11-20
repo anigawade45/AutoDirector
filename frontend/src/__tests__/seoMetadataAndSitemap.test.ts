@@ -152,7 +152,7 @@ describe('SEO & Technical Indexing Verification Suite', () => {
     it('includes semantic noscript fallback for search crawlers without JavaScript execution', () => {
       expect(indexHtml).toContain('<noscript>');
       expect(indexHtml).toContain('AutoDirector • The Editorial Video Suite');
-      expect(indexHtml).toContain('5-pass FFmpeg');
+      expect(indexHtml).toContain('5-pass rendering');
       expect(indexHtml).toContain('Voice Activity Excision');
       expect(indexHtml).toContain('Kinetic Subtitle Typography');
       expect(indexHtml).toContain('</noscript>');

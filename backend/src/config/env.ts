@@ -120,7 +120,7 @@ export const envSchema = z
       .transform((val) => val === 'true'),
 
     AI_PROVIDER: z.enum(['gemini', 'openai']).default('gemini'),
-    AI_MODEL: z.string().default('gemini-1.5-flash'),
+    AI_MODEL: z.string().default('gemini-3.5-flash-lite'),
     GEMINI_API_KEY: z.string().optional().default(''),
     OPENAI_API_KEY: z.string().optional().default(''),
     ALLOW_HEURISTIC_FALLBACK: z

@@ -171,7 +171,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
           </h1>
 
           <p className="text-sm sm:text-base md:text-lg text-[#FFF5F5]/75 leading-relaxed max-w-2xl mx-auto mb-7 sm:mb-10 font-normal">
-            A conversational cutting room built on deterministic multi-pass rendering, Whisper
+            A conversational cutting room built on deterministic multi-pass rendering, phonetic
             word-sync, and reversible version trees. Speak your creative vision; let the director
             cut, grade, and pace.
           </p>
@@ -234,7 +234,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
                   Typography
                 </div>
                 <div className="text-xs sm:text-sm font-semibold text-[#FFF5F5]">
-                  Whisper Word-Pop
+                  Kinetic Word-Pop
                 </div>
               </div>
               <div className="text-[10px] sm:text-[11px] text-[#FFF5F5]/60 mt-1">
@@ -375,7 +375,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
                     V2 Captions
                   </span>
                   <div className="flex-1 min-w-0 h-6 bg-[#2A2C2F] border border-[#E3B5BE]/30 rounded flex items-center px-2 text-[9px] sm:text-[10px] text-[#F7D7D1] font-mono overflow-hidden">
-                    <span className="truncate">Whisper Kinetic Word-Pop</span>
+                    <span className="truncate">Kinetic Word-Pop</span>
                   </div>
                 </div>
                 {/* Track 3: Audio */}
@@ -494,7 +494,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">Kinetic Subtitle Typography</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
-              Whisper timestamped word-by-word alignment with active highlight styling. Clean
+              Sub-syllable timestamped word-by-word alignment with active highlight styling. Clean
               typography that keeps viewers engaged across social feeds.
             </p>
           </div>
@@ -507,7 +507,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">Color Science & LUT Matrix</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
               Warm 35mm film, modern teal & orange, noir mono, and gentle saturation curves compiled
-              via non-destructive FFmpeg matrix transforms.
+              via non-destructive color matrix transforms.
             </p>
           </div>
 
@@ -542,8 +542,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </div>
             <h3 className="text-base font-bold text-[#FFF5F5] mb-2">High-Resolution Pipeline</h3>
             <p className="text-xs text-[#FFF5F5]/70 leading-relaxed">
-              From 480p real-time canvas preview to full 4K UHD 60fps master exports. Pure FFmpeg
-              native compilation without cloud lock-in.
+              From 480p real-time canvas preview to full 4K UHD 60fps master exports. Native
+              high-performance compilation with lossless quality.
             </p>
           </div>
         </div>
@@ -582,7 +582,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             <div className="space-y-2 text-[10px] sm:text-[11px] leading-relaxed text-[#FFF5F5]/70">
               <p>&gt; Audio analysis: 4 dead air pauses detected [1.2s, 0.8s, 1.4s, 0.9s]</p>
               <p>&gt; Silence excision filter generated with 120ms safety boundary</p>
-              <p>&gt; Whisper alignment: 16 subtitle cues synchronized to phonetic start times</p>
+              <p>&gt; Speech alignment: 16 subtitle cues synchronized to phonetic start times</p>
               <p>
                 &gt; Color grade: Kodak 35mm LUT applied (gamma: 1.05, sat: 0.95, vignette: 0.25)
               </p>
@@ -746,7 +746,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#E3B5BE] shrink-0" />
-                  <span>Dedicated FFmpeg worker cluster</span>
+                  <span>Dedicated GPU render worker cluster</span>
                 </li>
                 <li className="flex items-center space-x-2.5">
                   <Check className="w-3.5 h-3.5 text-[#E3B5BE] shrink-0" />
@@ -779,8 +779,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             Frequently Asked Questions
           </h2>
           <p className="text-xs sm:text-sm text-[#FFF5F5]/70">
-            Everything you need to know about conversational cutting, 5-pass FFmpeg compilation,
-            Whisper speech alignment, and export resolutions.
+            Everything you need to know about conversational cutting, deterministic multi-pass
+            compilation, kinetic speech alignment, and export resolutions.
           </p>
         </div>
 
@@ -795,7 +795,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
               AutoDirector allows editors to describe their creative intentions using plain natural
               language (e.g., &ldquo;remove silent pauses longer than 0.6 seconds and apply a warm
               35mm film grade&rdquo;). The AI director converts instructions into deterministic,
-              reversible JSON timeline operations compiled natively via FFmpeg.
+              reversible JSON timeline operations compiled natively with frame accuracy.
             </p>
           </div>
 
@@ -803,13 +803,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
           <div className="p-6 rounded-2xl bg-[#222326] border border-[#393B3F] hover:border-[#E3B5BE]/60 transition-colors">
             <h3 className="text-sm sm:text-base font-bold text-[#FFF5F5] mb-2.5 flex items-center space-x-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#F7D7D1] shrink-0" />
-              <span>How does the 5-pass FFmpeg rendering pipeline work?</span>
+              <span>How does the 5-pass rendering pipeline work?</span>
             </h3>
             <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
               The pipeline compiles edits sequentially across 5 non-destructive passes: 1. Keep
               segments and ripple silence excision, 2. Color grading and LUT matrix transforms, 3.
-              Crossfade transitions, 4. Advanced SubStation Alpha (ASS) kinetic subtitles, and 5.
-              Sidechain audio ducking normalized to -14 LUFS standards.
+              Crossfade transitions, 4. Kinetic typography and animated subtitles, and 5. Sidechain
+              audio ducking normalized to -14 LUFS standards.
             </p>
           </div>
 
@@ -817,12 +817,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
           <div className="p-6 rounded-2xl bg-[#222326] border border-[#393B3F] hover:border-[#E3B5BE]/60 transition-colors">
             <h3 className="text-sm sm:text-base font-bold text-[#FFF5F5] mb-2.5 flex items-center space-x-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE] shrink-0" />
-              <span>How accurate is Whisper kinetic subtitle synchronization?</span>
+              <span>How accurate is the kinetic subtitle synchronization?</span>
             </h3>
             <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
-              AutoDirector utilizes OpenAI Whisper speech recognition models with word-level
-              phonetic timestamping. Subtitle word highlights pop in real time on the exact spoken
-              syllable with sub-100ms precision.
+              AutoDirector utilizes advanced speech recognition models with word-level phonetic
+              timestamping. Subtitle word highlights pop in real time on the exact spoken syllable
+              with sub-100ms precision.
             </p>
           </div>
 
@@ -860,7 +860,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             </h3>
             <p className="text-xs text-[#FFF5F5]/75 leading-relaxed">
               All raw footage, audio, and exported masters are encrypted with AES-256 server-side
-              encryption in isolated tenant Amazon S3 buckets. Media access is strictly regulated
+              encryption in isolated tenant secure cloud storage. Media access is strictly regulated
               via short-lived, presigned URLs.
             </p>
           </div>
@@ -959,8 +959,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnterStudio }) => {
             <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE]" />
             <span>Render Pipeline Online</span>
           </span>
-          <span>RFC 7519 JWT Auth</span>
-          <span>FFmpeg Native Engine</span>
+          <span>Enterprise Security</span>
+          <span>High-Precision Render Engine</span>
         </div>
       </footer>
     </div>

@@ -1,4 +1,5 @@
 import { CaptionCue, WordTiming, SubtitleStyle, SubtitlePosition } from '@ai-video/shared';
+import { TranscriptionService } from '../ai/transcriptionService.js';
 
 export interface AssOptions {
   width?: number;
@@ -130,7 +131,9 @@ Style: Default,${font},${fontSize},${primaryAss},${highlightAss},${outlineAss},$
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
-    for (const cue of cues) {
+    const sanitizedCues = TranscriptionService.resolveCueOverlaps(cues as any, 30);
+
+    for (const cue of sanitizedCues) {
       const words: WordTiming[] = cue.words && cue.words.length > 0 ? cue.words : [];
 
       if (words.length === 0) {
