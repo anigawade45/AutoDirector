@@ -31,7 +31,7 @@ import {
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
 import { computeNaturalWordTimings } from '../../utils/subtitleTiming';
-import { getSpeakerColor } from '@ai-video/shared';
+import { getSpeakerColor, extractTimelineOperations } from '@ai-video/shared';
 
 export const ProjectPanel: React.FC = () => {
   const {
@@ -634,21 +634,57 @@ export const ProjectPanel: React.FC = () => {
           </span>
         </div>
 
-        <div className="space-y-1">
-          {effectivePlan?.layers.map((l) => (
-            <div
-              key={l.id}
-              onClick={() => selectLayer(l.id)}
-              className="px-2.5 py-1.5 rounded-lg bg-[#121314] hover:bg-[#2A2C2F] border border-[#393B3F]/70 flex items-center justify-between cursor-pointer transition-colors"
-            >
-              <div className="flex items-center space-x-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE]" />
-                <span className="capitalize font-medium text-[#FFF5F5]/90 text-xs">{l.layer}</span>
-              </div>
-              <ChevronRight className="w-3 h-3 text-[#FFF5F5]/40" />
+        {(() => {
+          const opsSummary = effectivePlan ? extractTimelineOperations(effectivePlan) : null;
+          const ops = opsSummary?.operations || [];
+
+          if (ops.length === 0) {
+            return (
+              <p className="text-[11px] text-[#FFF5F5]/40 italic py-2 text-center">
+                No active edit layers in sequence
+              </p>
+            );
+          }
+
+          return (
+            <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-0.5">
+              {ops.map((op) => (
+                <div
+                  key={op.id}
+                  onClick={() => {
+                    if (op.startSec !== undefined) {
+                      setCurrentTime(op.startSec);
+                    }
+                    selectLayer(op.id);
+                  }}
+                  className="px-2.5 py-2 rounded-lg bg-[#121314] hover:bg-[#2A2C2F] border border-[#393B3F]/70 hover:border-[#E3B5BE]/60 flex flex-col gap-1 cursor-pointer transition-colors group"
+                  title={`Select ${op.title} (${op.trackName})`}
+                >
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[#F7D7D1] text-[9px] font-medium">
+                      {op.trackName}
+                    </span>
+                    {op.startSec !== undefined && (
+                      <span className="font-mono text-[#FFF5F5]/60 text-[9px] flex items-center gap-1 group-hover:text-[#E3B5BE]">
+                        <Clock className="w-2.5 h-2.5" />
+                        {op.startSec.toFixed(1)}s{op.endSec !== undefined ? ` - ${op.endSec.toFixed(1)}s` : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs text-[#FFF5F5] group-hover:text-white">
+                      {op.title}
+                    </span>
+                    <ChevronRight className="w-3 h-3 text-[#FFF5F5]/30 group-hover:text-[#E3B5BE] group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  </div>
+                  <p className="text-[10px] text-[#FFF5F5]/60 truncate font-mono">
+                    {op.summary}
+                  </p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          );
+        })()}
       </div>
     </div>
   );

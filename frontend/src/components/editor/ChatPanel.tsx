@@ -10,12 +10,14 @@ import {
   Layers,
   ArrowRight,
   ChevronDown,
+  ChevronRight,
   Check,
   Cpu,
+  Clock,
 } from 'lucide-react';
-import { useEditorStore } from '../../stores/editorStore';
+import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
 import { api } from '../../api/client';
-import { AVAILABLE_GEMINI_MODELS } from '@ai-video/shared';
+import { AVAILABLE_GEMINI_MODELS, extractTimelineOperations } from '@ai-video/shared';
 import { toast } from '../../stores/toastStore';
 
 export const ChatPanel: React.FC = () => {
@@ -31,7 +33,10 @@ export const ChatPanel: React.FC = () => {
     setPreviewUrl,
     selectedAiModel,
     setSelectedAiModel,
+    setCurrentTime,
+    selectLayer,
   } = useEditorStore();
+  const effectivePlan = useEditorStore(selectEffectivePlan);
 
   const [promptText, setPromptText] = useState('');
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
@@ -218,10 +223,13 @@ export const ChatPanel: React.FC = () => {
         }
       }
 
+      const timelineOps = extractTimelineOperations(result.plan);
+
       addChatMessage({
         role: 'assistant',
         text: assistantMsg,
         planVersion: result.version,
+        operations: timelineOps.operations,
       });
 
       if (isHeuristicFallback) {
@@ -425,6 +433,68 @@ export const ChatPanel: React.FC = () => {
               )}
 
               <p className="whitespace-pre-wrap">{m.text}</p>
+
+              {/* Emitted Timeline Operations Card */}
+              {(() => {
+                const ops =
+                  m.operations ||
+                  (m.role === 'assistant' &&
+                  m.planVersion &&
+                  effectivePlan?.version === m.planVersion
+                    ? extractTimelineOperations(effectivePlan).operations
+                    : undefined);
+
+                if (!ops || ops.length === 0) return null;
+
+                return (
+                  <div className="mt-2.5 pt-2 border-t border-[#393B3F]/80 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-mono">
+                      <span className="flex items-center gap-1 font-semibold uppercase tracking-wider text-[#E3B5BE]">
+                        <Sparkles className="w-3 h-3 text-[#E3B5BE]" />
+                        <span>Emitted Timeline Ops ({ops.length})</span>
+                      </span>
+                      <span className="text-[#FFF5F5]/40 text-[9px]">Click to seek & inspect</span>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-0.5">
+                      {ops.map((op) => (
+                        <button
+                          key={op.id}
+                          type="button"
+                          onClick={() => {
+                            if (op.startSec !== undefined) {
+                              setCurrentTime(op.startSec);
+                            }
+                            selectLayer(op.id);
+                          }}
+                          className="w-full text-left bg-[#18191B] hover:bg-[#2A2C2F] border border-[#393B3F]/70 hover:border-[#E3B5BE]/60 rounded-lg p-2 transition-all flex flex-col gap-1 group cursor-pointer"
+                          title={`Select ${op.title} (${op.trackName})`}
+                        >
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[#F7D7D1] text-[9px] font-medium">
+                              {op.trackName}
+                            </span>
+                            {op.startSec !== undefined && (
+                              <span className="font-mono text-[#FFF5F5]/60 text-[9px] flex items-center gap-1 group-hover:text-[#E3B5BE]">
+                                <Clock className="w-2.5 h-2.5" />
+                                {op.startSec.toFixed(1)}s
+                                {op.endSec !== undefined ? ` - ${op.endSec.toFixed(1)}s` : ''}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] font-medium text-[#FFF5F5] group-hover:text-white flex items-center justify-between">
+                            <span>{op.title}</span>
+                            <ChevronRight className="w-3 h-3 text-[#FFF5F5]/30 group-hover:text-[#E3B5BE] group-hover:translate-x-0.5 transition-transform shrink-0" />
+                          </div>
+                          <p className="text-[10px] text-[#FFF5F5]/60 truncate font-mono">
+                            {op.summary}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {m.planVersion && (
                 <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-[#F7D7D1] font-mono">

@@ -5,6 +5,7 @@ import {
   renameSpeakerInCues,
   cleanEmptyCues,
   getSpeakerColor,
+  extractTimelineOperations,
 } from '@ai-video/shared';
 import { useEditorStore, selectEffectivePlan } from '../stores/editorStore';
 
@@ -273,6 +274,145 @@ describe('Media Indexing & Direct Timeline Editing Suite', () => {
       expect(textLayers.length).toBe(2);
       expect(textLayers[0].range?.end).toBe(5.0);
       expect(textLayers[1].range?.start).toBe(5.0);
+    });
+
+    it('extracts structured timeline operations from an edit plan', () => {
+      const sampleEditPlan: any = {
+        version: 2,
+        global: { aspect: '16:9', fps: 30, resolution: '1080p' },
+        layers: [
+          {
+            id: 'l_cut_1',
+            layer: 'cut',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 1.0, end: 2.5 },
+            params: { reason: 'silence' },
+          },
+          {
+            id: 'l_sub_1',
+            layer: 'subtitle',
+            enabled: true,
+            timebase: 'global',
+            params: { style: 'word_pop', font: 'Montserrat', size: 48, position: 'bottom' },
+          },
+          {
+            id: 'l_color_1',
+            layer: 'color',
+            enabled: true,
+            timebase: 'global',
+            params: { preset: 'cinematic', contrast: 1.1, saturation: 1.1 },
+          },
+          {
+            id: 'l_text_1',
+            layer: 'text',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 3.0, end: 8.0 },
+            params: { content: 'Product Demo', position: { x: 0.5, y: 0.5 }, animation: 'fade' },
+          },
+        ],
+      };
+
+      useEditorStore.setState((s) => {
+        s.plan.draft = sampleEditPlan;
+        s.plan.version = 2;
+      });
+
+      const plan = selectEffectivePlan(useEditorStore.getState())!;
+      const opsSummary = extractTimelineOperations(plan);
+
+      expect(opsSummary.version).toBe(2);
+      expect(opsSummary.totalOperations).toBe(4);
+      expect(opsSummary.tracksInvolved).toContain('V1: Video / Edits');
+      expect(opsSummary.tracksInvolved).toContain('T1: Subtitles');
+      expect(opsSummary.tracksInvolved).toContain('T2: Graphic Text');
+      expect(opsSummary.tracksInvolved).toContain('FX: Color & Transitions');
+
+      const cutOp = opsSummary.operations.find((op) => op.layer === 'cut');
+      expect(cutOp).toBeDefined();
+      expect(cutOp?.trackName).toBe('V1: Video / Edits');
+      expect(cutOp?.startSec).toBe(1.0);
+      expect(cutOp?.endSec).toBe(2.5);
+
+      const colorOp = opsSummary.operations.find((op) => op.layer === 'color');
+      expect(colorOp).toBeDefined();
+      expect(colorOp?.trackName).toBe('FX: Color & Transitions');
+      expect(colorOp?.summary).toContain('CINEMATIC');
+    });
+
+    it('supports clicking an emitted operation to seek playhead and select timeline layer', () => {
+      const sampleEditPlan: any = {
+        version: 2,
+        global: { aspect: '16:9', fps: 30, resolution: '1080p' },
+        layers: [
+          {
+            id: 'l_cut_1',
+            layer: 'cut',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 1.0, end: 2.5 },
+            params: { reason: 'silence' },
+          },
+        ],
+      };
+
+      useEditorStore.setState((s) => {
+        s.plan.draft = sampleEditPlan;
+        s.plan.version = 2;
+      });
+
+      const plan = selectEffectivePlan(useEditorStore.getState())!;
+      const opsSummary = extractTimelineOperations(plan);
+      const cutOp = opsSummary.operations.find((op) => op.layer === 'cut')!;
+
+      // Simulate clicking the emitted operation in chat
+      if (cutOp.startSec !== undefined) {
+        useEditorStore.getState().setCurrentTime(cutOp.startSec);
+      }
+      useEditorStore.getState().selectLayer(cutOp.id);
+
+      expect(useEditorStore.getState().playback.currentTime).toBe(1.0);
+      expect(useEditorStore.getState().timeline.selectedLayerIds).toEqual([cutOp.id]);
+    });
+
+    it('stores emitted timeline operations in chat messages', () => {
+      const sampleEditPlan: any = {
+        version: 2,
+        global: { aspect: '16:9', fps: 30, resolution: '1080p' },
+        layers: [
+          {
+            id: 'l_cut_1',
+            layer: 'cut',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 1.0, end: 2.5 },
+            params: { reason: 'silence' },
+          },
+        ],
+      };
+
+      useEditorStore.setState((s) => {
+        s.plan.draft = sampleEditPlan;
+        s.plan.version = 2;
+      });
+
+      const plan = selectEffectivePlan(useEditorStore.getState())!;
+      const opsSummary = extractTimelineOperations(plan);
+
+      useEditorStore.getState().addChatMessage({
+        role: 'assistant',
+        text: 'Generated cinematic cut with captions',
+        planVersion: plan.version,
+        operations: opsSummary.operations,
+      });
+
+      const messages = useEditorStore.getState().chat.messages;
+      const lastMsg = messages[messages.length - 1];
+      expect(lastMsg.role).toBe('assistant');
+      expect(lastMsg.planVersion).toBe(plan.version);
+      expect(lastMsg.operations?.length).toBe(opsSummary.operations.length);
+      expect(lastMsg.operations?.[0].trackName).toBeDefined();
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   cleanEmptyCues,
   renameSpeakerInCues,
   getSpeakerColor,
+  TimelineOperationItem,
 } from '@ai-video/shared';
 import { computeNaturalWordTimings } from '../utils/subtitleTiming';
 import { api } from '../api/client';
@@ -18,6 +19,7 @@ export interface ChatMessageItem {
   text: string;
   planVersion?: number;
   timestamp: string;
+  operations?: TimelineOperationItem[];
 }
 
 export interface TrackState {
