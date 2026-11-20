@@ -4,6 +4,7 @@ import {
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
   ListMultipartUploadsCommand,
+  ListPartsCommand,
   GetObjectCommand,
   PutObjectCommand,
   HeadObjectCommand,
@@ -334,6 +335,61 @@ export class S3Service {
       parts,
       expiresAt,
     };
+  }
+
+  /**
+   * Generates fresh presigned upload URLs for specific part numbers of an active multipart upload.
+   */
+  static async getPresignedPartUrls(
+    rawKey: string,
+    uploadId: string,
+    partNumbers: number[],
+    expiresIn: number = 900
+  ): Promise<Array<{ partNumber: number; url: string; expiresAt: string }>> {
+    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
+    const parts: Array<{ partNumber: number; url: string; expiresAt: string }> = [];
+
+    for (const partNumber of partNumbers) {
+      const partCommand = new UploadPartCommand({
+        Bucket: env.S3_BUCKET_NAME,
+        Key: rawKey,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+      });
+
+      const url = await getSignedUrl(s3Client, partCommand, { expiresIn });
+      parts.push({ partNumber, url, expiresAt });
+    }
+
+    return parts;
+  }
+
+  /**
+   * Lists the parts that have already been uploaded for an active multipart upload in S3.
+   */
+  static async listParts(
+    rawKey: string,
+    uploadId: string
+  ): Promise<Array<{ partNumber: number; etag: string; sizeBytes?: number }>> {
+    try {
+      const listCommand = new ListPartsCommand({
+        Bucket: env.S3_BUCKET_NAME,
+        Key: rawKey,
+        UploadId: uploadId,
+      });
+      const response = await s3Client.send(listCommand);
+      if (response.Parts && response.Parts.length > 0) {
+        return response.Parts.map((p) => ({
+          partNumber: p.PartNumber!,
+          etag: p.ETag!,
+          sizeBytes: p.Size,
+        }));
+      }
+      return [];
+    } catch (err: any) {
+      console.warn('[S3] listParts notice (may be empty or local mock):', err.message);
+      return [];
+    }
   }
 
   /**

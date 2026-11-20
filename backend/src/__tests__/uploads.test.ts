@@ -37,6 +37,8 @@ vi.mock('../services/storage/s3Service.js', () => ({
     createMultipartUpload: vi.fn(),
     completeMultipartUpload: vi.fn(),
     abortMultipartUpload: vi.fn(),
+    listParts: vi.fn(),
+    getPresignedPartUrls: vi.fn(),
   },
 }));
 
@@ -350,5 +352,158 @@ describe('UploadsController - MIME, Size & Session Validation', () => {
     );
     expect(mockProject.baseAssetId).toBe('ast_existing_id');
     expect(mockProject.status).toBe('ready');
+  });
+
+  it('rejects getUploadStatus with 404 if upload session does not exist', async () => {
+    mockReq = {
+      params: { id: 'non_existent_upload' },
+      user: { _id: 'usr_1', id: 'usr_1' } as any,
+      id: 'req_10',
+    };
+
+    await UploadsController.getUploadStatus(mockReq as Request, mockRes as Response, nextFn);
+
+    expect(nextFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 404,
+        code: 'UPLOAD_SESSION_NOT_FOUND',
+      })
+    );
+  });
+
+  it('rejects getUploadStatus with 403 if caller is not the session owner', async () => {
+    await UploadSessionStore.saveSession('upl_status_tenant', {
+      userId: 'usr_owner',
+      projectId: 'prj_test',
+      assetId: 'ast_test',
+      rawKey: 'users/usr_owner/...',
+      sizeBytes: 32000000,
+      contentType: 'video/mp4',
+      totalParts: 2,
+      createdAt: new Date().toISOString(),
+    });
+
+    mockReq = {
+      params: { id: 'upl_status_tenant' },
+      user: { _id: 'usr_intruder', id: 'usr_intruder' } as any,
+      id: 'req_11',
+    };
+
+    await UploadsController.getUploadStatus(mockReq as Request, mockRes as Response, nextFn);
+
+    expect(nextFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 403,
+        code: 'FORBIDDEN',
+      })
+    );
+  });
+
+  it('returns resumable upload status with uploaded parts and remaining presigned URLs', async () => {
+    await UploadSessionStore.saveSession('upl_resumable_123', {
+      userId: 'usr_1',
+      projectId: 'prj_resumable',
+      assetId: 'ast_resumable',
+      rawKey: 'users/usr_1/projects/prj_resumable/raw/ast_resumable.mp4',
+      sizeBytes: 64 * 1024 * 1024,
+      contentType: 'video/mp4',
+      totalParts: 4,
+      partSizeBytes: 16 * 1024 * 1024,
+      createdAt: new Date().toISOString(),
+    });
+
+    // S3 indicates part 1 and part 2 are already uploaded
+    (S3Service.listParts as any).mockResolvedValue([
+      { partNumber: 1, etag: '"etag1"', sizeBytes: 16777216 },
+      { partNumber: 2, etag: '"etag2"', sizeBytes: 16777216 },
+    ]);
+
+    // Presigned URLs generated for remaining parts 3 and 4
+    (S3Service.getPresignedPartUrls as any).mockResolvedValue([
+      { partNumber: 3, url: 'https://s3/part3', expiresAt: '2026-11-20' },
+      { partNumber: 4, url: 'https://s3/part4', expiresAt: '2026-11-20' },
+    ]);
+
+    mockReq = {
+      params: { id: 'upl_resumable_123' },
+      user: { _id: 'usr_1', id: 'usr_1' } as any,
+      id: 'req_12',
+    };
+
+    await UploadsController.getUploadStatus(mockReq as Request, mockRes as Response, nextFn);
+
+    expect(statusMock).toHaveBeenCalledWith(200);
+    expect(jsonMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({
+          uploadId: 'upl_resumable_123',
+          projectId: 'prj_resumable',
+          totalParts: 4,
+          uploadedParts: expect.arrayContaining([
+            expect.objectContaining({ partNumber: 1, etag: '"etag1"' }),
+            expect.objectContaining({ partNumber: 2, etag: '"etag2"' }),
+          ]),
+          remainingParts: expect.arrayContaining([
+            expect.objectContaining({ partNumber: 3, url: 'https://s3/part3' }),
+            expect.objectContaining({ partNumber: 4, url: 'https://s3/part4' }),
+          ]),
+          isComplete: false,
+        }),
+      })
+    );
+  });
+
+  it('resumes existing session when resumeUploadId is provided in createUpload request', async () => {
+    (ProjectModel.findOne as any).mockResolvedValue({
+      _id: 'prj_id_resume',
+      publicId: 'prj_resume_project',
+      userId: 'usr_1',
+    });
+
+    await UploadSessionStore.saveSession('upl_to_resume_456', {
+      userId: 'usr_1',
+      projectId: 'prj_resume_project',
+      assetId: 'ast_resume_project',
+      rawKey: 'users/usr_1/projects/prj_resume_project/raw/ast_resume_project.mp4',
+      sizeBytes: 32 * 1024 * 1024,
+      contentType: 'video/mp4',
+      totalParts: 2,
+      partSizeBytes: 16 * 1024 * 1024,
+      createdAt: new Date().toISOString(),
+    });
+
+    (S3Service.listParts as any).mockResolvedValue([
+      { partNumber: 1, etag: '"etag1"', sizeBytes: 16777216 },
+    ]);
+    (S3Service.getPresignedPartUrls as any).mockResolvedValue([
+      { partNumber: 2, url: 'https://s3/part2', expiresAt: '2026-11-20' },
+    ]);
+
+    mockReq = {
+      body: {
+        projectId: 'prj_resume_project',
+        fileName: 'my_video.mp4',
+        contentType: 'video/mp4',
+        sizeBytes: 32 * 1024 * 1024,
+        resumeUploadId: 'upl_to_resume_456',
+      },
+      user: { _id: 'usr_1', id: 'usr_1' } as any,
+      id: 'req_13',
+    };
+
+    await UploadsController.createUpload(mockReq as Request, mockRes as Response, nextFn);
+
+    expect(statusMock).toHaveBeenCalledWith(200);
+    expect(jsonMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({
+          uploadId: 'upl_to_resume_456',
+          uploadedParts: [expect.objectContaining({ partNumber: 1 })],
+          remainingParts: [expect.objectContaining({ partNumber: 2 })],
+        }),
+      })
+    );
   });
 });

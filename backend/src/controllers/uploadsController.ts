@@ -102,6 +102,20 @@ export class UploadsController {
         }
       }
 
+      // Check if client explicitly requests to resume an existing upload session by uploadId
+      if (req.body.resumeUploadId) {
+        const existingSession = await UploadSessionStore.getSession(req.body.resumeUploadId);
+        if (
+          existingSession &&
+          (existingSession.userId === req.user!.id ||
+            existingSession.userId === req.user!._id?.toString()) &&
+          existingSession.projectId === projectId
+        ) {
+          req.params = { ...(req.params || {}), id: req.body.resumeUploadId };
+          return UploadsController.getUploadStatus(req, res, next);
+        }
+      }
+
       const assetId = `ast_${nanoid(10)}`;
       const session = await S3Service.createMultipartUpload(
         req.user!.id,
@@ -120,6 +134,7 @@ export class UploadsController {
         sizeBytes,
         contentType,
         totalParts: session.parts.length,
+        partSizeBytes: session.partSizeBytes,
         checksumSha256: checksumSha256 || undefined,
         createdAt: new Date().toISOString(),
       });
@@ -135,6 +150,125 @@ export class UploadsController {
         },
         requestId: req.id,
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Retrieves the current resumable status of an active upload session,
+   * querying S3 for already uploaded parts and generating fresh presigned URLs for remaining parts.
+   */
+  static async getUploadStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const uploadId = req.params.id;
+      const session = await UploadSessionStore.getSession(uploadId);
+
+      if (!session) {
+        throw new AppError(404, 'UPLOAD_SESSION_NOT_FOUND', 'Upload session expired or invalid');
+      }
+
+      // Enforce tenant ownership
+      if (session.userId !== req.user!.id && session.userId !== req.user!._id?.toString()) {
+        throw new AppError(403, 'FORBIDDEN', 'Unauthorized: You do not own this upload session');
+      }
+
+      // Query S3 for already uploaded parts
+      const s3UploadedParts = await S3Service.listParts(session.rawKey, uploadId);
+
+      // Merge with any parts recorded in session
+      const uploadedMap = new Map<
+        number,
+        { partNumber: number; etag: string; sizeBytes?: number }
+      >();
+      if (session.uploadedParts && Array.isArray(session.uploadedParts)) {
+        session.uploadedParts.forEach((p) => uploadedMap.set(p.partNumber, p));
+      }
+      if (s3UploadedParts && Array.isArray(s3UploadedParts)) {
+        s3UploadedParts.forEach((p) => uploadedMap.set(p.partNumber, p));
+      }
+      const uploadedParts = Array.from(uploadedMap.values()).sort(
+        (a, b) => a.partNumber - b.partNumber
+      );
+
+      // Determine remaining parts
+      const totalParts = session.totalParts;
+      const uploadedPartNumbers = new Set(uploadedParts.map((p) => p.partNumber));
+      const remainingPartNumbers: number[] = [];
+      for (let p = 1; p <= totalParts; p++) {
+        if (!uploadedPartNumbers.has(p)) {
+          remainingPartNumbers.push(p);
+        }
+      }
+
+      // Generate fresh presigned URLs for remaining parts
+      let remainingParts: Array<{ partNumber: number; url: string; expiresAt: string }> = [];
+      if (remainingPartNumbers.length > 0) {
+        remainingParts = await S3Service.getPresignedPartUrls(
+          session.rawKey,
+          uploadId,
+          remainingPartNumbers
+        );
+      }
+
+      const partSizeBytes = session.partSizeBytes || 16 * 1024 * 1024;
+
+      res.status(200).json({
+        success: true,
+        data: {
+          uploadId,
+          projectId: session.projectId,
+          assetId: session.assetId,
+          sizeBytes: session.sizeBytes,
+          partSizeBytes,
+          totalParts,
+          uploadedParts,
+          remainingParts,
+          isComplete: remainingParts.length === 0 && uploadedParts.length === totalParts,
+        },
+        requestId: req.id,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * Queries if there is an active incomplete upload session for a specific project.
+   */
+  static async getActiveProjectUpload(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const projectId = req.params.projectId;
+      const uploadId = await UploadSessionStore.getActiveUploadByProject(projectId);
+
+      if (!uploadId) {
+        res.status(200).json({
+          success: true,
+          data: { hasActiveUpload: false },
+          requestId: req.id,
+        });
+        return;
+      }
+
+      const session = await UploadSessionStore.getSession(uploadId);
+      if (
+        !session ||
+        (session.userId !== req.user!.id && session.userId !== req.user!._id?.toString())
+      ) {
+        res.status(200).json({
+          success: true,
+          data: { hasActiveUpload: false },
+          requestId: req.id,
+        });
+        return;
+      }
+
+      req.params.id = uploadId;
+      return UploadsController.getUploadStatus(req, res, next);
     } catch (err) {
       next(err);
     }

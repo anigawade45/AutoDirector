@@ -10,5 +10,7 @@ uploadsRouter.use(authMiddleware);
 uploadsRouter.use(uploadRateLimiter);
 
 uploadsRouter.post('/', requireProjectOwner, UploadsController.createUpload);
+uploadsRouter.get('/active/project/:projectId', UploadsController.getActiveProjectUpload);
+uploadsRouter.get('/:id', UploadsController.getUploadStatus);
 uploadsRouter.post('/:id/complete', UploadsController.completeUpload);
 uploadsRouter.post('/:id/abort', UploadsController.abortUpload);

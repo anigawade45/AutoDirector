@@ -64,6 +64,19 @@ export interface CompleteUploadResponseData {
   state: JobState;
 }
 
+export interface UploadStatusResponseData {
+  uploadId: string;
+  projectId: string;
+  assetId: string;
+  fileName?: string;
+  sizeBytes: number;
+  partSizeBytes: number;
+  totalParts: number;
+  uploadedParts: Array<{ partNumber: number; etag: string; sizeBytes?: number }>;
+  remainingParts: PresignedPartUrl[];
+  isComplete: boolean;
+}
+
 // Prompt endpoint
 export interface PromptRequest {
   prompt: string;

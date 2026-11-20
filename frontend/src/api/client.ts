@@ -3,6 +3,7 @@ import {
   CreateUploadResponseData,
   CompleteUploadRequest,
   CompleteUploadResponseData,
+  UploadStatusResponseData,
   PromptRequest,
   PromptResponseData,
   PatchPlanRequest,
@@ -241,6 +242,14 @@ export const api = {
     request<{ aborted: boolean }>(`/uploads/${uploadId}/abort`, {
       method: 'POST',
     }),
+
+  getUploadStatus: (uploadId: string) =>
+    request<UploadStatusResponseData>(`/uploads/${uploadId}`),
+
+  getActiveProjectUpload: (projectId: string) =>
+    request<UploadStatusResponseData | { hasActiveUpload: false }>(
+      `/uploads/active/project/${projectId}`
+    ),
 
   // Projects
   listProjects: (status?: string) =>
