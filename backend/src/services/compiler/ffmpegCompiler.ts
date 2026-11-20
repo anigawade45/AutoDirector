@@ -440,6 +440,36 @@ export class FFmpegCompiler {
       }
     }
 
+    // 4D. Graphic Text Overlays (Titles, Lower Thirds, Callout Cards)
+    const textLayers = plan.layers.filter((l) => l.enabled && l.layer === 'text') as any[];
+    for (let tIdx = 0; tIdx < textLayers.length; tIdx++) {
+      const txt = textLayers[tIdx];
+      const start = txt.range?.start ?? 0;
+      const end = txt.range?.end ?? totalSec;
+      const rawContent = (txt.params?.content || txt.params?.text || '').trim();
+      if (rawContent) {
+        const escapedContent = rawContent
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'")
+          .replace(/:/g, '\\:');
+        const baseFontSize = profile === 'preview_480p' ? 24 : profile === 'final_4k' ? 72 : 36;
+        const fontSize = txt.params?.size
+          ? Math.round((txt.params.size / 36) * baseFontSize)
+          : baseFontSize;
+        const fontColor = txt.params?.color || 'white';
+        let xPos = '(w-text_w)/2';
+        let yPos = '(h-text_h)/2';
+        if (txt.params?.position === 'top') {
+          yPos = 'h*0.12';
+        } else if (txt.params?.position === 'bottom') {
+          yPos = 'h*0.82';
+        }
+        const drawtextClause = `drawtext=text='${escapedContent}':fontsize=${fontSize}:fontcolor=${fontColor}:x=${xPos}:y=${yPos}:enable='between(t,${start.toFixed(2)},${end.toFixed(2)})'`;
+        filterComplexParts.push(`${currentVOut}${drawtextClause}[v_txt_${tIdx}]`);
+        currentVOut = `[v_txt_${tIdx}]`;
+      }
+    }
+
     // =========================================================================
     // PASS 5: Audio Chain (Music Ducking, EBU R128 Loudnorm, Denoise & Fades)
     // =========================================================================

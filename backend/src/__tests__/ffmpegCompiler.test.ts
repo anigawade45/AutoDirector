@@ -259,4 +259,58 @@ describe('Phase 3 Task 2: Pure FFmpeg Compiler compile(plan, analysis, profile)'
       expect(result.args).toContain('export_4k.mp4');
     });
   });
+
+  describe('Pass 4: Overlays & Graphic Text', () => {
+    it('burns in graphic text layer with drawtext filter and boundary timings', () => {
+      const plan = createBasePlan();
+      plan.layers.push({
+        id: 'txt_1',
+        layer: 'text',
+        enabled: true,
+        timebase: 'global',
+        range: { start: 2, end: 8 },
+        params: {
+          content: 'Breaking Tech News',
+          position: 'top',
+          color: 'yellow',
+          size: 40,
+        },
+      });
+
+      const result = FFmpegCompiler.compile(plan, baseAnalysis, 'final_1080p');
+      const filterStr = result.args.join(' ');
+
+      expect(filterStr).toContain("drawtext=text='Breaking Tech News'");
+      expect(filterStr).toContain('between(t,2.00,8.00)');
+      expect(filterStr).toContain('y=h*0.12');
+      expect(filterStr).toContain('fontcolor=yellow');
+    });
+
+    it('overlays image and B-roll media when source path is provided', () => {
+      const plan = createBasePlan();
+      plan.layers.push({
+        id: 'ov_broll_1',
+        layer: 'overlay',
+        enabled: true,
+        timebase: 'global',
+        range: { start: 4, end: 10 },
+        params: {
+          asset: 'broll_coding',
+          mediaType: 'broll',
+          opacity: 0.85,
+        },
+      });
+
+      const result = FFmpegCompiler.compile(plan, baseAnalysis, 'final_1080p', {
+        overlaySourcePaths: { ov_broll_1: 'scratch/overlay_broll.png' },
+      });
+
+      expect(result.args).toContain('scratch/overlay_broll.png');
+      expect(result.inputs).toContainEqual({ key: 'scratch/overlay_broll.png', type: 'image' });
+
+      const filterStr = result.args.join(' ');
+      expect(filterStr).toContain('colorchannelmixer=aa=0.85');
+      expect(filterStr).toContain("between(t,4.00,10.00)");
+    });
+  });
 });

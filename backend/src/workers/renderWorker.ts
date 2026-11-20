@@ -160,13 +160,108 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
           }
         }
 
+        // 2c. Prepare Overlay assets (B-Roll, Images, Generative Cutaways) if overlay layers enabled
+        const overlayLayers = planDoc.plan.layers.filter(
+          (l: any) => l.enabled && l.layer === 'overlay'
+        );
+        const overlaySourcePaths: Record<string, string> = {};
+
+        for (let i = 0; i < overlayLayers.length; i++) {
+          const ov = overlayLayers[i] as any;
+          const assetKeyOrId = ov.params?.asset || `ov_${i}`;
+          const localOverlayPath = scratch.resolve(`overlay_${ov.id}.png`);
+
+          let resolved = false;
+          // Try 1: check if it's an uploaded asset in AssetModel
+          try {
+            const assetDoc = await AssetModel.findOne({
+              $or: [{ _id: assetKeyOrId }, { publicId: assetKeyOrId }],
+            });
+            if (assetDoc?.s3?.rawKey) {
+              await S3Service.downloadFile(assetDoc.s3.rawKey, localOverlayPath);
+              if (fs.existsSync(localOverlayPath)) {
+                overlaySourcePaths[ov.id] = localOverlayPath;
+                overlaySourcePaths[assetKeyOrId] = localOverlayPath;
+                resolved = true;
+              }
+            }
+          } catch {}
+
+          // Try 2: check if it's in CatalogModel
+          if (!resolved) {
+            try {
+              const catDoc = await CatalogModel.findOne({ key: assetKeyOrId });
+              if (catDoc?.s3Key) {
+                await S3Service.downloadFile(catDoc.s3Key, localOverlayPath);
+                if (fs.existsSync(localOverlayPath)) {
+                  overlaySourcePaths[ov.id] = localOverlayPath;
+                  overlaySourcePaths[assetKeyOrId] = localOverlayPath;
+                  resolved = true;
+                }
+              }
+            } catch {}
+          }
+
+          // Try 3: If no external file, synthesize a clean visual card with FFmpeg
+          if (!resolved && !fs.existsSync(localOverlayPath)) {
+            try {
+              const ovWidth = profile === 'preview_480p' ? 854 : 1920;
+              const ovHeight = profile === 'preview_480p' ? 480 : 1080;
+              const ovLabel = (ov.params?.asset || ov.params?.mediaType || 'B-Roll Media').replace(
+                /[':\\]/g,
+                ''
+              );
+              await MediaProbeService.execProcess(env.FFMPEG_PATH, [
+                '-y',
+                '-f',
+                'lavfi',
+                '-i',
+                `color=c=0x1E2024:s=${ovWidth}x${ovHeight}:d=1`,
+                '-vf',
+                `drawtext=text='${ovLabel}':fontsize=36:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2`,
+                '-frames:v',
+                '1',
+                localOverlayPath,
+              ]);
+              if (fs.existsSync(localOverlayPath)) {
+                overlaySourcePaths[ov.id] = localOverlayPath;
+                overlaySourcePaths[assetKeyOrId] = localOverlayPath;
+              }
+            } catch (synthErr: any) {
+              console.warn(
+                `[RenderWorker:${queueName}] Overlay synthesis notice:`,
+                synthErr?.message
+              );
+            }
+          }
+        }
+
+        // 2d. Prepare LUT file if color grading layer specifies a LUT
+        const colorLayer = planDoc.plan.layers.find((l: any) => l.enabled && l.layer === 'color');
+        let lutPath: string | undefined = undefined;
+        if (colorLayer && (colorLayer.params as any)?.lut) {
+          const lutKey = (colorLayer.params as any).lut;
+          const localLutFile = scratch.resolve(`${lutKey}.cube`);
+          try {
+            const lutCatalog = await CatalogModel.findOne({ key: lutKey, kind: 'lut' });
+            if (lutCatalog?.s3Key) {
+              await S3Service.downloadFile(lutCatalog.s3Key, localLutFile);
+              if (fs.existsSync(localLutFile)) {
+                lutPath = localLutFile;
+              }
+            }
+          } catch (lutErr: any) {
+            console.warn(`[RenderWorker:${queueName}] LUT download notice:`, lutErr?.message);
+          }
+        }
+
         // 3. Compile deterministic FFmpeg arguments
         const compiled = FFmpegCompiler.compile(
           planDoc.plan,
           {
             durationMs: expectedDurationMs,
-            width: 1920,
-            height: 1080,
+            width: profile === 'preview_480p' ? 854 : profile === 'final_4k' ? 3840 : 1920,
+            height: profile === 'preview_480p' ? 480 : profile === 'final_4k' ? 2160 : 1080,
             fps: planDoc.plan.global.fps || 30,
             silences: [],
             sceneCuts: [],
@@ -179,6 +274,8 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
             inputSourcePath: localSourcePath,
             assSubtitlePath,
             musicSourcePath,
+            lutPath,
+            overlaySourcePaths,
             outputPath: localOutputPath,
           }
         );
