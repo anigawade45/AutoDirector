@@ -113,6 +113,38 @@ export class PlanNormalizer {
         l.layer = 'intro';
       } else if (['outro', 'outros'].includes(typeStr)) {
         l.layer = 'outro';
+      } else if (
+        [
+          'overlay',
+          'overlays',
+          'broll',
+          'b-roll',
+          'cutaway',
+          'cutaways',
+          'image',
+          'images',
+          'generative',
+          'stock',
+          'media',
+        ].includes(typeStr)
+      ) {
+        l.layer = 'overlay';
+      } else if (
+        [
+          'audio',
+          'audio_cleanup',
+          'audiocleanup',
+          'cleanup',
+          'denoise',
+          'noise_reduction',
+          'noisereduction',
+          'loudness',
+          'voice_processing',
+          'voice',
+          'audio_fx',
+        ].includes(typeStr)
+      ) {
+        l.layer = 'audio';
       } else if (typeStr === 'global') {
         if (
           l.params?.color ||
@@ -133,6 +165,8 @@ export class PlanNormalizer {
           l.layer = 'color';
         else if (idLower.includes('cut') || idLower.includes('trim')) l.layer = 'cut';
         else if (idLower.includes('mus') || idLower.includes('bgm')) l.layer = 'music';
+        else if (idLower.includes('aud') || idLower.includes('denoise') || idLower.includes('clean') || idLower.includes('lufs'))
+          l.layer = 'audio';
       }
 
       return l;
@@ -503,6 +537,17 @@ export class PlanNormalizer {
             1.0
           );
 
+          const mediaType = ['broll', 'image', 'generative'].includes(params.mediaType)
+            ? params.mediaType
+            : String(params.asset || '').startsWith('http') || String(params.asset || '').startsWith('data:')
+            ? 'image'
+            : params.prompt
+            ? 'generative'
+            : 'broll';
+
+          const mode = ['cutaway', 'pip', 'sticker'].includes(params.mode) ? params.mode : 'cutaway';
+          const fit = ['cover', 'contain'].includes(params.fit) ? params.fit : 'cover';
+
           normalizedLayers.push({
             id,
             layer: 'overlay',
@@ -519,7 +564,11 @@ export class PlanNormalizer {
                 }
               : undefined,
             params: {
-              asset: String(params.asset || 'overlay_default'),
+              asset: String(params.asset || 'broll_tech'),
+              mediaType,
+              prompt: params.prompt ? String(params.prompt).slice(0, 300) : undefined,
+              mode,
+              fit,
               scale: Number(scale.toFixed(2)),
               opacity: Number(opacity.toFixed(2)),
               position: params.position
@@ -527,7 +576,7 @@ export class PlanNormalizer {
                     x: PlanNormalizer.clamp(Number(params.position.x) || 0.5, 0, 1),
                     y: PlanNormalizer.clamp(Number(params.position.y) || 0.5, 0, 1),
                   }
-                : undefined,
+                : { x: 0.5, y: 0.5 },
             },
           });
           break;
@@ -764,6 +813,29 @@ export class PlanNormalizer {
           fadeIn: 1.5,
           fadeOut: 2.5,
           beatSync: promptLower.includes('beat'),
+        },
+      });
+    }
+
+    // 5. Audio cleanup fallback:
+    if (
+      !normalizedLayers.some((l) => l.layer === 'audio') &&
+      (promptLower.includes('audio') ||
+        promptLower.includes('denoise') ||
+        promptLower.includes('noise') ||
+        promptLower.includes('clean') ||
+        promptLower.includes('loudness') ||
+        promptLower.includes('lufs') ||
+        promptLower.includes('normalize'))
+    ) {
+      normalizedLayers.push({
+        id: 'lyr_aud_1',
+        layer: 'audio',
+        enabled: true,
+        timebase: 'global',
+        params: {
+          normalizeLufs: promptLower.includes('-14') ? -14 : promptLower.includes('-23') ? -23 : -16,
+          denoise: promptLower.includes('denoise') || promptLower.includes('noise') || promptLower.includes('clean'),
         },
       });
     }

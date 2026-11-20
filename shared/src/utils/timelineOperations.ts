@@ -145,9 +145,30 @@ function mapLayerToTimelineOperation(layer: EditLayer): TimelineOperationItem | 
         id: layer.id,
         layer: 'music',
         trackKind: 'music',
-        trackName: 'A1: Audio Mix',
+        trackName: 'A1: Background Music',
         title: 'Soundtrack & Ducking',
         summary: `${trackId} at ${volume}% volume${duck ? ' (speech auto-ducking)' : ''}`,
+        startSec: startSec ?? 0,
+        endSec,
+        durSec,
+        parameters: p,
+      };
+    }
+
+    case 'audio': {
+      const p = (layer.params as any) || {};
+      const lufs = p.normalizeLufs ?? -16;
+      const denoise = p.denoise ?? false;
+      return {
+        id: layer.id,
+        layer: 'audio',
+        trackKind: 'music',
+        trackName: 'A2: Dialogue & Audio FX',
+        title: 'Audio Cleanup & Voice Processing',
+        summary: `EBU R128: ${lufs} LUFS${denoise ? ' • AI Noise Reduction Active' : ''}`,
+        startSec: 0,
+        endSec,
+        durSec,
         parameters: p,
       };
     }
@@ -224,15 +245,30 @@ function mapLayerToTimelineOperation(layer: EditLayer): TimelineOperationItem | 
 
     case 'overlay': {
       const p = (layer.params as any) || {};
-      const asset = p.asset || 'overlay';
+      const asset = p.asset || 'broll_tech';
+      const mediaType =
+        p.mediaType ||
+        (asset.startsWith('http') || asset.startsWith('data:')
+          ? 'image'
+          : p.prompt
+          ? 'generative'
+          : 'broll');
+      const mode = p.mode || 'cutaway';
       const opacity = Math.round((p.opacity ?? 1.0) * 100);
+      const title =
+        mediaType === 'generative'
+          ? 'AI Generative Media Cutaway'
+          : mediaType === 'image'
+          ? 'Image Overlay'
+          : 'B-Roll Cutaway';
+
       return {
         id: layer.id,
         layer: 'overlay',
-        trackKind: 'fx',
-        trackName: 'FX: Overlays',
-        title: 'Visual Asset Overlay',
-        summary: `${asset} graphic (${opacity}% opacity) at ${startSec?.toFixed(2)}s - ${endSec?.toFixed(2)}s`,
+        trackKind: 'video',
+        trackName: 'V2: B-Roll & Visual Media',
+        title,
+        summary: `${asset} (${mode}, ${opacity}% opacity) at ${startSec?.toFixed(2)}s - ${endSec?.toFixed(2)}s`,
         startSec,
         endSec,
         durSec,

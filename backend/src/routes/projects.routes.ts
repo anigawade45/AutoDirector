@@ -34,6 +34,7 @@ projectsRouter.post(
 );
 
 // Immutable Plan Versioning & Patches
+projectsRouter.get('/:id/plans', requireProjectOwner, PlansController.listPlanVersions);
 projectsRouter.get('/:id/plans/:v', requireProjectOwner, PlansController.getPlanVersion);
 projectsRouter.patch('/:id/plans/:v', requireProjectOwner, PlansController.patchPlan);
 projectsRouter.post('/:id/plans/:v/revert', requireProjectOwner, PlansController.revertPlan);

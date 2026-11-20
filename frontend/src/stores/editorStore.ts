@@ -187,7 +187,7 @@ export interface EditorStoreState {
   ) => void;
   duplicateLayer: (layerId: string) => void;
   duplicateCue: (cueIndex: number) => void;
-  addTimelineLayer: (type: 'text' | 'music' | 'color' | 'cut' | 'overlay') => void;
+  addTimelineLayer: (type: 'text' | 'music' | 'color' | 'cut' | 'overlay' | 'subtitle' | 'audio') => void;
   toggleTrackMute: (trackId: string) => void;
   toggleTrackLock: (trackId: string) => void;
   toggleTrackHidden: (trackId: string) => void;
@@ -940,10 +940,18 @@ export const useEditorStore = create<EditorStoreState>()(
               layer: 'overlay',
               enabled: true,
               timebase: 'source',
-              range: { start: Number(startSec.toFixed(2)), end: Number(endSec.toFixed(2)) },
+              range: {
+                start: Number(startSec.toFixed(2)),
+                end: Number(Math.min(totalDur, startSec + 3.0).toFixed(2)),
+              },
               params: {
-                asset: 'lens_flare',
-                opacity: 0.8,
+                asset: 'broll_tech',
+                mediaType: 'broll',
+                mode: 'cutaway',
+                scale: 1.0,
+                opacity: 1.0,
+                fit: 'cover',
+                position: { x: 0.5, y: 0.5 },
               },
             };
             break;
@@ -962,6 +970,51 @@ export const useEditorStore = create<EditorStoreState>()(
               },
             };
             break;
+          case 'subtitle': {
+            const existingSub = state.plan.draft.layers.find((l) => l.layer === 'subtitle');
+            if (existingSub) {
+              existingSub.enabled = true;
+              state.timeline.selectedLayerIds = [existingSub.id];
+              state.preview.stale = true;
+              return;
+            }
+            newLayer = {
+              id: newId,
+              layer: 'subtitle',
+              enabled: true,
+              timebase: 'source',
+              params: {
+                style: 'word_pop',
+                font: 'Montserrat',
+                size: 48,
+                position: 'bottom',
+                primaryColor: '#FFF5F5',
+                highlightColor: '#F7D7D1',
+                maxWordsPerLine: 6,
+              },
+            };
+            break;
+          }
+          case 'audio': {
+            const existingAudio = state.plan.draft.layers.find((l) => l.layer === 'audio');
+            if (existingAudio) {
+              existingAudio.enabled = true;
+              state.timeline.selectedLayerIds = [existingAudio.id];
+              state.preview.stale = true;
+              return;
+            }
+            newLayer = {
+              id: newId,
+              layer: 'audio',
+              enabled: true,
+              timebase: 'global',
+              params: {
+                normalizeLufs: -16,
+                denoise: true,
+              },
+            };
+            break;
+          }
           default:
             return;
         }
@@ -978,13 +1031,14 @@ export const useEditorStore = create<EditorStoreState>()(
         const nextMuted = !curr.muted;
         state.timeline.trackStates[trackId] = { ...curr, muted: nextMuted };
 
-        if (trackId === 'trk_audio') {
+        if (trackId === 'trk_audio' || trackId === 'trk_music') {
           if (!state.plan.draft && state.plan.current) {
             state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
           }
           if (state.plan.draft) {
+            const targetType = trackId === 'trk_music' ? 'music' : 'audio';
             state.plan.draft.layers.forEach((l) => {
-              if (l.layer === 'music' || l.layer === 'audio') {
+              if (l.layer === targetType) {
                 l.enabled = !nextMuted;
               }
             });
@@ -1013,10 +1067,12 @@ export const useEditorStore = create<EditorStoreState>()(
         if (state.plan.draft) {
           const kindMap: Record<string, string[]> = {
             trk_video: ['video', 'cut', 'speed', 'intro', 'outro'],
+            trk_broll: ['overlay'],
             trk_subtitle: ['subtitle'],
             trk_text: ['text'],
-            trk_audio: ['music', 'audio'],
-            trk_fx: ['color', 'overlay', 'transition'],
+            trk_music: ['music'],
+            trk_audio: ['audio'],
+            trk_fx: ['color', 'transition'],
           };
           const layerTypes = kindMap[trackId] || [];
           state.plan.draft.layers.forEach((l) => {
@@ -1406,6 +1462,46 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
     clips: videoClips,
   });
 
+  // Track 2: B-Roll & Visual Media Track
+  const overlayLayers = plan.layers.filter((l) => l.enabled && l.layer === 'overlay') as any[];
+  if (overlayLayers.length > 0) {
+    tracks.push({
+      id: 'trk_broll',
+      kind: 'video',
+      name: 'V2: B-Roll & Visual Media',
+      clips: overlayLayers.map((ov) => {
+        const s = ov.range?.start || 0;
+        const e = ov.range?.end || Math.min(totalDuration, s + 3.0);
+        const mediaType =
+          ov.params?.mediaType ||
+          (ov.params?.asset?.startsWith('http') || ov.params?.asset?.startsWith('data:')
+            ? 'image'
+            : ov.params?.prompt
+            ? 'generative'
+            : 'broll');
+        const mode = ov.params?.mode || 'cutaway';
+        const label = ov.params?.prompt
+          ? `AI Gen: "${ov.params.prompt.slice(0, 20)}..."`
+          : mediaType === 'image'
+          ? `Image: ${ov.params?.asset?.replace(/^.*[\\/]/, '') || 'graphic'}`
+          : `B-Roll: ${ov.params?.asset || 'cutaway'}`;
+
+        return {
+          id: ov.id,
+          label: `${label} (${(e - s).toFixed(1)}s)`,
+          startSec: s,
+          durSec: Math.max(0.2, e - s),
+          type: 'overlay',
+          layerId: ov.id,
+          layerRef: ov,
+          mediaType,
+          mode,
+          asset: ov.params?.asset,
+        };
+      }),
+    });
+  }
+
   // Track 2: Subtitle Track
   const subtitleLayer = plan.layers.find((l) => l.enabled && l.layer === 'subtitle') as any;
   if (subtitleLayer) {
@@ -1476,52 +1572,62 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
     });
   }
 
-  // Track 4: Audio Mix Track (Music & Speech Audio)
+  // Track 4: Background Music Track (A1)
   const musicLayers = plan.layers.filter((l) => l.enabled && l.layer === 'music') as any[];
-  const audioLayers = plan.layers.filter((l) => l.enabled && l.layer === 'audio') as any[];
-  if (musicLayers.length > 0 || audioLayers.length > 0) {
-    const audioClips: TrackClipVM[] = [];
-    for (const ml of musicLayers) {
-      const s = ml.range?.start ?? 0;
-      const e = ml.range?.end ?? totalDuration;
-      audioClips.push({
-        id: ml.id,
-        label: `Music: ${ml.params?.trackId || 'Background Soundtrack'} (${ml.params?.duckUnderSpeech ? 'Speech Ducking' : 'Full Vol'}, ${Math.round((ml.params?.volume ?? 0.8) * 100)}%)`,
-        startSec: s,
-        durSec: Math.max(0.5, e - s),
-        type: 'music',
-        layerId: ml.id,
-        layerRef: ml,
-      });
-    }
-    for (const al of audioLayers) {
-      const s = al.range?.start ?? 0;
-      const e = al.range?.end ?? totalDuration;
-      audioClips.push({
-        id: al.id,
-        label: `Audio: ${al.params?.name || 'Voice/FX Track'}`,
-        startSec: s,
-        durSec: Math.max(0.5, e - s),
-        type: 'music',
-        layerId: al.id,
-        layerRef: al,
-      });
-    }
+  if (musicLayers.length > 0) {
     tracks.push({
-      id: 'trk_audio',
+      id: 'trk_music',
       kind: 'music',
-      name: 'A1: Audio Mix',
-      clips: audioClips,
+      name: 'A1: Background Music',
+      clips: musicLayers.map((ml) => {
+        const s = ml.range?.start ?? 0;
+        const e = ml.range?.end ?? totalDuration;
+        const duck = ml.params?.duckUnderSpeech !== false;
+        const volPct = Math.round((ml.params?.volume ?? 0.35) * 100);
+        return {
+          id: ml.id,
+          label: `Music: ${ml.params?.trackId || 'Soundtrack'} (${volPct}% vol${duck ? ', Auto-Duck' : ''})`,
+          startSec: s,
+          durSec: Math.max(0.5, e - s),
+          type: 'music',
+          layerId: ml.id,
+          layerRef: ml,
+        };
+      }),
     });
   }
 
-  // Track 5: FX Track (Color LUT, Overlays, Transitions)
+  // Track 5: Dialogue & Audio FX Track (A2)
+  const audioLayers = plan.layers.filter((l) => l.enabled && l.layer === 'audio') as any[];
+  if (audioLayers.length > 0) {
+    tracks.push({
+      id: 'trk_audio',
+      kind: 'music',
+      name: 'A2: Dialogue & Audio FX',
+      clips: audioLayers.map((al) => {
+        const s = al.range?.start ?? 0;
+        const e = al.range?.end ?? totalDuration;
+        const lufs = al.params?.normalizeLufs ?? -16;
+        const denoise = al.params?.denoise;
+        return {
+          id: al.id,
+          label: `Audio Cleanup: ${lufs} LUFS${denoise ? ' (AI Denoise)' : ''}`,
+          startSec: s,
+          durSec: Math.max(0.5, e - s),
+          type: 'music',
+          layerId: al.id,
+          layerRef: al,
+        };
+      }),
+    });
+  }
+
+  // Track 5: FX Track (Color LUT & Transitions)
   const colorLayers = plan.layers.filter((l) => l.enabled && l.layer === 'color') as any[];
-  const overlayLayers = plan.layers.filter((l) => l.enabled && l.layer === 'overlay') as any[];
   const transitionLayers = plan.layers.filter(
     (l) => l.enabled && l.layer === 'transition'
   ) as any[];
-  if (colorLayers.length > 0 || overlayLayers.length > 0 || transitionLayers.length > 0) {
+  if (colorLayers.length > 0 || transitionLayers.length > 0) {
     const fxClips: TrackClipVM[] = [];
     for (const cl of colorLayers) {
       const s = cl.range?.start ?? 0;
@@ -1534,17 +1640,6 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
         type: 'color',
         layerId: cl.id,
         layerRef: cl,
-      });
-    }
-    for (const ov of overlayLayers) {
-      fxClips.push({
-        id: ov.id,
-        label: `Overlay: ${ov.params.asset}`,
-        startSec: ov.range?.start || 0,
-        durSec: ov.range ? Math.max(0.5, ov.range.end - ov.range.start) : totalDuration,
-        type: 'overlay',
-        layerId: ov.id,
-        layerRef: ov,
       });
     }
     for (const tr of transitionLayers) {

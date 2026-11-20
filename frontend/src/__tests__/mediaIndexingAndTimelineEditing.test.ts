@@ -7,7 +7,7 @@ import {
   getSpeakerColor,
   extractTimelineOperations,
 } from '@ai-video/shared';
-import { useEditorStore, selectEffectivePlan } from '../stores/editorStore';
+import { useEditorStore, selectEffectivePlan, selectDerivedTracks } from '../stores/editorStore';
 
 describe('Media Indexing & Direct Timeline Editing Suite', () => {
   const sampleCues = [
@@ -413,6 +413,105 @@ describe('Media Indexing & Direct Timeline Editing Suite', () => {
       expect(lastMsg.planVersion).toBe(plan.version);
       expect(lastMsg.operations?.length).toBe(opsSummary.operations.length);
       expect(lastMsg.operations?.[0].trackName).toBeDefined();
+    });
+
+    it('adds B-roll cutaway overlay layer and derives dedicated V2: B-Roll & Visual Media track', () => {
+      useEditorStore.setState((s) => {
+        s.plan.draft = {
+          version: 3,
+          global: { aspect: '16:9', fps: 30, resolution: '1080p' },
+          layers: [],
+        };
+        s.plan.version = 3;
+        s.playback.currentTime = 4.0;
+        s.playback.duration = 20.0;
+      });
+
+      // Add overlay layer at playhead
+      useEditorStore.getState().addTimelineLayer('overlay');
+
+      const derivedTracks = selectDerivedTracks(useEditorStore.getState());
+      const brollTrack = derivedTracks.find((t) => t.id === 'trk_broll');
+      expect(brollTrack).toBeDefined();
+      expect(brollTrack?.name).toBe('V2: B-Roll & Visual Media');
+      expect(brollTrack?.kind).toBe('video');
+      expect(brollTrack?.clips.length).toBe(1);
+
+      const brollClip = brollTrack!.clips[0];
+      expect(brollClip.startSec).toBe(4.0);
+      expect(brollClip.durSec).toBe(3.0);
+      expect(brollClip.label).toContain('B-Roll');
+
+      // Check extracted operations
+      const plan = selectEffectivePlan(useEditorStore.getState())!;
+      const opsSummary = extractTimelineOperations(plan);
+      expect(opsSummary.tracksInvolved).toContain('V2: B-Roll & Visual Media');
+      const brollOp = opsSummary.operations.find((op) => op.layer === 'overlay');
+      expect(brollOp).toBeDefined();
+      expect(brollOp?.trackName).toBe('V2: B-Roll & Visual Media');
+    });
+
+    it('adds caption, audio cleanup, and music layers and verifies multi-track separation', () => {
+      useEditorStore.setState((s) => {
+        s.plan.draft = {
+          version: 4,
+          global: { aspect: '16:9', fps: 30, resolution: '1080p' },
+          layers: [],
+        };
+        s.plan.version = 4;
+        s.playback.currentTime = 0;
+        s.playback.duration = 30.0;
+      });
+
+      // 1. Add Subtitle Layer
+      useEditorStore.getState().addTimelineLayer('subtitle');
+      let plan = selectEffectivePlan(useEditorStore.getState())!;
+      const subLayer = plan.layers.find((l) => l.layer === 'subtitle') as any;
+      expect(subLayer).toBeDefined();
+      expect(subLayer.params.style).toBe('word_pop');
+      expect(subLayer.params.font).toBe('Montserrat');
+
+      // 2. Add Audio Cleanup Layer
+      useEditorStore.getState().addTimelineLayer('audio');
+      plan = selectEffectivePlan(useEditorStore.getState())!;
+      const audLayer = plan.layers.find((l) => l.layer === 'audio') as any;
+      expect(audLayer).toBeDefined();
+      expect(audLayer.params.normalizeLufs).toBe(-16);
+      expect(audLayer.params.denoise).toBe(true);
+
+      // 3. Add Background Music Layer
+      useEditorStore.getState().addTimelineLayer('music');
+      plan = selectEffectivePlan(useEditorStore.getState())!;
+      const musLayer = plan.layers.find((l) => l.layer === 'music') as any;
+      expect(musLayer).toBeDefined();
+      expect(musLayer.params.duckUnderSpeech).toBe(true);
+
+      // Verify Track Derivation separates A1 and A2
+      const derivedTracks = selectDerivedTracks(useEditorStore.getState());
+      const musicTrack = derivedTracks.find((t) => t.id === 'trk_music');
+      const audioTrack = derivedTracks.find((t) => t.id === 'trk_audio');
+      const subtitleTrack = derivedTracks.find((t) => t.id === 'trk_subtitle');
+
+      expect(musicTrack).toBeDefined();
+      expect(musicTrack?.name).toBe('A1: Background Music');
+      expect(musicTrack?.kind).toBe('music');
+
+      expect(audioTrack).toBeDefined();
+      expect(audioTrack?.name).toBe('A2: Dialogue & Audio FX');
+      expect(audioTrack?.kind).toBe('music');
+
+      expect(subtitleTrack).toBeDefined();
+      expect(subtitleTrack?.name).toBe('T1: Subtitles');
+
+      // Verify Extracted Operations Summary
+      const opsSummary = extractTimelineOperations(plan);
+      expect(opsSummary.tracksInvolved).toContain('A1: Background Music');
+      expect(opsSummary.tracksInvolved).toContain('A2: Dialogue & Audio FX');
+      expect(opsSummary.tracksInvolved).toContain('T1: Subtitles');
+
+      const audOp = opsSummary.operations.find((op) => op.layer === 'audio');
+      expect(audOp?.summary).toContain('-16 LUFS');
+      expect(audOp?.summary).toContain('AI Noise Reduction Active');
     });
   });
 });

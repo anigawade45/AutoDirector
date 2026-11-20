@@ -30,6 +30,7 @@ import {
   Unlock,
   Copy,
   ChevronDown,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   useEditorStore,
@@ -824,8 +825,11 @@ export const TimelineView: React.FC = () => {
                   New Timeline Layer
                 </div>
                 {[
-                  { id: 'text', label: 'Graphic Text', icon: <Layers className="w-3 h-3 text-[#FFF5F5]" /> },
+                  { id: 'overlay', label: 'B-Roll & Visual Media', icon: <ImageIcon className="w-3 h-3 text-cyan-300" /> },
+                  { id: 'subtitle', label: 'Captions & Subtitles', icon: <Type className="w-3 h-3 text-[#E3B5BE]" /> },
                   { id: 'music', label: 'Audio Soundtrack', icon: <Music className="w-3 h-3 text-[#F7D7D1]" /> },
+                  { id: 'audio', label: 'Audio Cleanup & Voice', icon: <Sliders className="w-3 h-3 text-emerald-300" /> },
+                  { id: 'text', label: 'Graphic Text', icon: <Layers className="w-3 h-3 text-[#FFF5F5]" /> },
                   { id: 'color', label: 'Color Grade FX', icon: <Palette className="w-3 h-3 text-[#E3B5BE]" /> },
                   { id: 'cut', label: 'Razor Cut Exclude', icon: <Scissors className="w-3 h-3 text-red-300" /> },
                 ].map((item) => (

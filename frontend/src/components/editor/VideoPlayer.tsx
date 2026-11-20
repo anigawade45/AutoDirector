@@ -17,7 +17,12 @@ import {
   Pencil,
 } from 'lucide-react';
 import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
-import { computeColorCssFilter, resolveColorParams } from '@ai-video/shared';
+import {
+  computeColorCssFilter,
+  resolveColorParams,
+  STOCK_BROLL_PRESETS,
+  STOCK_MUSIC_PRESETS,
+} from '@ai-video/shared';
 import { computeNaturalWordTimings } from '../../utils/subtitleTiming';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
@@ -26,6 +31,8 @@ export const VideoPlayer: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const {
     playback,
@@ -164,6 +171,72 @@ export const VideoPlayer: React.FC = () => {
       })
     : -1;
   const activeCue = activeCueIdx !== -1 && cues ? cues[activeCueIdx] : null;
+
+  // Background Music Live Synchronization & Real-Time Speech Ducking Preview
+  const musicLayer = effectivePlan?.layers.find(
+    (l) => l.enabled && l.layer === 'music'
+  ) as any;
+
+  useEffect(() => {
+    if (isVideoBaked || !musicLayer) {
+      if (musicAudioRef.current && !musicAudioRef.current.paused) {
+        musicAudioRef.current.pause();
+      }
+      return;
+    }
+
+    const trackId = musicLayer.params?.trackId;
+    const preset = STOCK_MUSIC_PRESETS.find((p) => p.id === trackId);
+    const audioUrl = preset?.previewUrl || (trackId?.startsWith('http') ? trackId : null);
+
+    if (!audioUrl) return;
+
+    if (!musicAudioRef.current) {
+      musicAudioRef.current = new Audio();
+      musicAudioRef.current.loop = true;
+    }
+
+    if (musicAudioRef.current.src !== audioUrl) {
+      musicAudioRef.current.src = audioUrl;
+    }
+
+    const baseVolume = (musicLayer.params?.volume ?? 0.35) * (playback.muted ? 0 : playback.volume);
+    const isSpeechActive = activeCue !== null && musicLayer.params?.duckUnderSpeech !== false;
+    const targetVolume = isSpeechActive ? baseVolume * 0.25 : baseVolume;
+
+    musicAudioRef.current.volume = Math.max(0, Math.min(1, targetVolume));
+    musicAudioRef.current.muted = playback.muted;
+
+    const isVideoPlaying = videoRef.current ? !videoRef.current.paused : playback.status === 'playing';
+    if (isVideoPlaying) {
+      if (musicAudioRef.current.paused) {
+        const loopDur = musicAudioRef.current.duration || 180;
+        musicAudioRef.current.currentTime = playback.currentTime % loopDur;
+        musicAudioRef.current.play().catch(() => {});
+      }
+    } else {
+      if (!musicAudioRef.current.paused) {
+        musicAudioRef.current.pause();
+      }
+    }
+  }, [
+    playback.status,
+    playback.currentTime,
+    playback.volume,
+    playback.muted,
+    activeCue,
+    musicLayer,
+    isVideoBaked,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (musicAudioRef.current) {
+        musicAudioRef.current.pause();
+        musicAudioRef.current = null;
+      }
+    };
+  }, []);
 
   const handleStartCanvasSubtitleEdit = useCallback(() => {
     if (!activeCue || activeCueIdx === -1) return;
@@ -490,6 +563,128 @@ export const VideoPlayer: React.FC = () => {
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
+    }
+
+    // 3.5 Derive Visual Overlays (B-Roll Cutaways, Stock Footage, AI Generative Media, PIP)
+    const overlayLayers = effectivePlan.layers.filter(
+      (l) => l.enabled && l.layer === 'overlay'
+    ) as any[];
+    for (const ol of overlayLayers) {
+      const inRange = !ol.range || (curSec >= ol.range.start && curSec <= ol.range.end);
+      if (!inRange) continue;
+
+      const p = ol.params || {};
+      const asset = p.asset || 'broll_tech';
+      const mode = p.mode || 'cutaway';
+      const scale = p.scale ?? (mode === 'cutaway' ? 1.0 : 0.35);
+      const opacity = p.opacity ?? 1.0;
+      const posX = (p.position?.x ?? (mode === 'pip' ? 0.8 : 0.5)) * canvas.width;
+      const posY = (p.position?.y ?? (mode === 'pip' ? 0.25 : 0.5)) * canvas.height;
+
+      const preset = STOCK_BROLL_PRESETS.find((b) => b.id === asset);
+      const imageUrl = preset
+        ? preset.previewUrl
+        : asset.startsWith('http') || asset.startsWith('data:')
+        ? asset
+        : null;
+      const label = preset
+        ? preset.name
+        : p.prompt
+        ? `AI: ${p.prompt.slice(0, 22)}...`
+        : 'Visual Cutaway';
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+
+      if (mode === 'cutaway') {
+        let drawn = false;
+        if (imageUrl) {
+          let img = imageCache.current.get(imageUrl);
+          if (!img) {
+            img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = imageUrl;
+            imageCache.current.set(imageUrl, img);
+          }
+          if (img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            drawn = true;
+          }
+        }
+
+        if (!drawn) {
+          const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+          grad.addColorStop(0, preset?.dominantColor || '#0f172a');
+          grad.addColorStop(1, '#1e1b4b');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Onscreen HUD badge indicating active B-roll cutaway
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+        ctx.strokeStyle = 'rgba(227, 181, 190, 0.5)';
+        ctx.lineWidth = 1;
+        const badgeW = Math.min(320, Math.max(160, canvas.width * 0.32));
+        const badgeH = 30;
+        const badgeX = 20;
+        const badgeY = 20;
+        ctx.beginPath();
+        if (typeof (ctx as any).roundRect === 'function') {
+          (ctx as any).roundRect(badgeX, badgeY, badgeW, badgeH, 6);
+        } else {
+          ctx.rect(badgeX, badgeY, badgeW, badgeH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#E3B5BE';
+        ctx.font = '700 12px Inter, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`🎥 B-ROLL: ${label}`, badgeX + 10, badgeY + badgeH / 2);
+      } else {
+        // PIP or floating graphic overlay
+        const baseW = canvas.width * scale;
+        const baseH = (baseW * 9) / 16;
+        const x = posX - baseW / 2;
+        const y = posY - baseH / 2;
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4;
+
+        let drawn = false;
+        if (imageUrl) {
+          let img = imageCache.current.get(imageUrl);
+          if (!img) {
+            img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = imageUrl;
+            imageCache.current.set(imageUrl, img);
+          }
+          if (img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, x, y, baseW, baseH);
+            drawn = true;
+          }
+        }
+
+        if (!drawn) {
+          const grad = ctx.createLinearGradient(x, y, x + baseW, y + baseH);
+          grad.addColorStop(0, preset?.dominantColor || '#1e1b4b');
+          grad.addColorStop(1, '#0f172a');
+          ctx.fillStyle = grad;
+          ctx.fillRect(x, y, baseW, baseH);
+        }
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, baseW, baseH);
+        ctx.restore();
+      }
+
+      ctx.restore();
     }
 
     // 4. Derive Graphic Text Overlays from Text Layers

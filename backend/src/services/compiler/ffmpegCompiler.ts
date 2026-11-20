@@ -17,6 +17,7 @@ export interface CompilerPaths {
   outputPath?: string;
   introSourcePath?: string;
   outroSourcePath?: string;
+  overlaySourcePaths?: Record<string, string>;
 }
 
 export interface CompilerResult {
@@ -413,6 +414,30 @@ export class FFmpegCompiler {
       const escapedSubPath = subPath.replace(/\\/g, '/').replace(/:/g, '\\:');
       filterComplexParts.push(`${currentVOut}subtitles='${escapedSubPath}'[vsubs]`);
       currentVOut = '[vsubs]';
+    }
+
+    // 4C. B-Roll & Image Overlays
+    const overlayLayers = plan.layers.filter((l) => l.enabled && l.layer === 'overlay') as any[];
+    for (let oIdx = 0; oIdx < overlayLayers.length; oIdx++) {
+      const ov = overlayLayers[oIdx];
+      const start = ov.range?.start ?? 0;
+      const end = ov.range?.end ?? totalSec;
+      const opacity = ov.params?.opacity ?? 1.0;
+      const overlayPath =
+        paths?.overlaySourcePaths?.[ov.id] || paths?.overlaySourcePaths?.[ov.params?.asset];
+
+      if (overlayPath) {
+        const ovInputIdx = inputs.length;
+        args.push('-i', overlayPath);
+        inputs.push({ key: overlayPath, type: 'image' });
+
+        const ovFilter = `[${ovInputIdx}:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=${opacity}[ov_${oIdx}]`;
+        filterComplexParts.push(ovFilter);
+        filterComplexParts.push(
+          `${currentVOut}[ov_${oIdx}]overlay=(W-w)/2:(H-h)/2:enable='between(t,${start.toFixed(2)},${end.toFixed(2)})'[v_ov_${oIdx}]`
+        );
+        currentVOut = `[v_ov_${oIdx}]`;
+      }
     }
 
     // =========================================================================

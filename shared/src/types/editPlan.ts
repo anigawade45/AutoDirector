@@ -155,10 +155,14 @@ export interface OutroLayer extends BaseLayer {
 }
 
 export interface OverlayParams {
-  asset: string; // catalog or asset ID
+  asset: string; // catalog or asset ID, stock preset, or image URL
+  mediaType?: 'broll' | 'image' | 'generative';
+  prompt?: string;
+  mode?: 'cutaway' | 'pip' | 'sticker';
   position?: { x: number; y: number }; // 0 to 1
   scale?: number;
   opacity?: number;
+  fit?: 'cover' | 'contain';
 }
 
 export interface OverlayLayer extends BaseLayer {

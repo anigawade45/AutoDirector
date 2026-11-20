@@ -19,12 +19,17 @@ import {
   Film,
   RefreshCw,
   PlayCircle,
+  Play,
+  Pause,
   FileText,
   Search,
   Clock,
   ChevronDown,
   ChevronUp,
   Minus,
+  Tv,
+  Wand2,
+  Layout,
 } from 'lucide-react';
 import { compare, Operation, applyPatch } from 'fast-json-patch';
 import { rebasePlanPatch } from '../../utils/planRebase';
@@ -50,6 +55,8 @@ import {
   COLOR_PRESETS,
   resolveColorParams,
   getSpeakerColor,
+  STOCK_BROLL_PRESETS,
+  STOCK_MUSIC_PRESETS,
 } from '@ai-video/shared';
 
 export const InspectorPanel: React.FC = () => {
@@ -80,6 +87,39 @@ export const InspectorPanel: React.FC = () => {
   const [subtitleSearch, setSubtitleSearch] = useState('');
   const [expandedWordCueIndex, setExpandedWordCueIndex] = useState<number | null>(null);
   const captionDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // B-Roll & Generative Media Studio states
+  const [brollTab, setBrollTab] = useState<'stock' | 'generative' | 'custom'>('stock');
+  const [generativePrompt, setGenerativePrompt] = useState('');
+  const [generativeStyle, setGenerativeStyle] = useState<'cinematic' | 'photorealistic' | '3d' | 'cyberpunk'>('cinematic');
+  const [isGeneratingMedia, setIsGeneratingMedia] = useState(false);
+
+  // Background Music Audition State
+  const [auditioningTrackId, setAuditioningTrackId] = useState<string | null>(null);
+  const auditionAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleToggleAudition = (preset: any) => {
+    if (auditioningTrackId === preset.id) {
+      auditionAudioRef.current?.pause();
+      setAuditioningTrackId(null);
+    } else {
+      if (!auditionAudioRef.current) {
+        auditionAudioRef.current = new Audio();
+      }
+      auditionAudioRef.current.src = preset.previewUrl;
+      auditionAudioRef.current.volume = 0.5;
+      auditionAudioRef.current.play().catch(() => {});
+      setAuditioningTrackId(preset.id);
+      auditionAudioRef.current.onended = () => setAuditioningTrackId(null);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      auditionAudioRef.current?.pause();
+      auditionAudioRef.current = null;
+    };
+  }, []);
 
   const formatCueTime = (ms: number) => {
     const totalSec = Math.max(0, ms) / 1000;
@@ -791,9 +831,23 @@ export const InspectorPanel: React.FC = () => {
             enabled: true,
             timebase: 'output',
             params: {
-              trackId: 'track_lofi_01',
-              volume: 0.8,
+              trackId: 'mus_calm_ambient',
+              volume: 0.35,
               duckUnderSpeech: true,
+              fadeIn: 1.5,
+              fadeOut: 2.5,
+            },
+          };
+          break;
+        case 'audio':
+          newLayer = {
+            id: newId,
+            layer: 'audio',
+            enabled: true,
+            timebase: 'global',
+            params: {
+              normalizeLufs: -16,
+              denoise: true,
             },
           };
           break;
@@ -829,6 +883,27 @@ export const InspectorPanel: React.FC = () => {
               duration: 3.0,
               text: 'MY HIGHLIGHTS',
               subtext: 'Summer Vacation',
+            },
+          };
+          break;
+        case 'overlay':
+          newLayer = {
+            id: newId,
+            layer: 'overlay',
+            enabled: true,
+            timebase: 'source',
+            range: {
+              start: Number(playback.currentTime.toFixed(2)),
+              end: Number(Math.min(playback.duration || 60, playback.currentTime + 3.0).toFixed(2)),
+            },
+            params: {
+              asset: 'broll_tech',
+              mediaType: 'broll',
+              mode: 'cutaway',
+              scale: 1.0,
+              opacity: 1.0,
+              fit: 'cover',
+              position: { x: 0.5, y: 0.5 },
             },
           };
           break;
@@ -923,6 +998,13 @@ export const InspectorPanel: React.FC = () => {
             {isAddMenuOpen && (
               <div className="absolute right-0 top-full mt-1.5 w-44 bg-[#222326] border border-[#393B3F] rounded-xl shadow-xl z-50 p-1.5 space-y-0.5 text-[11px]">
                 <button
+                  onClick={() => handleAddLayer('overlay')}
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
+                >
+                  <Film className="w-3.5 h-3.5 text-cyan-300" />
+                  <span>B-Roll / Visual Media</span>
+                </button>
+                <button
                   onClick={() => handleAddLayer('text')}
                   className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
                 >
@@ -949,6 +1031,13 @@ export const InspectorPanel: React.FC = () => {
                 >
                   <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Background Music</span>
+                </button>
+                <button
+                  onClick={() => handleAddLayer('audio')}
+                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors flex items-center space-x-2"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Audio Cleanup & Voice</span>
                 </button>
                 <button
                   onClick={() => handleAddLayer('speed')}
@@ -1273,6 +1362,85 @@ export const InspectorPanel: React.FC = () => {
           {/* 2. Subtitle Layer Controls */}
           {activeLayer.layer === 'subtitle' && (
             <div className="space-y-3.5">
+              {/* Preset Caption Looks */}
+              <div>
+                <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1.5 font-medium font-mono">
+                  Caption Style Presets
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    {
+                      label: 'TikTok Word-Pop',
+                      style: 'word_pop',
+                      font: 'Montserrat',
+                      size: 52,
+                      primary: '#FFFFFF',
+                      highlight: '#FFD84D',
+                      maxWords: 4,
+                      pos: 'bottom',
+                    },
+                    {
+                      label: 'Clean Minimal',
+                      style: 'minimal',
+                      font: 'Inter',
+                      size: 40,
+                      primary: '#F8FAFC',
+                      highlight: '#38BDF8',
+                      maxWords: 6,
+                      pos: 'bottom',
+                    },
+                    {
+                      label: 'Karaoke Golden',
+                      style: 'karaoke',
+                      font: 'Montserrat',
+                      size: 48,
+                      primary: '#FFFFFF',
+                      highlight: '#F59E0B',
+                      maxWords: 4,
+                      pos: 'bottom',
+                    },
+                    {
+                      label: 'Bold Impact',
+                      style: 'word_pop',
+                      font: 'Impact',
+                      size: 56,
+                      primary: '#FFF5F5',
+                      highlight: '#EF4444',
+                      maxWords: 3,
+                      pos: 'center',
+                    },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        updateDraft((d) => {
+                          const s = d.layers.find((l) => l.id === activeLayer.id) as any;
+                          if (s) {
+                            s.params.style = preset.style;
+                            s.params.font = preset.font;
+                            s.params.size = preset.size;
+                            s.params.primaryColor = preset.primary;
+                            s.params.highlightColor = preset.highlight;
+                            s.params.maxWordsPerLine = preset.maxWords;
+                            s.params.position = preset.pos;
+                          }
+                        });
+                        toast.info(`Applied "${preset.label}" caption style`, 'Captions');
+                      }}
+                      className="px-2 py-1.5 rounded-lg bg-[#222326] hover:bg-[#2A2C2F] border border-[#393B3F] hover:border-[#E3B5BE]/60 text-left transition-colors"
+                    >
+                      <span className="text-[11px] font-medium text-[#FFF5F5] block truncate">
+                        {preset.label}
+                      </span>
+                      <span className="text-[9px] text-[#FFF5F5]/40 font-mono block">
+                        {preset.font} • {preset.size}px
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <span className="text-[#FFF5F5]/70 text-[11px]">Animation Style</span>
                 <select
@@ -1291,6 +1459,27 @@ export const InspectorPanel: React.FC = () => {
                   <option value="bounce">Bounce</option>
                   <option value="karaoke">Karaoke</option>
                   <option value="minimal">Minimal</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-[#FFF5F5]/70 text-[11px]">Font Family</span>
+                <select
+                  value={activeLayer.params?.font || 'Montserrat'}
+                  onChange={(e) => {
+                    const font = e.target.value;
+                    updateDraft((d) => {
+                      const s = d.layers.find((l) => l.id === activeLayer.id) as any;
+                      if (s) s.params.font = font;
+                    });
+                  }}
+                  className="bg-[#222326] border border-[#393B3F] rounded-lg px-2.5 py-1 text-[#FFF5F5] text-xs focus:outline-none focus:border-[#E3B5BE] transition-colors"
+                >
+                  <option value="Montserrat">Montserrat (Clean Modern)</option>
+                  <option value="Inter">Inter (Neutral Sans)</option>
+                  <option value="Roboto">Roboto (Google Standard)</option>
+                  <option value="Playfair">Playfair Display (Editorial)</option>
+                  <option value="Impact">Impact (Heavy Punch)</option>
                 </select>
               </div>
 
@@ -1336,6 +1525,30 @@ export const InspectorPanel: React.FC = () => {
                     updateDraft((d) => {
                       const s = d.layers.find((l) => l.id === activeLayer.id) as any;
                       if (s) s.params.size = size;
+                    });
+                  }}
+                  className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                  <span>Max Words Per Line</span>
+                  <span className="font-mono text-[#F7D7D1]">
+                    {activeLayer.params?.maxWordsPerLine || 4} words
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="2"
+                  max="8"
+                  step="1"
+                  value={activeLayer.params?.maxWordsPerLine || 4}
+                  onChange={(e) => {
+                    const mw = parseInt(e.target.value, 10);
+                    updateDraft((d) => {
+                      const s = d.layers.find((l) => l.id === activeLayer.id) as any;
+                      if (s) s.params.maxWordsPerLine = mw;
                     });
                   }}
                   className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
@@ -1929,10 +2142,10 @@ export const InspectorPanel: React.FC = () => {
             <div className="space-y-3.5">
               <div>
                 <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1 font-medium font-mono">
-                  Licensed Music Track
+                  Licensed Music Track Catalog
                 </label>
                 <select
-                  value={activeLayer.params?.trackId || 'mus_calm_01'}
+                  value={activeLayer.params?.trackId || STOCK_MUSIC_PRESETS[0].id}
                   onChange={(e) => {
                     const trk = e.target.value;
                     updateDraft((d) => {
@@ -1942,19 +2155,63 @@ export const InspectorPanel: React.FC = () => {
                   }}
                   className="w-full bg-[#222326] border border-[#393B3F] rounded-lg px-2.5 py-1.5 text-xs text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE] transition-colors"
                 >
-                  <option value="mus_calm_01">Calm Cinematic Ambient (96 BPM)</option>
-                  <option value="mus_upbeat_01">Upbeat Creator Energy (128 BPM)</option>
-                  <option value="mus_lofi_01">Lo-Fi Chill Hop (85 BPM)</option>
-                  <option value="mus_acoustic_01">Acoustic Sunshine (110 BPM)</option>
+                  {STOCK_MUSIC_PRESETS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.bpm} BPM • {p.genre})
+                    </option>
+                  ))}
                 </select>
+
+                {(() => {
+                  const currentPreset =
+                    STOCK_MUSIC_PRESETS.find(
+                      (p) => p.id === (activeLayer.params?.trackId || STOCK_MUSIC_PRESETS[0].id)
+                    ) || STOCK_MUSIC_PRESETS[0];
+                  const isAuditioning = auditioningTrackId === currentPreset.id;
+
+                  return (
+                    <div className="mt-2 p-2.5 rounded-lg bg-[#141517] border border-[#393B3F]/70 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-[#F7D7D1]">
+                          {currentPreset.bpm} BPM • {currentPreset.genre.toUpperCase()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAudition(currentPreset)}
+                          className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-medium font-mono transition-colors ${
+                            isAuditioning
+                              ? 'bg-[#E3B5BE] text-[#18191B] font-bold'
+                              : 'bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5] border border-[#393B3F]'
+                          }`}
+                        >
+                          {isAuditioning ? (
+                            <>
+                              <Pause className="w-2.5 h-2.5" />
+                              <span>Stop</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-2.5 h-2.5" />
+                              <span>Audition</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-[#FFF5F5]/60 italic">
+                        {currentPreset.description}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[#FFF5F5]/70 text-[11px] block">Speech Ducking</span>
-                  <span className="text-[10px] text-[#FFF5F5]/40">&gt;8 dB auto-attenuation</span>
+                  <span className="text-[10px] text-[#FFF5F5]/40">-12 dB auto-attenuation when speech detected</span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     updateDraft((d) => {
                       const m = d.layers.find((l) => l.id === activeLayer.id) as any;
@@ -1979,6 +2236,7 @@ export const InspectorPanel: React.FC = () => {
                   </span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     updateDraft((d) => {
                       const m = d.layers.find((l) => l.id === activeLayer.id) as any;
@@ -2073,9 +2331,49 @@ export const InspectorPanel: React.FC = () => {
           {/* Audio Layer Controls */}
           {activeLayer.layer === 'audio' && (
             <div className="space-y-3.5">
+              {/* Loudness Standard Presets */}
+              <div>
+                <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1.5 font-medium font-mono">
+                  Loudness Standards
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { label: 'YouTube / Web', lufs: -14, desc: 'Maximum punch for social algorithms' },
+                    { label: 'Podcast / Speech', lufs: -16, desc: 'Balanced spoken dialogue standard' },
+                    { label: 'Warm Master', lufs: -18, desc: 'Natural dynamic range & warmth' },
+                    { label: 'Broadcast EBU', lufs: -23, desc: 'Television & Netflix broadcast spec' },
+                  ].map((preset) => {
+                    const isActive = (activeLayer.params?.normalizeLufs ?? -16) === preset.lufs;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => {
+                          updateDraft((d) => {
+                            const a = d.layers.find((l) => l.id === activeLayer.id) as any;
+                            if (a) a.params.normalizeLufs = preset.lufs;
+                          });
+                        }}
+                        className={`px-2 py-1.5 rounded-lg border text-left transition-colors ${
+                          isActive
+                            ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border-[#E3B5BE] font-semibold'
+                            : 'bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-[#393B3F]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium">{preset.label}</span>
+                          <span className="text-[10px] font-mono text-[#F7D7D1]">{preset.lufs} LUFS</span>
+                        </div>
+                        <span className="text-[9px] text-[#FFF5F5]/40 block truncate">{preset.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div>
                 <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
-                  <span>Loudness Target (EBU R128)</span>
+                  <span>Custom Target (EBU R128)</span>
                   <span className="font-mono text-[#F7D7D1]">
                     {activeLayer.params?.normalizeLufs ?? -16} LUFS
                   </span>
@@ -2097,26 +2395,47 @@ export const InspectorPanel: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between bg-[#222326] p-2.5 rounded-lg border border-[#393B3F]">
                 <div>
-                  <span className="text-[#FFF5F5]/70 text-[11px] block">Background Denoise</span>
-                  <span className="text-[10px] text-[#FFF5F5]/40">FFT audio filter (afftdn)</span>
+                  <span className="text-[#FFF5F5]/80 text-[11px] font-medium block">
+                    AI Background Denoise
+                  </span>
+                  <span className="text-[10px] text-[#FFF5F5]/40 block">
+                    FFT Spectral Isolation (`afftdn` -25dB floor)
+                  </span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     updateDraft((d) => {
                       const a = d.layers.find((l) => l.id === activeLayer.id) as any;
                       if (a) a.params.denoise = !a.params.denoise;
                     });
                   }}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                  className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold transition-colors ${
                     activeLayer.params?.denoise
-                      ? 'bg-[#E3B5BE]/20 text-[#F7D7D1] border border-[#E3B5BE]/50'
-                      : 'bg-[#222326] text-[#FFF5F5]/50 border border-[#393B3F]'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50'
+                      : 'bg-[#18191B] text-[#FFF5F5]/50 border border-[#393B3F]'
                   }`}
                 >
                   {activeLayer.params?.denoise ? 'ACTIVE' : 'OFF'}
                 </button>
+              </div>
+
+              {/* Audio Mastering Telemetry */}
+              <div className="bg-[#121314] p-2.5 rounded-lg border border-[#393B3F]/70 space-y-1.5 text-[10px] font-mono">
+                <div className="flex justify-between text-[#FFF5F5]/60">
+                  <span>True Peak Ceiling</span>
+                  <span className="text-[#F7D7D1]">-1.5 dBTP</span>
+                </div>
+                <div className="flex justify-between text-[#FFF5F5]/60">
+                  <span>Loudness Range (LRA)</span>
+                  <span className="text-[#F7D7D1]">11.0 LU</span>
+                </div>
+                <div className="flex justify-between text-[#FFF5F5]/60">
+                  <span>Auto-Speech Ducking Attenuation</span>
+                  <span className="text-[#F7D7D1]">-12.0 dB</span>
+                </div>
               </div>
             </div>
           )}
@@ -2314,6 +2633,383 @@ export const InspectorPanel: React.FC = () => {
                   }}
                   className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* 8. B-Roll & Visual Media Overlay Layer Controls */}
+          {activeLayer.layer === 'overlay' && (
+            <div className="space-y-4">
+              {/* Media Mode Toggle (Cutaway vs PIP vs Sticker) */}
+              <div>
+                <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1.5 font-medium font-mono">
+                  Compositing Mode
+                </label>
+                <div className="grid grid-cols-3 gap-1 bg-[#121314] p-1 rounded-lg border border-[#393B3F]">
+                  {[
+                    { id: 'cutaway', label: 'B-Roll Cutaway', icon: <Film className="w-3 h-3" /> },
+                    { id: 'pip', label: 'Picture-in-Pic', icon: <Tv className="w-3 h-3" /> },
+                    { id: 'sticker', label: 'Floating Graphic', icon: <Layout className="w-3 h-3" /> },
+                  ].map((m) => {
+                    const currentMode = activeLayer.params?.mode || 'cutaway';
+                    const isActive = currentMode === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          updateDraft((d) => {
+                            const ov = d.layers.find((l) => l.id === activeLayer.id) as any;
+                            if (ov) ov.params.mode = m.id;
+                          });
+                        }}
+                        className={`flex flex-col items-center justify-center py-1 px-1 rounded text-[10px] font-medium transition-all ${
+                          isActive
+                            ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/50 shadow-sm'
+                            : 'text-[#FFF5F5]/60 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="mb-0.5">{m.icon}</span>
+                        <span className="truncate">{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Media Source Tabs: Stock vs Generative vs Custom */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide font-medium font-mono">
+                    Visual Media Source
+                  </label>
+                  <span className="text-[10px] text-cyan-300 font-mono capitalize">
+                    {activeLayer.params?.mediaType || 'broll'}
+                  </span>
+                </div>
+                <div className="flex bg-[#121314] p-1 rounded-lg border border-[#393B3F] text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setBrollTab('stock')}
+                    className={`flex-1 py-1 text-center rounded text-[11px] font-medium transition-all ${
+                      brollTab === 'stock'
+                        ? 'bg-[#2A2C2F] text-white font-semibold'
+                        : 'text-[#FFF5F5]/60 hover:text-white'
+                    }`}
+                  >
+                    Stock B-Roll
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBrollTab('generative')}
+                    className={`flex-1 py-1 text-center rounded text-[11px] font-medium transition-all ${
+                      brollTab === 'generative'
+                        ? 'bg-cyan-950/60 text-cyan-200 font-semibold border border-cyan-500/40'
+                        : 'text-[#FFF5F5]/60 hover:text-white'
+                    }`}
+                  >
+                    ✨ AI Generative
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBrollTab('custom')}
+                    className={`flex-1 py-1 text-center rounded text-[11px] font-medium transition-all ${
+                      brollTab === 'custom'
+                        ? 'bg-[#2A2C2F] text-white font-semibold'
+                        : 'text-[#FFF5F5]/60 hover:text-white'
+                    }`}
+                  >
+                    Custom URL
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab 1: Stock B-Roll Presets */}
+              {brollTab === 'stock' && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                    {STOCK_BROLL_PRESETS.map((item) => {
+                      const isSelected = activeLayer.params?.asset === item.id;
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            updateDraft((d) => {
+                              const ov = d.layers.find((l) => l.id === activeLayer.id) as any;
+                              if (ov) {
+                                ov.params.asset = item.id;
+                                ov.params.mediaType = 'broll';
+                                ov.params.prompt = undefined;
+                              }
+                            });
+                          }}
+                          className={`group cursor-pointer rounded-lg border p-1.5 transition-all flex flex-col gap-1 ${
+                            isSelected
+                              ? 'bg-cyan-950/40 border-cyan-400 ring-1 ring-cyan-400/50'
+                              : 'bg-[#121314] border-[#393B3F] hover:border-[#E3B5BE]/60'
+                          }`}
+                        >
+                          <div className="relative h-16 w-full rounded overflow-hidden bg-black/40">
+                            <img
+                              src={item.previewUrl}
+                              alt={item.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                            {isSelected && (
+                              <div className="absolute top-1 right-1 bg-cyan-500 text-black p-0.5 rounded-full">
+                                <Check className="w-2.5 h-2.5" />
+                              </div>
+                            )}
+                            <span className="absolute bottom-1 left-1 px-1 py-0.5 rounded bg-black/70 text-[9px] font-mono text-white/80">
+                              {item.category}
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-medium text-[#FFF5F5] truncate group-hover:text-white">
+                            {item.name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: AI Generative Media */}
+              {brollTab === 'generative' && (
+                <div className="space-y-3 bg-[#121314] p-3 rounded-xl border border-cyan-500/30">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-cyan-200 uppercase tracking-wide block font-mono font-medium">
+                      AI Generative Prompt
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={generativePrompt}
+                      onChange={(e) => setGenerativePrompt(e.target.value)}
+                      placeholder="e.g. Futuristic mountain drone shot at golden hour..."
+                      className="w-full bg-[#18191B] text-[#FFF5F5] text-xs p-2 rounded-lg border border-[#393B3F] focus:border-cyan-400 focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  {/* Style selector */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-[#FFF5F5]/60 block font-mono">Visual Style</span>
+                    <div className="flex flex-wrap gap-1">
+                      {(['cinematic', 'photorealistic', '3d', 'cyberpunk'] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => setGenerativeStyle(st)}
+                          className={`px-2 py-0.5 rounded text-[10px] capitalize font-mono transition-all ${
+                            generativeStyle === st
+                              ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/60'
+                              : 'bg-[#18191B] text-[#FFF5F5]/60 border border-[#393B3F] hover:text-white'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Generate Button */}
+                  <button
+                    type="button"
+                    disabled={isGeneratingMedia || !generativePrompt.trim()}
+                    onClick={async () => {
+                      setIsGeneratingMedia(true);
+                      setTimeout(() => {
+                        const matchingPreset =
+                          STOCK_BROLL_PRESETS.find((p) =>
+                            generativePrompt.toLowerCase().includes(p.category)
+                          ) || STOCK_BROLL_PRESETS[0];
+
+                        updateDraft((d) => {
+                          const ov = d.layers.find((l) => l.id === activeLayer.id) as any;
+                          if (ov) {
+                            ov.params.asset = matchingPreset.id;
+                            ov.params.mediaType = 'generative';
+                            ov.params.prompt = generativePrompt.trim();
+                          }
+                        });
+                        setIsGeneratingMedia(false);
+                        toast.success(
+                          `Generated AI B-roll for "${generativePrompt.slice(0, 25)}..."`,
+                          'Generative Media'
+                        );
+                      }, 500);
+                    }}
+                    className="w-full py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black font-bold text-xs flex items-center justify-center space-x-1.5 transition-all shadow-lg disabled:opacity-50"
+                  >
+                    {isGeneratingMedia ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Synthesizing Generative Media...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-3.5 h-3.5" />
+                        <span>Generate with AI</span>
+                      </>
+                    )}
+                  </button>
+
+                  {activeLayer.params?.prompt && (
+                    <div className="p-2 rounded bg-black/40 border border-[#393B3F] space-y-1">
+                      <span className="text-[10px] text-cyan-300 font-mono block">Active Generative Prompt:</span>
+                      <p className="text-[11px] text-[#FFF5F5]/80 italic">"{activeLayer.params.prompt}"</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 3: Custom Image URL */}
+              {brollTab === 'custom' && (
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-[10px] text-[#FFF5F5]/60 uppercase tracking-wide block mb-1 font-mono">
+                      Image / Media URL
+                    </label>
+                    <input
+                      type="text"
+                      value={activeLayer.params?.asset || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateDraft((d) => {
+                          const ov = d.layers.find((l) => l.id === activeLayer.id) as any;
+                          if (ov) {
+                            ov.params.asset = val;
+                            ov.params.mediaType = 'image';
+                          }
+                        });
+                      }}
+                      placeholder="https://example.com/broll-image.jpg"
+                      className="w-full bg-[#121314] text-[#FFF5F5] text-xs px-2.5 py-1.5 rounded-lg border border-[#393B3F] focus:border-cyan-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Timing Controls (Start, End, Duration) */}
+              <div className="space-y-2 pt-2 border-t border-[#393B3F]/60">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-[#FFF5F5]/70 font-mono">Duration</span>
+                  <span className="font-mono text-cyan-300 font-semibold">
+                    {activeLayer.range ? (activeLayer.range.end - activeLayer.range.start).toFixed(2) : 3.0}s
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F] space-y-1">
+                    <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">Start (sec)</span>
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="0"
+                      value={Number((activeLayer.range?.start || 0).toFixed(2))}
+                      onChange={(e) => {
+                        const s = Math.max(0, parseFloat(e.target.value) || 0);
+                        const dur = activeLayer.range ? activeLayer.range.end - activeLayer.range.start : 3.0;
+                        updateLayerRange(activeLayer.id, s, s + Math.max(0.2, dur));
+                      }}
+                      className="w-full bg-[#18191B] border border-[#393B3F] focus:border-cyan-400 rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(playback.currentTime.toFixed(2));
+                        const dur = activeLayer.range ? activeLayer.range.end - activeLayer.range.start : 3.0;
+                        updateLayerRange(activeLayer.id, cur, cur + Math.max(0.2, dur));
+                        toast.success(`Set B-roll start to ${cur.toFixed(2)}s (Pink Line)`, 'Timeline');
+                      }}
+                      className="w-full text-left text-[10px] text-cyan-300 hover:underline flex items-center gap-1 font-mono pt-1"
+                    >
+                      <Clock className="w-2.5 h-2.5" />
+                      <span>Set to Pink Line ({playback.currentTime.toFixed(2)}s)</span>
+                    </button>
+                  </div>
+
+                  <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F] space-y-1">
+                    <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">End (sec)</span>
+                    <input
+                      type="number"
+                      step="0.05"
+                      min="0.2"
+                      value={Number((activeLayer.range?.end || 3.0).toFixed(2))}
+                      onChange={(e) => {
+                        const s = activeLayer.range?.start || 0;
+                        const endVal = Math.max(s + 0.2, parseFloat(e.target.value) || s + 1.0);
+                        updateLayerRange(activeLayer.id, s, endVal);
+                      }}
+                      className="w-full bg-[#18191B] border border-[#393B3F] focus:border-cyan-400 rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(playback.currentTime.toFixed(2));
+                        const s = activeLayer.range?.start || 0;
+                        if (cur > s) {
+                          updateLayerRange(activeLayer.id, s, cur);
+                          toast.success(`Set B-roll end to ${cur.toFixed(2)}s (Pink Line)`, 'Timeline');
+                        }
+                      }}
+                      className="w-full text-left text-[10px] text-cyan-300 hover:underline flex items-center gap-1 font-mono pt-1"
+                    >
+                      <Clock className="w-2.5 h-2.5" />
+                      <span>Set to Pink Line ({playback.currentTime.toFixed(2)}s)</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Opacity & Scale Sliders */}
+              <div className="space-y-3 pt-2 border-t border-[#393B3F]/60">
+                <div>
+                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                    <span>Opacity</span>
+                    <span className="font-mono text-cyan-300">
+                      {Math.round((activeLayer.params?.opacity ?? 1.0) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1.0"
+                    step="0.05"
+                    value={activeLayer.params?.opacity ?? 1.0}
+                    onChange={(e) => {
+                      const op = parseFloat(e.target.value);
+                      updateDraft((d) => {
+                        const ov = d.layers.find((l) => l.id === activeLayer.id) as any;
+                        if (ov) ov.params.opacity = op;
+                      });
+                    }}
+                    className="w-full accent-cyan-400 h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[#FFF5F5]/70 text-[11px] mb-1">
+                    <span>Scale</span>
+                    <span className="font-mono text-cyan-300">
+                      {(activeLayer.params?.scale ?? 1.0).toFixed(2)}x
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.2"
+                    max="3.0"
+                    step="0.1"
+                    value={activeLayer.params?.scale ?? 1.0}
+                    onChange={(e) => {
+                      const sc = parseFloat(e.target.value);
+                      updateDraft((d) => {
+                        const ov = d.layers.find((l) => l.id === activeLayer.id) as any;
+                        if (ov) ov.params.scale = sc;
+                      });
+                    }}
+                    className="w-full accent-cyan-400 h-1.5 bg-[#2A2C2F] rounded-lg cursor-pointer"
+                  />
+                </div>
               </div>
             </div>
           )}

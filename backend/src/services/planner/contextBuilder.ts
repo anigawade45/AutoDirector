@@ -32,6 +32,11 @@ CRITICAL RULES:
      Schema: { "id": "lyr_mus_1", "layer": "music", "enabled": true, "timebase": "output", "params": { "trackId": "tpl_lofi_beat", "volume": 0.35, "duckUnderSpeech": true } }
    - "speed": { "id": "lyr_spd_1", "layer": "speed", "enabled": true, "timebase": "source", "range": { "start": 0, "end": 5 }, "params": { "factor": 1.5, "keepPitch": true } }
    - "transition": { "id": "lyr_tr_1", "layer": "transition", "enabled": true, "timebase": "source", "params": { "type": "dissolve", "duration": 0.5, "at": 3.0 } }
+   - "overlay": For B-roll cutaways, secondary footage, stock images, and AI generative media insertion.
+     Schema: { "id": "lyr_ov_1", "layer": "overlay", "enabled": true, "timebase": "source", "range": { "start": 3.0, "end": 6.5 }, "params": { "asset": "broll_tech", "mediaType": "broll", "mode": "cutaway", "scale": 1.0, "opacity": 1.0, "prompt": "Futuristic technology and code" } }
+     mediaTypes: "broll", "image", "generative"
+     modes: "cutaway" (full-frame B-roll covering narration), "pip" (picture-in-picture floating box), "sticker".
+     Stock B-roll presets: "broll_tech", "broll_city", "broll_nature", "broll_workspace", "broll_cyberpunk", "broll_abstract", "broll_finance".
 
 4. NEVER invent asset IDs or catalog IDs. Use only the provided baseAssetId and allowed catalog identifiers.
 5. PREFER CATALOG DEFAULTS for vague user inputs (e.g. "cinematic look" -> preset "cinematic" with lut "teal_orange").

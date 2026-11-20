@@ -314,6 +314,21 @@ export const api = {
     }),
 
   // Plan versions & patches
+  listPlanVersions: (projectId: string) =>
+    request<{
+      headVersion: number;
+      versions: Array<{
+        version: number;
+        parentVersion: number | null;
+        prompt: string;
+        model: string;
+        createdAt: string;
+        layersCount: number;
+        layers: Array<{ id: string; layer: string; enabled: boolean }>;
+        isCurrent: boolean;
+      }>;
+    }>(`/projects/${projectId}/plans`),
+
   getPlanVersion: (projectId: string, version?: number | string) => {
     const v =
       version !== undefined && version !== null && !isNaN(Number(version)) ? version : 'latest';

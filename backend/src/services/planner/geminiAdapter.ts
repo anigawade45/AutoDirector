@@ -429,6 +429,49 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         }
       }
 
+      // Audio cleanup adjustments (denoise & loudness normalization)
+      if (
+        instruction.includes('denoise') ||
+        instruction.includes('noise') ||
+        instruction.includes('clean') ||
+        instruction.includes('loudness') ||
+        instruction.includes('lufs') ||
+        instruction.includes('normalize audio')
+      ) {
+        const audLayer = currentPlan.layers?.find((l: any) => l.layer === 'audio');
+        const audId = audLayer?.id || 'lyr_aud_1';
+        const targetLufs = instruction.includes('-14') ? -14 : instruction.includes('-23') ? -23 : -16;
+        const wantDenoise = !instruction.includes('disable denoise') && !instruction.includes('no denoise');
+
+        if (audLayer) {
+          patches.push({
+            op: 'replace',
+            path: `/layers/${audId}/params/normalizeLufs`,
+            value: targetLufs,
+          });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${audId}/params/denoise`,
+            value: wantDenoise,
+          });
+        } else {
+          patches.push({
+            op: 'add',
+            path: '/layers/-',
+            value: {
+              id: 'lyr_aud_new',
+              layer: 'audio',
+              enabled: true,
+              timebase: 'global',
+              params: {
+                normalizeLufs: targetLufs,
+                denoise: wantDenoise,
+              },
+            },
+          });
+        }
+      }
+
       // Remove intro
       if (
         (instruction.includes('remove') || instruction.includes('delete')) &&
@@ -480,6 +523,52 @@ export class GeminiPlannerAdapter implements PlannerProvider {
             },
           });
         }
+      }
+
+      // B-Roll / Image / Generative Media Overlay
+      if (
+        instruction.includes('broll') ||
+        instruction.includes('b-roll') ||
+        instruction.includes('cutaway') ||
+        instruction.includes('image') ||
+        instruction.includes('generative') ||
+        instruction.includes('overlay') ||
+        instruction.includes('stock')
+      ) {
+        let asset = 'broll_tech';
+        for (const k of ['tech', 'city', 'nature', 'workspace', 'cyberpunk', 'abstract', 'finance']) {
+          if (instruction.includes(k)) {
+            asset = `broll_${k}`;
+            break;
+          }
+        }
+        const mediaType = instruction.includes('generative')
+          ? 'generative'
+          : instruction.includes('image')
+          ? 'image'
+          : 'broll';
+
+        const sStart = Math.min(totalDurationSec - 2, 2.5);
+        const sEnd = Math.min(totalDurationSec, sStart + 3.0);
+        patches.push({
+          op: 'add',
+          path: '/layers/-',
+          value: {
+            id: `lyr_ov_${Date.now()}`,
+            layer: 'overlay',
+            enabled: true,
+            timebase: 'source',
+            range: { start: Number(sStart.toFixed(2)), end: Number(sEnd.toFixed(2)) },
+            params: {
+              asset,
+              mediaType,
+              mode: instruction.includes('pip') ? 'pip' : 'cutaway',
+              scale: 1.0,
+              opacity: 1.0,
+              prompt: instruction.includes('generate') ? instruction : undefined,
+            },
+          },
+        });
       }
 
       return {
@@ -713,6 +802,48 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         denoise: instruction.includes('denoise') || instruction.includes('noise'),
       },
     });
+
+    // 9. B-Roll / Image / Generative Media Cutaway
+    if (
+      instruction.includes('broll') ||
+      instruction.includes('b-roll') ||
+      instruction.includes('cutaway') ||
+      instruction.includes('image') ||
+      instruction.includes('generative') ||
+      instruction.includes('overlay') ||
+      instruction.includes('stock')
+    ) {
+      let asset = 'broll_tech';
+      for (const k of ['tech', 'city', 'nature', 'workspace', 'cyberpunk', 'abstract', 'finance']) {
+        if (instruction.includes(k)) {
+          asset = `broll_${k}`;
+          break;
+        }
+      }
+      const mediaType = instruction.includes('generative')
+        ? 'generative'
+        : instruction.includes('image')
+        ? 'image'
+        : 'broll';
+
+      const sStart = Math.min(totalDurationSec - 2, 2.5);
+      const sEnd = Math.min(totalDurationSec, sStart + 3.0);
+      layers.push({
+        id: `lyr_ov_${layerCounter++}`,
+        layer: 'overlay',
+        enabled: true,
+        timebase: 'source',
+        range: { start: Number(sStart.toFixed(2)), end: Number(sEnd.toFixed(2)) },
+        params: {
+          asset,
+          mediaType,
+          mode: instruction.includes('pip') ? 'pip' : 'cutaway',
+          scale: 1.0,
+          opacity: 1.0,
+          prompt: instruction.includes('generate') ? instruction : undefined,
+        },
+      });
+    }
 
     MetricsService.recordPlannerExecution({
       provider: 'gemini',

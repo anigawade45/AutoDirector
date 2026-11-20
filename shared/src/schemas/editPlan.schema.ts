@@ -186,14 +186,19 @@ export const OverlayLayerSchema = z.object({
     .optional(),
   params: z.object({
     asset: z.string(),
+    mediaType: z.enum(['broll', 'image', 'generative']).optional().default('broll'),
+    prompt: z.string().max(300).optional(),
+    mode: z.enum(['cutaway', 'pip', 'sticker']).optional().default('cutaway'),
     position: z
       .object({
         x: z.number().min(0).max(1).default(0.5),
         y: z.number().min(0).max(1).default(0.5),
       })
-      .optional(),
+      .optional()
+      .default({ x: 0.5, y: 0.5 }),
     scale: z.number().min(0.1).max(5).default(1),
     opacity: z.number().min(0).max(1).default(1),
+    fit: z.enum(['cover', 'contain']).optional().default('cover'),
   }),
 });
 

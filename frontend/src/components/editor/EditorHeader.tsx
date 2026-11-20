@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Undo2, Redo2, Download, Film, Sparkles, ArrowLeft, Loader2, User } from 'lucide-react';
+import { Undo2, Redo2, Download, Film, Sparkles, ArrowLeft, Loader2, User, History } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../api/client';
 import { ExportModal } from './ExportModal';
+import { VersionHistoryModal } from './VersionHistoryModal';
 import { toast } from '../../stores/toastStore';
 
 interface EditorHeaderProps {
@@ -14,6 +15,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ onBack }) => {
   const { project, plan, undo, redo, preview, updateJob, setPreviewUrl } = useEditorStore();
   const { user } = useAuthStore();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isRenderingPreview, setIsRenderingPreview] = useState(false);
 
   const canUndo = plan.cursor > 0;
@@ -113,9 +115,15 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ onBack }) => {
             <h1 className="text-xs sm:text-sm font-semibold text-[#FFF5F5] truncate max-w-[90px] xs:max-w-[130px] sm:max-w-[180px] md:max-w-xs">
               {project?.title || 'Video Studio'}
             </h1>
-            <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-[#2A2C2F] text-[#F7D7D1] font-mono border border-[#393B3F] shrink-0">
-              v{plan.version}
-            </span>
+            <button
+              type="button"
+              onClick={() => setIsHistoryModalOpen(true)}
+              className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-[#2A2C2F] hover:bg-[#34373B] text-[#F7D7D1] hover:text-white font-mono border border-[#393B3F] hover:border-[#E3B5BE] shrink-0 transition-colors flex items-center gap-1 cursor-pointer"
+              title="Click to view full sequence version history"
+            >
+              <History className="w-2.5 h-2.5 text-[#E3B5BE]" />
+              <span>v{plan.version}</span>
+            </button>
             {preview.stale && (
               <span className="hidden md:inline-block text-[10px] px-1.5 py-0.5 rounded bg-[#2A2C2F] text-[#F7D7D1] border border-[#E3B5BE]/30 font-medium shrink-0">
                 Modified
@@ -124,7 +132,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ onBack }) => {
           </div>
         </div>
 
-        {/* Center section: Undo / Redo */}
+        {/* Center section: Undo / Redo & Version History */}
         <div className="flex items-center space-x-1 bg-[#121314] p-0.5 sm:p-1 rounded-lg border border-[#393B3F] shrink-0">
           <button
             onClick={handleUndo}
@@ -141,6 +149,16 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ onBack }) => {
             title="Redo (Ctrl+Y)"
           >
             <Redo2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <div className="h-4 w-px bg-[#393B3F] mx-0.5" />
+          <button
+            type="button"
+            onClick={() => setIsHistoryModalOpen(true)}
+            className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/80 hover:text-[#FFF5F5] transition-colors text-xs font-mono"
+            title="Sequence Version History & Agent Audit Trail"
+          >
+            <History className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span className="hidden sm:inline">History</span>
           </button>
         </div>
 
@@ -189,6 +207,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ onBack }) => {
       </header>
 
       <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
+      <VersionHistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} />
     </>
   );
 };

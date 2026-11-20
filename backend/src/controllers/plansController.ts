@@ -56,6 +56,56 @@ export class PlansController {
     }
   }
 
+  static async listPlanVersions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id: projectId } = req.params;
+
+      const project =
+        req.project ||
+        (await ProjectModel.findOne({
+          publicId: projectId,
+          userId: req.user!._id,
+          deletedAt: null,
+        }));
+      if (!project) {
+        throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found');
+      }
+
+      const planDocs = await EditPlanModel.find({ projectId: project._id })
+        .sort({ version: -1 })
+        .select('version parentVersion prompt model createdAt patch plan.layers')
+        .lean();
+
+      const versions = planDocs.map((doc: any) => ({
+        version: doc.version,
+        parentVersion: doc.parentVersion,
+        prompt:
+          doc.prompt ||
+          (doc.version === 1 ? 'Initial baseline sequence' : `Edit plan v${doc.version}`),
+        model: doc.model || 'ai-planner',
+        createdAt: doc.createdAt,
+        layersCount: doc.plan?.layers?.length || 0,
+        layers: (doc.plan?.layers || []).map((l: any) => ({
+          id: l.id,
+          layer: l.layer,
+          enabled: l.enabled,
+        })),
+        isCurrent: doc.version === project.headVersion,
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: {
+          headVersion: project.headVersion,
+          versions,
+        },
+        requestId: req.id,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async patchPlan(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id: projectId, v: versionStr } = req.params;

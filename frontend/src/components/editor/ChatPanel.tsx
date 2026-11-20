@@ -14,17 +14,23 @@ import {
   Check,
   Cpu,
   Clock,
+  RotateCcw,
+  RotateCw,
+  History,
 } from 'lucide-react';
 import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
 import { api } from '../../api/client';
 import { AVAILABLE_GEMINI_MODELS, extractTimelineOperations } from '@ai-video/shared';
 import { toast } from '../../stores/toastStore';
+import { VersionHistoryModal } from './VersionHistoryModal';
 
 export const ChatPanel: React.FC = () => {
   const {
     project,
     plan,
     setPlan,
+    undo,
+    preview,
     chat,
     addChatMessage,
     setChatMessages,
@@ -40,6 +46,8 @@ export const ChatPanel: React.FC = () => {
 
   const [promptText, setPromptText] = useState('');
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isUndoingAction, setIsUndoingAction] = useState<number | null>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [activeJobProgress, setActiveJobProgress] = useState<{
@@ -312,28 +320,93 @@ export const ChatPanel: React.FC = () => {
     }
   };
 
+  const handleUndoAgentAction = async (targetVersion: number) => {
+    if (!project?.id || isUndoingAction !== null) return;
+    setIsUndoingAction(targetVersion);
+    try {
+      const priorVersion = Math.max(1, targetVersion - 1);
+      const res = await api.revertPlan(project.id, priorVersion);
+      const newPlan = res?.data?.plan || (res as any)?.plan;
+      if (newPlan) {
+        setPlan(newPlan);
+        if (preview.versionUrlMap?.[priorVersion]) {
+          setPreviewUrl(preview.versionUrlMap[priorVersion], newPlan.version, true);
+        } else if (preview.baseProxyUrl) {
+          setPreviewUrl(preview.baseProxyUrl, newPlan.version, false);
+        }
+        toast.success(
+          `Undid agent action (reverted to v${newPlan.version} from baseline v${priorVersion})`,
+          'Agent Action Undone'
+        );
+      }
+    } catch (err: any) {
+      console.warn('[ChatPanel] Server revert failed, executing local store undo:', err?.message);
+      undo();
+      toast.info('Reverted to previous plan version locally', 'Local Undo');
+    } finally {
+      setIsUndoingAction(null);
+    }
+  };
+
+  const handleRestoreAgentAction = async (targetVersion: number) => {
+    if (!project?.id || isUndoingAction !== null) return;
+    setIsUndoingAction(targetVersion);
+    try {
+      const res = await api.revertPlan(project.id, targetVersion);
+      const newPlan = res?.data?.plan || (res as any)?.plan;
+      if (newPlan) {
+        setPlan(newPlan);
+        if (preview.versionUrlMap?.[targetVersion]) {
+          setPreviewUrl(preview.versionUrlMap[targetVersion], newPlan.version, true);
+        } else if (preview.baseProxyUrl) {
+          setPreviewUrl(preview.baseProxyUrl, newPlan.version, false);
+        }
+        toast.success(
+          `Restored agent action v${targetVersion} as current sequence v${newPlan.version}`,
+          'Sequence Restored'
+        );
+      }
+    } catch (err: any) {
+      console.error('[ChatPanel] Restore agent action failed:', err);
+      toast.error(err?.message || 'Failed to restore agent action', 'Restore Failed');
+    } finally {
+      setIsUndoingAction(null);
+    }
+  };
+
   return (
     <aside className="w-full lg:w-80 border-l-0 lg:border-l border-[#393B3F] bg-[#18191B] flex flex-col h-full select-none text-xs font-sans min-h-0">
       {/* Header */}
-      <div className="h-12 border-b border-[#393B3F] px-4 flex items-center justify-between relative bg-[#18191B]">
+      <div className="h-12 border-b border-[#393B3F] px-3 sm:px-4 flex items-center justify-between relative bg-[#18191B]">
         <div className="flex items-center space-x-2">
           <Clapperboard className="w-4 h-4 text-[#E3B5BE]" />
           <h2 className="text-xs font-bold text-[#FFF5F5] uppercase tracking-wider">AI Director</h2>
         </div>
 
-        {/* Gemini Model Selector Dropdown */}
-        <div ref={modelMenuRef} className="relative">
+        <div className="flex items-center space-x-1.5">
+          {/* Version History Button */}
           <button
-            onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
-            className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#2A2C2F] hover:bg-[#34373B] text-[#F7D7D1] border border-[#393B3F] text-[10px] font-mono transition-colors shadow-sm"
-            title="Switch Gemini AI Model"
+            type="button"
+            onClick={() => setIsHistoryModalOpen(true)}
+            className="p-1.5 rounded-lg bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 hover:text-[#FFF5F5] border border-[#393B3F] transition-colors"
+            title="Sequence Version History & Agent Audit Trail"
           >
-            <Cpu className="w-3 h-3 text-[#E3B5BE]" />
-            <span className="font-semibold">{activeModel.name.replace('Gemini ', '')}</span>
-            <ChevronDown
-              className={`w-3 h-3 transition-transform ${isModelMenuOpen ? 'rotate-180' : ''}`}
-            />
+            <History className="w-3.5 h-3.5 text-[#E3B5BE]" />
           </button>
+
+          {/* Gemini Model Selector Dropdown */}
+          <div ref={modelMenuRef} className="relative">
+            <button
+              onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-[#2A2C2F] hover:bg-[#34373B] text-[#F7D7D1] border border-[#393B3F] text-[10px] font-mono transition-colors shadow-sm"
+              title="Switch Gemini AI Model"
+            >
+              <Cpu className="w-3 h-3 text-[#E3B5BE]" />
+              <span className="font-semibold">{activeModel.name.replace('Gemini ', '')}</span>
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${isModelMenuOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
 
           {isModelMenuOpen && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-[#222326] border border-[#393B3F] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 text-xs backdrop-blur-md">
@@ -385,6 +458,7 @@ export const ChatPanel: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
 
@@ -497,14 +571,52 @@ export const ChatPanel: React.FC = () => {
               })()}
 
               {m.planVersion && (
-                <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-[#F7D7D1] font-mono">
-                  <span className="flex items-center space-x-1">
-                    <Layers className="w-3 h-3 text-[#E3B5BE]" />
-                    <span>Plan updated</span>
-                  </span>
-                  <span className="bg-[#2A2C2F] px-1.5 py-0.5 rounded border border-[#393B3F]">
-                    v{m.planVersion}
-                  </span>
+                <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-[#F7D7D1] font-mono gap-2 flex-wrap">
+                  <div className="flex items-center space-x-1.5 truncate">
+                    <Layers className="w-3 h-3 text-[#E3B5BE] shrink-0" />
+                    <span>Plan v{m.planVersion}</span>
+                  </div>
+
+                  {m.role === 'assistant' && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {plan.version >= m.planVersion ? (
+                        <button
+                          type="button"
+                          onClick={() => handleUndoAgentAction(m.planVersion!)}
+                          disabled={isUndoingAction === m.planVersion}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#2A2C2F] hover:bg-red-950/40 border border-[#393B3F] hover:border-red-800/50 text-red-300 transition-colors text-[10px] font-medium disabled:opacity-50"
+                          title={`Undo agent action v${m.planVersion} and roll back timeline`}
+                        >
+                          {isUndoingAction === m.planVersion ? (
+                            <Loader2 className="w-2.5 h-2.5 animate-spin text-red-300" />
+                          ) : (
+                            <RotateCcw className="w-2.5 h-2.5 text-red-300" />
+                          )}
+                          <span>Undo Action</span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[9px] uppercase">
+                            Undone
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreAgentAction(m.planVersion!)}
+                            disabled={isUndoingAction === m.planVersion}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] font-bold transition-colors text-[10px] disabled:opacity-50"
+                            title={`Restore agent action plan v${m.planVersion}`}
+                          >
+                            {isUndoingAction === m.planVersion ? (
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              <RotateCw className="w-2.5 h-2.5" />
+                            )}
+                            <span>Restore</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -609,6 +721,8 @@ export const ChatPanel: React.FC = () => {
           </button>
         </form>
       </div>
+
+      <VersionHistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} />
     </aside>
   );
 };

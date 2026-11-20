@@ -261,7 +261,7 @@ export const ProjectPanel: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('transcript')}
-            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium transition-all min-w-0 ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-medium transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
               activeTab === 'transcript'
                 ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
                 : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
@@ -270,13 +270,13 @@ export const ProjectPanel: React.FC = () => {
           >
             <FileText className="w-3 h-3 shrink-0" />
             <span className="truncate">Transcript</span>
-            <span className="text-[10px] font-mono opacity-80 shrink-0">({cues.length})</span>
+            <span className="text-[9.5px] font-mono opacity-75 shrink-0">({cues.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('scenes')}
-            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium transition-all min-w-0 ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-medium transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
               activeTab === 'scenes'
                 ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
                 : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
@@ -285,13 +285,13 @@ export const ProjectPanel: React.FC = () => {
           >
             <Video className="w-3 h-3 shrink-0" />
             <span className="truncate">Scenes</span>
-            <span className="text-[10px] font-mono opacity-80 shrink-0">({mediaIndex.scenes.length})</span>
+            <span className="text-[9.5px] font-mono opacity-75 shrink-0">({mediaIndex.scenes.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('speakers')}
-            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium transition-all min-w-0 ${
+            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-medium transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
               activeTab === 'speakers'
                 ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
                 : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
@@ -300,7 +300,7 @@ export const ProjectPanel: React.FC = () => {
           >
             <Users className="w-3 h-3 shrink-0" />
             <span className="truncate">Speakers</span>
-            <span className="text-[10px] font-mono opacity-80 shrink-0">({mediaIndex.speakers.length})</span>
+            <span className="text-[9.5px] font-mono opacity-75 shrink-0">({mediaIndex.speakers.length})</span>
           </button>
         </div>
 
