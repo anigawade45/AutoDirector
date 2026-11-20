@@ -49,6 +49,7 @@ import {
   EditLayer,
   COLOR_PRESETS,
   resolveColorParams,
+  getSpeakerColor,
 } from '@ai-video/shared';
 
 export const InspectorPanel: React.FC = () => {
@@ -507,6 +508,10 @@ export const InspectorPanel: React.FC = () => {
   // Selected layer derived from timeline selection or default to first layer
   const selectedLayerId = timeline.selectedLayerIds[0] || effectivePlan?.layers[0]?.id;
   const activeLayer = effectivePlan?.layers.find((l) => l.id === selectedLayerId);
+  const selectedCueIndex = cues.findIndex(
+    (c, idx) => (c.id || `cue_${idx + 1}`) === selectedLayerId || `cue_${idx}` === selectedLayerId
+  );
+  const selectedCue = selectedCueIndex !== -1 ? cues[selectedCueIndex] : null;
 
   // Debounced RFC 6902 Sync with Optimistic Concurrency Handling
   const syncDraftToServer = useCallback(async () => {
@@ -2312,6 +2317,190 @@ export const InspectorPanel: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+      ) : selectedCue ? (
+        <div className="bg-[#18191B] p-3.5 rounded-xl border border-[#393B3F] space-y-4 animate-in fade-in">
+          {/* Header */}
+          <div className="flex items-center justify-between pb-2 border-b border-[#393B3F]">
+            <div className="flex items-center space-x-2">
+              <span
+                style={{ backgroundColor: getSpeakerColor(selectedCue.speaker) }}
+                className="w-2.5 h-2.5 rounded-full"
+              />
+              <span className="font-semibold text-[#FFF5F5] text-xs">
+                Subtitle Cue #{selectedCueIndex + 1}
+              </span>
+              <span className="font-mono text-[10px] text-[#F7D7D1]">
+                ({(selectedCue.startMs / 1000).toFixed(2)}s - {(selectedCue.endMs / 1000).toFixed(2)}s)
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => setCurrentTime(selectedCue.startMs / 1000)}
+                className="p-1 rounded hover:bg-[#2A2C2F] text-[#E3B5BE] hover:text-[#F7D7D1] transition-colors"
+                title="Seek playhead to cue start"
+              >
+                <PlayCircle className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteCueLine(selectedCueIndex)}
+                className="p-1 rounded hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors"
+                title="Delete this subtitle cue"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Speaker Diarization Tag */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono text-[#FFF5F5]/60 block">
+              Speaker Diarization Tag
+            </label>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={selectedCue.speaker || 'Speaker 1'}
+                onChange={(e) => {
+                  const newSpk = e.target.value;
+                  const currentCues = project?.analysisSummary?.cues || [];
+                  const updated = currentCues.map((c, i) =>
+                    i === selectedCueIndex ? { ...c, speaker: newSpk } : c
+                  );
+                  updateCues(updated);
+                  if (project) {
+                    api.updateCaptions(project.id, updated).catch(() => {});
+                  }
+                }}
+                className="flex-1 bg-[#222326] text-[#FFF5F5] text-xs px-2.5 py-1.5 rounded-lg border border-[#393B3F] focus:border-[#E3B5BE] focus:outline-none"
+                placeholder="Speaker 1"
+              />
+              <div className="flex items-center space-x-1">
+                {['Speaker 1', 'Speaker 2', 'Speaker 3'].map((spk) => (
+                  <button
+                    key={spk}
+                    type="button"
+                    onClick={() => {
+                      const currentCues = project?.analysisSummary?.cues || [];
+                      const updated = currentCues.map((c, i) =>
+                        i === selectedCueIndex ? { ...c, speaker: spk } : c
+                      );
+                      updateCues(updated);
+                      if (project) {
+                        api.updateCaptions(project.id, updated).catch(() => {});
+                      }
+                    }}
+                    className={`px-2 py-1 rounded text-[10px] font-mono border transition-all ${
+                      (selectedCue.speaker || 'Speaker 1') === spk
+                        ? 'bg-[#E3B5BE]/25 text-[#F7D7D1] border-[#E3B5BE]'
+                        : 'bg-[#222326] text-[#FFF5F5]/60 border-[#393B3F] hover:text-[#FFF5F5]'
+                    }`}
+                  >
+                    {spk}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Subtitle Textarea */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[10px] font-mono text-[#FFF5F5]/60">
+              <label>Caption Text</label>
+              <span>{selectedCue.text?.length || 0} characters</span>
+            </div>
+            <textarea
+              rows={3}
+              value={selectedCue.text || ''}
+              onChange={(e) => handleUpdateCueText(selectedCueIndex, e.target.value)}
+              className="w-full bg-[#222326] text-[#FFF5F5] text-xs font-medium rounded-lg p-2.5 border border-[#393B3F] focus:border-[#E3B5BE] focus:outline-none leading-relaxed"
+              placeholder="Enter spoken dialogue..."
+            />
+          </div>
+
+          {/* Start and End Timestamps */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="bg-[#222326] p-2 rounded-lg border border-[#393B3F] space-y-1">
+              <span className="text-[10px] text-[#FFF5F5]/60 font-mono block">Start Time</span>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[#F7D7D1]">
+                  {(selectedCue.startMs / 1000).toFixed(2)}s
+                </span>
+                <div className="flex items-center space-x-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleUpdateCueTiming(
+                        selectedCueIndex,
+                        Math.max(0, selectedCue.startMs / 1000 - 0.1),
+                        selectedCue.endMs / 1000
+                      )
+                    }
+                    className="p-1 rounded bg-[#18191B] hover:bg-[#34373B] text-[#FFF5F5]/70"
+                    title="-0.1s"
+                  >
+                    <Minus className="w-2.5 h-2.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleUpdateCueTiming(
+                        selectedCueIndex,
+                        selectedCue.startMs / 1000 + 0.1,
+                        selectedCue.endMs / 1000
+                      )
+                    }
+                    className="p-1 rounded bg-[#18191B] hover:bg-[#34373B] text-[#FFF5F5]/70"
+                    title="+0.1s"
+                  >
+                    <Plus className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#222326] p-2 rounded-lg border border-[#393B3F] space-y-1">
+              <span className="text-[10px] text-[#FFF5F5]/60 font-mono block">End Time</span>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[#F7D7D1]">
+                  {(selectedCue.endMs / 1000).toFixed(2)}s
+                </span>
+                <div className="flex items-center space-x-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleUpdateCueTiming(
+                        selectedCueIndex,
+                        selectedCue.startMs / 1000,
+                        Math.max(selectedCue.startMs / 1000 + 0.1, selectedCue.endMs / 1000 - 0.1)
+                      )
+                    }
+                    className="p-1 rounded bg-[#18191B] hover:bg-[#34373B] text-[#FFF5F5]/70"
+                    title="-0.1s"
+                  >
+                    <Minus className="w-2.5 h-2.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleUpdateCueTiming(
+                        selectedCueIndex,
+                        selectedCue.startMs / 1000,
+                        selectedCue.endMs / 1000 + 0.1
+                      )
+                    }
+                    className="p-1 rounded bg-[#18191B] hover:bg-[#34373B] text-[#FFF5F5]/70"
+                    title="+0.1s"
+                  >
+                    <Plus className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="p-6 text-center text-[#FFF5F5]/50 border border-dashed border-[#393B3F] rounded-xl bg-[#18191B]">

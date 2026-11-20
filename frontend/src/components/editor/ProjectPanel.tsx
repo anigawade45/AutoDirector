@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   Film,
   HardDrive,
@@ -18,18 +18,46 @@ import {
   Check,
   Plus,
   Trash2,
+  Search,
+  Users,
+  Video,
+  Tag,
 } from 'lucide-react';
-import { useEditorStore, selectEffectivePlan } from '../../stores/editorStore';
+import {
+  useEditorStore,
+  selectEffectivePlan,
+  selectMediaIndex,
+} from '../../stores/editorStore';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
 import { computeNaturalWordTimings } from '../../utils/subtitleTiming';
+import { getSpeakerColor } from '@ai-video/shared';
 
 export const ProjectPanel: React.FC = () => {
-  const { project, playback, setCurrentTime, selectLayer, updateCues } = useEditorStore();
+  const {
+    project,
+    playback,
+    setCurrentTime,
+    selectLayer,
+    updateCues,
+    deleteCue,
+    cleanEmptySubtitleCues,
+    renameSpeaker,
+  } = useEditorStore();
   const effectivePlan = useEditorStore(selectEffectivePlan);
+  const mediaIndex = useEditorStore(selectMediaIndex);
+
+  const [activeTab, setActiveTab] = useState<'transcript' | 'scenes' | 'speakers'>('transcript');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSpeakerFilter, setSelectedSpeakerFilter] = useState<string | null>(null);
+
   const [isEditing, setIsEditing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Speaker renaming state
+  const [renamingSpeakerId, setRenamingSpeakerId] = useState<string | null>(null);
+  const [newSpeakerName, setNewSpeakerName] = useState('');
 
   const formatTime = (ms: number) => {
     const totalSec = Math.max(0, ms) / 1000;
@@ -41,8 +69,6 @@ export const ProjectPanel: React.FC = () => {
 
   const currentSec = playback.currentTime;
   const analysis = project?.analysisSummary;
-
-  // Real speech cues from backend audio analysis
   const cues = analysis?.cues || [];
 
   const handleUpdateCueText = (index: number, newText: string) => {
@@ -89,6 +115,7 @@ export const ProjectPanel: React.FC = () => {
       id: `cue_user_${Date.now()}`,
       startMs,
       endMs,
+      speaker: selectedSpeakerFilter || 'Speaker 1',
       text: 'New subtitle text',
       words: [
         { word: 'New', startMs, endMs: startMs + 800, score: 1 },
@@ -103,321 +130,483 @@ export const ProjectPanel: React.FC = () => {
     updateCues(currentCues);
     toast.success('Added new subtitle line', 'Captions');
 
-    api.updateCaptions(project.id, currentCues).catch((err) => {
-      console.error('Failed to save added cue:', err);
-    });
+    api
+      .updateCaptions(project.id, currentCues)
+      .then(() => {
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2500);
+      })
+      .catch((err) => {
+        console.error('Failed to save added cue:', err);
+        setSaveStatus('error');
+      });
   };
 
   const handleDeleteCue = (index: number) => {
-    if (!project) return;
-    const currentCues = project.analysisSummary?.cues || [];
-    const updatedCues = currentCues.filter((_, i) => i !== index);
-
-    updateCues(updatedCues);
+    deleteCue(index);
     toast.info('Removed subtitle line', 'Captions');
-
-    api.updateCaptions(project.id, updatedCues).catch((err) => {
-      console.error('Failed to save deleted cue:', err);
-    });
   };
 
   const handleCleanEmptyCues = () => {
-    if (!project) return;
-    const currentCues = project.analysisSummary?.cues || [];
-    const cleaned = currentCues.filter((c) => {
-      const cleanText = (c.text || '').replace(/["'\s]/g, '');
-      const hasWords =
-        Array.isArray(c.words) &&
-        c.words.some(
-          (w: any) => ((w.w || w.word || '') as string).replace(/["'\s]/g, '').length > 0
-        );
-      return cleanText.length > 0 || hasWords;
-    });
-    if (cleaned.length === currentCues.length) {
-      toast.info('No empty subtitle cues to remove', 'Captions');
-      return;
+    const removed = cleanEmptySubtitleCues();
+    if (removed > 0) {
+      toast.success(`Removed ${removed} empty subtitle cue(s)`, 'Clean Subtitles');
+    } else {
+      toast.info('No empty cues found', 'Clean Subtitles');
     }
-    updateCues(cleaned);
-    toast.success(`Removed ${currentCues.length - cleaned.length} empty cue(s)`, 'Clean Subtitles');
-    api.updateCaptions(project.id, cleaned).catch((err) => {
-      console.error('Failed to clean empty cues:', err);
-    });
   };
 
+  const handleSaveSpeakerRename = (oldName: string) => {
+    const cleanName = newSpeakerName.trim();
+    if (!cleanName || cleanName === oldName) {
+      setRenamingSpeakerId(null);
+      return;
+    }
+    renameSpeaker(oldName, cleanName);
+    setRenamingSpeakerId(null);
+    setNewSpeakerName('');
+    toast.success(`Renamed "${oldName}" to "${cleanName}" across all cues`, 'Speaker Diarization');
+  };
+
+  // Filtered dialogue cues
+  const filteredCues = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return cues.map((cue, originalIndex) => ({ cue, originalIndex })).filter(({ cue }) => {
+      if (selectedSpeakerFilter && (cue.speaker || 'Speaker 1') !== selectedSpeakerFilter) {
+        return false;
+      }
+      if (q) {
+        const textMatch = (cue.text || '').toLowerCase().includes(q);
+        const wordMatch = cue.words?.some((w: any) =>
+          ((w as any).word || (w as any).w || '').toLowerCase().includes(q)
+        );
+        return textMatch || wordMatch;
+      }
+      return true;
+    });
+  }, [cues, searchQuery, selectedSpeakerFilter]);
+
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5 select-none text-xs font-sans text-[#FFF5F5]">
-      {/* Project & Media Info Card */}
-      <div className="bg-[#18191B] rounded-xl p-3 border border-[#393B3F] space-y-2.5">
-        <div className="flex items-center justify-between text-[#FFF5F5]">
-          <div className="flex items-center space-x-1.5 font-semibold">
+    <div className="h-full flex flex-col p-4 space-y-4 overflow-y-auto custom-scrollbar select-none text-xs">
+      {/* Media Metadata Card */}
+      <div className="bg-[#18191B] p-3 rounded-xl border border-[#393B3F] space-y-2.5">
+        <div className="flex items-center justify-between text-[#FFF5F5]/60 font-mono text-[11px]">
+          <span className="flex items-center space-x-1">
             <Film className="w-3.5 h-3.5 text-[#E3B5BE]" />
-            <span className="truncate max-w-[150px]">{project?.title || 'Project'}</span>
-          </div>
-          <span className="px-2 py-0.5 rounded-full bg-[#2A2C2F] text-[10px] text-[#F7D7D1] font-mono border border-[#393B3F]">
-            {project?.status || 'ready'}
+            <span>SOURCE ASSET</span>
+          </span>
+          <span className="uppercase text-[10px] px-1.5 py-0.5 rounded bg-[#2A2C2F] text-[#F7D7D1] border border-[#393B3F]">
+            {project?.status || 'Active'}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-[#393B3F]">
-          <div>
-            <span className="text-[#FFF5F5]/50 block text-[10px]">Resolution</span>
-            <span className="font-mono text-[#FFF5F5]">
-              {project?.media ? `${project.media.width}x${project.media.height}` : '1920x1080'}
-            </span>
-          </div>
-          <div>
-            <span className="text-[#FFF5F5]/50 block text-[10px]">Frame Rate</span>
-            <span className="font-mono text-[#FFF5F5]">{project?.fps || 30} FPS</span>
-          </div>
-          <div>
-            <span className="text-[#FFF5F5]/50 block text-[10px]">Aspect Ratio</span>
-            <span className="font-mono text-[#FFF5F5]">{project?.aspect || '16:9'}</span>
-          </div>
-          <div>
-            <span className="text-[#FFF5F5]/50 block text-[10px]">Duration</span>
-            <span className="font-mono text-[#F7D7D1]">
-              {formatTime((project?.durationSec || 60) * 1000)}
-            </span>
-          </div>
+        <div>
+          <h3 className="font-semibold text-sm text-[#FFF5F5] truncate" title={project?.title}>
+            {project?.title || 'Untitled Sequence'}
+          </h3>
+          <p className="text-[#FFF5F5]/40 font-mono text-[10px] truncate mt-0.5">
+            ID: {project?.id || '—'}
+          </p>
         </div>
 
-        {project?.assetId && (
-          <div className="pt-2 border-t border-[#393B3F] flex items-center justify-between text-[10px] text-[#FFF5F5]/60 font-mono">
-            <span className="flex items-center space-x-1">
-              <HardDrive className="w-3 h-3 text-[#E3B5BE]" />
-              <span>Base Asset</span>
+        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#393B3F]/60 text-[11px]">
+          <div className="space-y-0.5">
+            <span className="text-[#FFF5F5]/50 block">Resolution</span>
+            <span className="font-mono text-[#FFF5F5] font-medium">
+              {project?.media?.width || 1920}x{project?.media?.height || 1080}
             </span>
-            <span className="text-[#FFF5F5]/80 truncate max-w-[120px]">{project.assetId}</span>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-[#FFF5F5]/50 block">Framerate</span>
+            <span className="font-mono text-[#FFF5F5] font-medium">{project?.fps || 30} FPS</span>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-[#FFF5F5]/50 block">Duration</span>
+            <span className="font-mono text-[#FFF5F5] font-medium">
+              {(playback.duration || project?.durationSec || 0).toFixed(2)}s
+            </span>
+          </div>
+          <div className="space-y-0.5">
+            <span className="text-[#FFF5F5]/50 block">Aspect Ratio</span>
+            <span className="font-mono text-[#FFF5F5] font-medium">{project?.aspect || '16:9'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Multimodal Index Explorer: Tabs for Transcript, Scenes, and Speakers */}
+      <div className="bg-[#18191B] rounded-xl border border-[#393B3F] p-3 space-y-3">
+        {/* Navigation Tabs */}
+        <div className="flex items-center justify-between border-b border-[#393B3F]/70 pb-2">
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => setActiveTab('transcript')}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors ${
+                activeTab === 'transcript'
+                  ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                  : 'text-[#FFF5F5]/70 hover:text-white'
+              }`}
+            >
+              <FileText className="w-3 h-3" />
+              <span>Transcript ({cues.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('scenes')}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors ${
+                activeTab === 'scenes'
+                  ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                  : 'text-[#FFF5F5]/70 hover:text-white'
+              }`}
+            >
+              <Video className="w-3 h-3" />
+              <span>Scenes ({mediaIndex.scenes.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('speakers')}
+              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors ${
+                activeTab === 'speakers'
+                  ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                  : 'text-[#FFF5F5]/70 hover:text-white'
+              }`}
+            >
+              <Users className="w-3 h-3" />
+              <span>Speakers ({mediaIndex.speakers.length})</span>
+            </button>
+          </div>
+
+          {/* Quick status indicators */}
+          {saveStatus === 'saving' && (
+            <span className="flex items-center space-x-1 text-[10px] text-[#E3B5BE]">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+              <span>Syncing</span>
+            </span>
+          )}
+          {saveStatus === 'saved' && (
+            <span className="flex items-center space-x-1 text-[10px] text-emerald-400">
+              <Check className="w-2.5 h-2.5" />
+              <span>Saved</span>
+            </span>
+          )}
+        </div>
+
+        {/* Tab 1: Transcript & Dialogue */}
+        {activeTab === 'transcript' && (
+          <div className="space-y-2.5">
+            {/* Search & Actions Bar */}
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1">
+                <Search className="w-3 h-3 absolute left-2 top-2 text-[#FFF5F5]/40" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search dialogue words..."
+                  className="w-full bg-[#121314] text-[#FFF5F5] pl-7 pr-2 py-1 rounded-lg text-[11px] border border-[#393B3F] focus:border-[#E3B5BE] focus:outline-none"
+                />
+              </div>
+
+              {selectedSpeakerFilter && (
+                <button
+                  onClick={() => setSelectedSpeakerFilter(null)}
+                  className="px-2 py-1 rounded bg-[#2A2C2F] text-[10px] text-[#F7D7D1] border border-[#E3B5BE]/40 flex items-center space-x-1"
+                  title="Clear speaker filter"
+                >
+                  <span>{selectedSpeakerFilter}</span>
+                  <span>✕</span>
+                </button>
+              )}
+
+              {cues.some((c) => !(c.text || '').replace(/^["'\s]+|["'\s]+$/g, '').trim()) && (
+                <button
+                  type="button"
+                  onClick={handleCleanEmptyCues}
+                  className="px-2 py-1 rounded text-[10px] bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/40 flex items-center space-x-1"
+                  title="Remove empty subtitle cues"
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                  <span>Clean</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsEditing(!isEditing)}
+                className="px-2 py-1 rounded text-[10px] bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5] border border-[#393B3F] flex items-center space-x-1"
+              >
+                {isEditing ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Edit3 className="w-2.5 h-2.5 text-[#E3B5BE]" />}
+                <span>{isEditing ? 'Done' : 'Edit'}</span>
+              </button>
+
+              {isEditing && (
+                <button
+                  type="button"
+                  onClick={handleAddCueLine}
+                  className="px-2 py-1 rounded text-[10px] bg-[#E3B5BE] text-[#18191B] font-bold flex items-center space-x-0.5"
+                  title="Add cue at playhead"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                  <span>Add</span>
+                </button>
+              )}
+            </div>
+
+            {/* Cue List */}
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+              {filteredCues.length === 0 ? (
+                <div className="text-center py-6 px-4 bg-[#121314] rounded-xl border border-[#393B3F]/60 space-y-1.5">
+                  <MicOff className="w-5 h-5 mx-auto text-[#FFF5F5]/40" />
+                  <p className="font-semibold text-xs text-[#FFF5F5]">No matching dialogue cues</p>
+                  <p className="text-[10px] text-[#FFF5F5]/40">
+                    Try clearing the search query or click "+ Add" to create a caption.
+                  </p>
+                </div>
+              ) : (
+                filteredCues.map(({ cue, originalIndex }) => {
+                  const startSec = cue.startMs / 1000;
+                  const endSec = cue.endMs / 1000;
+                  const isActive = currentSec >= startSec && currentSec <= endSec;
+                  const speaker = (cue.speaker || 'Speaker 1').trim();
+                  const speakerColor = getSpeakerColor(speaker);
+
+                  return (
+                    <div
+                      key={cue.id || originalIndex}
+                      style={{ borderLeftColor: speakerColor, borderLeftWidth: '3px' }}
+                      className={`p-2 rounded-lg border transition-all ${
+                        isActive
+                          ? 'bg-[#E3B5BE]/15 border-[#E3B5BE] text-[#F7D7D1] shadow-sm'
+                          : 'bg-[#121314] border-[#393B3F]/70 hover:border-[#484949] text-[#FFF5F5]/80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setCurrentTime(startSec)}
+                            className="font-mono text-[10px] flex items-center space-x-1 text-[#E3B5BE] hover:underline"
+                          >
+                            <PlayCircle className="w-2.5 h-2.5" />
+                            <span>
+                              {formatTime(cue.startMs)} - {formatTime(cue.endMs)}
+                            </span>
+                          </button>
+                          <span
+                            onClick={() => setSelectedSpeakerFilter(speaker)}
+                            className="text-[9px] font-mono px-1 rounded bg-[#2A2C2F] text-[#FFF5F5]/70 hover:text-white cursor-pointer"
+                            title="Filter by this speaker"
+                          >
+                            {speaker}
+                          </span>
+                        </div>
+
+                        {isEditing && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCue(originalIndex)}
+                            className="text-[#FFF5F5]/30 hover:text-red-400 p-0.5"
+                            title="Delete cue"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {isEditing ? (
+                        <textarea
+                          rows={2}
+                          value={cue.text}
+                          onChange={(e) => handleUpdateCueText(originalIndex, e.target.value)}
+                          className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded p-1.5 text-xs text-[#FFF5F5] resize-none focus:outline-none"
+                        />
+                      ) : (
+                        <p
+                          onClick={() => setCurrentTime(startSec)}
+                          className="text-[11px] leading-relaxed cursor-pointer hover:text-white"
+                        >
+                          {cue.text?.trim() ? (
+                            `"${cue.text.trim()}"`
+                          ) : (
+                            <span className="text-red-400 italic">[Empty Caption — Click Edit to add text]</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Visual Scenes */}
+        {activeTab === 'scenes' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-mono text-[#FFF5F5]/60 mb-1">
+              <span>Detected Scenes ({mediaIndex.scenes.length})</span>
+              <span>Click scene to jump</span>
+            </div>
+
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+              {mediaIndex.scenes.map((scene) => {
+                const isActive = currentSec >= scene.startSec && currentSec < scene.endSec;
+
+                return (
+                  <div
+                    key={scene.id}
+                    onClick={() => setCurrentTime(scene.startSec)}
+                    className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                      isActive
+                        ? 'bg-[#E3B5BE]/20 border-[#E3B5BE] shadow-md'
+                        : 'bg-[#121314] border-[#393B3F]/70 hover:border-[#484949]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-semibold text-xs text-[#FFF5F5]">
+                          Scene {scene.index}
+                        </span>
+                        <span className="font-mono text-[10px] text-[#F7D7D1]">
+                          ({scene.startSec.toFixed(1)}s - {scene.endSec.toFixed(1)}s)
+                        </span>
+                      </div>
+                      <span className="font-mono text-[10px] text-[#FFF5F5]/50">
+                        {scene.durationSec.toFixed(1)}s duration
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-[#FFF5F5]/60 mt-1">
+                      <span>{scene.cues.length} dialogue cue(s)</span>
+                      <div className="flex items-center space-x-1">
+                        {scene.speakers.map((spk) => (
+                          <span
+                            key={spk}
+                            style={{ backgroundColor: getSpeakerColor(spk) }}
+                            className="w-2 h-2 rounded-full"
+                            title={spk}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Speaker Diarization & Metrics */}
+        {activeTab === 'speakers' && (
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between text-[11px] font-mono text-[#FFF5F5]/60 mb-1">
+              <span>Speakers & Dialogue Breakdown</span>
+              <span>{mediaIndex.speakerTurnCount} speaker turns</span>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+              {mediaIndex.speakers.map((spk) => {
+                const isRenaming = renamingSpeakerId === spk.id;
+
+                return (
+                  <div
+                    key={spk.id}
+                    className="p-2.5 rounded-lg bg-[#121314] border border-[#393B3F]/70 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span
+                          style={{ backgroundColor: spk.color }}
+                          className="w-3 h-3 rounded-full shrink-0 shadow-sm"
+                        />
+                        {isRenaming ? (
+                          <div className="flex items-center space-x-1">
+                            <input
+                              type="text"
+                              value={newSpeakerName}
+                              onChange={(e) => setNewSpeakerName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveSpeakerRename(spk.name);
+                                else if (e.key === 'Escape') setRenamingSpeakerId(null);
+                              }}
+                              autoFocus
+                              className="w-28 bg-[#18191B] text-[#FFF5F5] px-1.5 py-0.5 rounded text-xs border border-[#E3B5BE] focus:outline-none"
+                            />
+                            <button
+                              onClick={() => handleSaveSpeakerRename(spk.name)}
+                              className="px-2 py-0.5 rounded bg-[#E3B5BE] text-[#18191B] font-bold text-[10px]"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setRenamingSpeakerId(null)}
+                              className="text-[#FFF5F5]/40 hover:text-white text-[10px]"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-1.5">
+                            <span className="font-semibold text-xs text-[#FFF5F5]">{spk.name}</span>
+                            <button
+                              onClick={() => {
+                                setRenamingSpeakerId(spk.id);
+                                setNewSpeakerName(spk.name);
+                              }}
+                              className="text-[#FFF5F5]/40 hover:text-[#E3B5BE] p-0.5"
+                              title="Rename speaker"
+                            >
+                              <Edit3 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setSelectedSpeakerFilter(spk.name);
+                          setActiveTab('transcript');
+                        }}
+                        className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#2A2C2F] text-[#F7D7D1] hover:bg-[#34373B]"
+                      >
+                        Filter dialogue
+                      </button>
+                    </div>
+
+                    {/* Progress Bar of Dialogue Percentage */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-[#FFF5F5]/60">
+                        <span>Speaking Time: {(spk.totalSpeakingMs / 1000).toFixed(1)}s</span>
+                        <span>{spk.percentageOfDialogue}% of dialogue</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-[#2A2C2F] rounded-full overflow-hidden">
+                        <div
+                          style={{
+                            width: `${spk.percentageOfDialogue}%`,
+                            backgroundColor: spk.color,
+                          }}
+                          className="h-full rounded-full transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-[#FFF5F5]/50 font-mono">
+                      <span>{spk.cuesCount} cues • {spk.wordCount} words</span>
+                      <span>Active in {spk.sceneIndices.length} scene(s)</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Media Analysis Summary */}
-      <div>
-        <div className="flex items-center space-x-2 text-[#FFF5F5] font-semibold mb-2.5">
-          <Sparkles className="w-3.5 h-3.5 text-[#E3B5BE]" />
-          <span>Media Intelligence & Audio</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="bg-[#18191B] p-2.5 rounded-xl border border-[#393B3F]">
-            <span className="text-[#FFF5F5]/60 flex items-center space-x-1 text-[11px]">
-              <Scissors className="w-3 h-3 text-[#E3B5BE]" />
-              <span>Silences</span>
-            </span>
-            <span className="font-mono text-[#F7D7D1] text-xs font-semibold mt-1 block">
-              {analysis && analysis.silencesCount !== undefined
-                ? `${analysis.silencesCount} regions`
-                : '—'}
-            </span>
-          </div>
-
-          <div className="bg-[#18191B] p-2.5 rounded-xl border border-[#393B3F]">
-            <span className="text-[#FFF5F5]/60 flex items-center space-x-1 text-[11px]">
-              <Activity className="w-3 h-3 text-[#F7D7D1]" />
-              <span>Scene Cuts</span>
-            </span>
-            <span className="font-mono text-[#FFF5F5] text-xs font-semibold mt-1 block">
-              {analysis && analysis.sceneCutsCount !== undefined
-                ? `${analysis.sceneCutsCount} detected`
-                : '—'}
-            </span>
-          </div>
-
-          <div className="bg-[#18191B] p-2.5 rounded-xl border border-[#393B3F]">
-            <span className="text-[#FFF5F5]/60 flex items-center space-x-1 text-[11px]">
-              <Music className="w-3 h-3 text-[#E3B5BE]" />
-              <span>Musical Tempo</span>
-            </span>
-            <span className="font-mono text-[#F7D7D1] text-xs font-semibold mt-1 block">
-              {analysis && analysis.bpm !== undefined ? `${analysis.bpm} BPM` : '—'}
-            </span>
-          </div>
-
-          <div className="bg-[#18191B] p-2.5 rounded-xl border border-[#393B3F]">
-            <span className="text-[#FFF5F5]/60 flex items-center space-x-1 text-[11px]">
-              <Volume2 className="w-3 h-3 text-[#F7D7D1]" />
-              <span>Integrated LUFS</span>
-            </span>
-            <span className="font-mono text-[#FFF5F5] text-xs font-semibold mt-1 block">
-              {analysis && analysis.integratedLufs !== undefined
-                ? `${analysis.integratedLufs.toFixed(1)} dB`
-                : '—'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Transcript & Dialogue Explorer */}
-      <div>
-        <div className="flex items-center justify-between text-[#FFF5F5]/80 font-mono text-[11px] font-semibold mb-2">
-          <div className="flex items-center space-x-1.5">
-            <FileText className="w-3.5 h-3.5 text-[#E3B5BE]" />
-            <span className="uppercase tracking-wider">Dialogue & Cues ({cues.length})</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            {saveStatus === 'saving' && (
-              <span className="flex items-center space-x-1 text-[10px] text-[#E3B5BE]">
-                <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                <span>Saving</span>
-              </span>
-            )}
-            {saveStatus === 'saved' && (
-              <span className="flex items-center space-x-1 text-[10px] text-emerald-400">
-                <Check className="w-2.5 h-2.5" />
-                <span>Saved</span>
-              </span>
-            )}
-            {cues.some((c) => !(c.text || '').replace(/["'\s]/g, '')) && (
-              <button
-                type="button"
-                onClick={handleCleanEmptyCues}
-                className="px-1.5 py-0.5 rounded text-[10px] bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/40 flex items-center space-x-1 transition-colors"
-                title="Remove empty subtitle cues"
-              >
-                <Trash2 className="w-2.5 h-2.5" />
-                <span>Clean</span>
-              </button>
-            )}
-            {isEditing && (
-              <button
-                type="button"
-                onClick={handleAddCueLine}
-                className="px-1.5 py-0.5 rounded text-[10px] bg-[#E3B5BE]/15 hover:bg-[#E3B5BE]/25 text-[#F7D7D1] border border-[#E3B5BE]/40 flex items-center space-x-0.5 transition-colors"
-                title="Add a subtitle line"
-              >
-                <Plus className="w-2.5 h-2.5" />
-                <span>Add</span>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsEditing(!isEditing)}
-              className="px-2 py-0.5 rounded text-[10px] bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5] border border-[#393B3F] flex items-center space-x-1 transition-colors"
-            >
-              {isEditing ? (
-                <>
-                  <Check className="w-2.5 h-2.5 text-emerald-400" />
-                  <span>Done</span>
-                </>
-              ) : (
-                <>
-                  <Edit3 className="w-2.5 h-2.5 text-[#E3B5BE]" />
-                  <span>Edit</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-          {cues.length === 0 ? (
-            <div className="text-center py-6 px-4 bg-[#18191B] rounded-xl border border-[#393B3F] space-y-2">
-              <div className="w-8 h-8 rounded-lg bg-[#2A2C2F] border border-[#393B3F] flex items-center justify-center mx-auto text-[#E3B5BE]">
-                <MicOff className="w-4 h-4 text-[#E3B5BE]" />
-              </div>
-              <p className="font-semibold text-[#FFF5F5] text-xs">No Dialogue Detected</p>
-              <p className="text-[11px] text-[#FFF5F5]/50 leading-relaxed max-w-[220px] mx-auto">
-                No spoken dialogue was detected in this clip. Click "Edit" or "+ Add" to create
-                subtitles manually.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEditing(true);
-                  handleAddCueLine();
-                }}
-                className="px-3 py-1 rounded-lg text-xs bg-[#E3B5BE] text-[#18191B] font-medium hover:bg-[#E3B5BE]/90 transition-colors"
-              >
-                + Add Subtitle Line
-              </button>
-            </div>
-          ) : (
-            cues.map((cue, index) => {
-              const startSec = cue.startMs / 1000;
-              const endSec = cue.endMs / 1000;
-              const isActive = currentSec >= startSec && currentSec <= endSec;
-
-              return (
-                <div
-                  key={cue.id || index}
-                  className={`p-2.5 rounded-xl border transition-all ${
-                    isActive
-                      ? 'bg-[#E3B5BE]/15 border-[#E3B5BE] text-[#F7D7D1] shadow-sm'
-                      : 'bg-[#18191B] border-[#393B3F] hover:border-[#484949] text-[#FFF5F5]/80'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setCurrentTime(startSec)}
-                      className={`font-mono text-[10px] flex items-center space-x-1 hover:underline ${
-                        isActive ? 'text-[#F7D7D1] font-semibold' : 'text-[#FFF5F5]/50'
-                      }`}
-                      title="Seek to cue"
-                    >
-                      <PlayCircle className="w-2.5 h-2.5 text-[#E3B5BE]" />
-                      <span>
-                        {formatTime(cue.startMs)} - {formatTime(cue.endMs)}
-                      </span>
-                    </button>
-                    <div className="flex items-center space-x-1.5">
-                      {isActive && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE] animate-pulse" />
-                      )}
-                      {isEditing && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCue(index)}
-                          className="text-[#FFF5F5]/30 hover:text-red-400 p-0.5 transition-colors"
-                          title="Delete line"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {isEditing ? (
-                    <textarea
-                      rows={2}
-                      value={cue.text}
-                      onChange={(e) => handleUpdateCueText(index, e.target.value)}
-                      placeholder="Enter subtitle text..."
-                      className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded p-1.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/30 resize-none focus:outline-none transition-colors"
-                    />
-                  ) : (
-                    <p
-                      onClick={() => setCurrentTime(startSec)}
-                      className={`text-[11px] leading-relaxed cursor-pointer ${
-                        isActive ? 'text-[#FFF5F5] font-medium' : 'text-[#FFF5F5]/70'
-                      }`}
-                    >
-                      {cue.text?.trim() ? (
-                        `"${cue.text.trim()}"`
-                      ) : cue.words &&
-                        cue.words.map((w: any) => w.word || w.w).join(' ').trim() ? (
-                        `"${cue.words.map((w: any) => w.word || w.w).join(' ').trim()}"`
-                      ) : (
-                        <span className="text-[#FFF5F5]/40 italic">
-                          (Empty cue — click to seek or Edit to change)
-                        </span>
-                      )}
-                    </p>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* Active Edit Plan Overview */}
-      <div className="pt-2 border-t border-[#393B3F]">
-        <div className="flex items-center justify-between text-[#FFF5F5]/80 font-mono text-[11px] font-semibold mb-2">
+      {/* Active Edit Plan Layers Overview */}
+      <div className="bg-[#18191B] rounded-xl border border-[#393B3F] p-3 space-y-2">
+        <div className="flex items-center justify-between text-[#FFF5F5]/80 font-mono text-[11px] font-semibold">
           <div className="flex items-center space-x-1.5">
             <Layers className="w-3.5 h-3.5 text-[#E3B5BE]" />
-            <span className="uppercase tracking-wider">Current Plan</span>
+            <span className="uppercase tracking-wider">Active Sequence Layers</span>
           </div>
           <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[#2A2C2F] text-[#F7D7D1] border border-[#393B3F]">
             v{effectivePlan?.version ?? 1}
@@ -429,11 +618,11 @@ export const ProjectPanel: React.FC = () => {
             <div
               key={l.id}
               onClick={() => selectLayer(l.id)}
-              className="px-2.5 py-1.5 rounded-lg bg-[#18191B] hover:bg-[#2A2C2F] border border-[#393B3F] flex items-center justify-between cursor-pointer transition-colors"
+              className="px-2.5 py-1.5 rounded-lg bg-[#121314] hover:bg-[#2A2C2F] border border-[#393B3F]/70 flex items-center justify-between cursor-pointer transition-colors"
             >
               <div className="flex items-center space-x-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#E3B5BE]" />
-                <span className="capitalize font-medium text-[#FFF5F5]/90">{l.layer}</span>
+                <span className="capitalize font-medium text-[#FFF5F5]/90 text-xs">{l.layer}</span>
               </div>
               <ChevronRight className="w-3 h-3 text-[#FFF5F5]/40" />
             </div>

@@ -15,6 +15,13 @@ import {
   Pause,
   Scissors,
   Edit3,
+  MousePointer,
+  Sliders,
+  Check,
+  X,
+  Plus,
+  Minus,
+  RotateCcw,
 } from 'lucide-react';
 import {
   useEditorStore,
@@ -25,7 +32,8 @@ import {
 } from '../../stores/editorStore';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
-import { COLOR_PRESETS } from '@ai-video/shared';
+import { COLOR_PRESETS, resolveColorParams, getSpeakerColor } from '@ai-video/shared';
+import { compare } from 'fast-json-patch';
 
 export const TimelineView: React.FC = () => {
   const {
@@ -38,6 +46,7 @@ export const TimelineView: React.FC = () => {
     setScrollX,
     fitTimelineToWidth,
     toggleSnap,
+    setToolMode,
     selectLayer,
     deleteSelectedLayers,
     updateLayerRange,
@@ -45,9 +54,13 @@ export const TimelineView: React.FC = () => {
     splitSubtitleCueAtTime,
     updateCueTiming,
     updateCueText,
+    updateCueSpeaker,
     deleteCue,
+    cleanEmptySubtitleCues,
     updateDraft,
+    commitDraft,
     project,
+    plan,
   } = useEditorStore();
 
   const togglePlay = useCallback(() => {
@@ -255,6 +268,25 @@ export const TimelineView: React.FC = () => {
       if (isCue && project) {
         const latestCues = useEditorStore.getState().project?.analysisSummary?.cues || [];
         api.updateCaptions(project.id, latestCues).catch(() => {});
+      } else if (!isCue && project && clip.layerId) {
+        // Sync trimmed plan layer to server
+        const currentPlan = useEditorStore.getState().plan;
+        if (currentPlan.current && currentPlan.draft) {
+          const patch = compare(currentPlan.current, currentPlan.draft);
+          if (patch.length > 0) {
+            api
+              .patchPlan(project.id, currentPlan.version, {
+                patch: patch as any,
+                baseVersion: currentPlan.version,
+              })
+              .then((res) => {
+                commitDraft(res.plan);
+              })
+              .catch((err) => {
+                console.warn('Trim patch sync failed:', err);
+              });
+          }
+        }
       }
       setActiveTrim(null);
       setActiveSnapLine(null);
@@ -269,23 +301,56 @@ export const TimelineView: React.FC = () => {
   // State & Handlers for direct timeline subtitle text editing
   const [editingTimelineCueIndex, setEditingTimelineCueIndex] = useState<number | null>(null);
   const [editingTimelineCueText, setEditingTimelineCueText] = useState<string>('');
+  const [editingTimelineCueSpeaker, setEditingTimelineCueSpeaker] = useState<string>('Speaker 1');
 
-  // State for direct timeline color preset picker
+  // State for direct timeline color preset & parameter picker
   const [editingTimelineColorLayerId, setEditingTimelineColorLayerId] = useState<string | null>(null);
+  const colorDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleStartTimelineCueEdit = (index: number, text: string) => {
+  const handleStartTimelineCueEdit = (index: number, text: string, speaker = 'Speaker 1') => {
     setEditingTimelineCueIndex(index);
     setEditingTimelineCueText(text);
+    setEditingTimelineCueSpeaker(speaker);
   };
 
   const handleSaveTimelineCueText = (index: number) => {
     if (!project) return;
     updateCueText(index, editingTimelineCueText);
+    if (editingTimelineCueSpeaker) {
+      updateCueSpeaker(index, editingTimelineCueSpeaker);
+    }
     setEditingTimelineCueIndex(null);
     toast.success('Updated subtitle on timeline', 'Timeline Subtitle');
     const updatedCues = useEditorStore.getState().project?.analysisSummary?.cues || [];
     api.updateCaptions(project.id, updatedCues).catch(() => {});
   };
+
+  const handleDeleteTimelineCue = (index: number) => {
+    deleteCue(index);
+    setEditingTimelineCueIndex(null);
+    toast.info('Deleted subtitle cue from timeline', 'Captions');
+  };
+
+  // Sync color adjustments to backend with debouncing
+  const syncColorChangesToServer = useCallback(() => {
+    if (!project) return;
+    if (colorDebounceRef.current) clearTimeout(colorDebounceRef.current);
+    colorDebounceRef.current = setTimeout(async () => {
+      const currentPlan = useEditorStore.getState().plan;
+      if (!currentPlan.current || !currentPlan.draft) return;
+      const patch = compare(currentPlan.current, currentPlan.draft);
+      if (patch.length === 0) return;
+      try {
+        const res = await api.patchPlan(project.id, currentPlan.version, {
+          patch: patch as any,
+          baseVersion: currentPlan.version,
+        });
+        commitDraft(res.plan);
+      } catch (err) {
+        console.warn('Failed to sync color grade to server:', err);
+      }
+    }, 600);
+  }, [project, commitDraft]);
 
   // Playhead Auto-Scroll / Follow during playback
   useEffect(() => {
@@ -295,7 +360,6 @@ export const TimelineView: React.FC = () => {
       const visibleLeft = container.scrollLeft;
       const visibleRight = visibleLeft + container.clientWidth;
 
-      // When playhead nears the right boundary or falls behind left, scroll immediately to keep playhead in view
       if (playheadPx > visibleRight - 60 || playheadPx < visibleLeft) {
         container.scrollLeft = Math.max(0, playheadPx - 100);
       }
@@ -338,7 +402,16 @@ export const TimelineView: React.FC = () => {
     toast.info(nextSnap ? 'Magnetic snapping enabled' : 'Magnetic snapping disabled', 'Snapping');
   };
 
-  // Keyboard Delete key for selected layers
+  const handleCleanEmptyCues = () => {
+    const removed = cleanEmptySubtitleCues();
+    if (removed > 0) {
+      toast.success(`Removed ${removed} empty caption cue(s)`, 'Captions Cleaned');
+    } else {
+      toast.info('No empty caption cues found', 'Captions');
+    }
+  };
+
+  // Keyboard shortcuts: Delete, Split (S), Razor Tool (C), Select Tool (V)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -350,16 +423,22 @@ export const TimelineView: React.FC = () => {
           e.preventDefault();
           handleDeleteSelected();
         }
-      }
-      if (e.key === 's' || e.key === 'S') {
+      } else if (e.key === 's' || e.key === 'S') {
         e.preventDefault();
         handleSplitAtPlayhead();
+      } else if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        setToolMode('razor');
+        toast.info('Razor Cut Tool active (Click clip to cut)', 'Razor Tool');
+      } else if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        setToolMode('select');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [timeline.selectedLayerIds, deleteSelectedLayers, handleSplitAtPlayhead]);
+  }, [timeline.selectedLayerIds, deleteSelectedLayers, handleSplitAtPlayhead, setToolMode]);
 
   // Generate ruler tick marks based on zoom level
   const tickStep = zoom > 120 ? 1 : zoom > 50 ? 5 : 10;
@@ -367,6 +446,12 @@ export const TimelineView: React.FC = () => {
   for (let sec = 0; sec <= totalDuration; sec += tickStep) {
     rulerTicks.push(sec);
   }
+
+  // Scene cut boundary points from analysis
+  const sceneCuts = project?.analysisSummary?.sceneCuts || [];
+  const emptyCuesCount = (project?.analysisSummary?.cues || []).filter(
+    (c) => !(c.text || '').replace(/^["'\s]+|["'\s]+$/g, '').trim()
+  ).length;
 
   const selectedLayerIds = timeline.selectedLayerIds;
 
@@ -388,10 +473,18 @@ export const TimelineView: React.FC = () => {
   };
 
   const getClipStyle = (clip: TrackClipVM, isSelected: boolean) => {
+    // Note: Do NOT add 'truncate' here! Keep outer clip overflow visible so popovers render cleanly.
     const base =
-      'h-full rounded-md cursor-pointer flex items-center px-2.5 text-xs truncate transition-all select-none ';
+      'h-full rounded-md cursor-pointer flex items-center px-2 text-xs transition-all select-none relative ';
     if (isSelected) {
       return base + 'ring-2 ring-[#FFF5F5] shadow-lg z-20 font-semibold';
+    }
+
+    if (clip.isEmpty) {
+      return (
+        base +
+        'bg-red-950/40 border border-dashed border-red-500/70 text-red-300 hover:border-red-400 font-mono text-[10px]'
+      );
     }
 
     switch (clip.type) {
@@ -442,7 +535,7 @@ export const TimelineView: React.FC = () => {
     >
       {/* Timeline Controls Header */}
       <div className="h-10 border-b border-[#393B3F] px-2 sm:px-4 flex items-center justify-between bg-[#18191B] overflow-x-auto gap-2 custom-scrollbar shrink-0">
-        <div className="flex items-center space-x-2 sm:space-x-3 text-xs text-[#FFF5F5]/70 shrink-0">
+        <div className="flex items-center space-x-2 sm:space-x-2.5 text-xs text-[#FFF5F5]/70 shrink-0">
           {/* Quick Timeline Play / Pause Button */}
           <button
             onClick={togglePlay}
@@ -462,17 +555,51 @@ export const TimelineView: React.FC = () => {
             )}
           </button>
 
-          <span className="hidden sm:inline font-semibold text-[#FFF5F5]">Timeline Sequence</span>
-          <span className="hidden sm:inline text-[#393B3F]">•</span>
-          <span className="hidden md:inline font-mono text-[11px] text-[#F7D7D1]">
-            {effectivePlan?.layers.length || 0} active layers
-          </span>
-          <span className="hidden md:inline text-[#393B3F]">•</span>
+          {/* Tool Mode: Select vs Razor Cut */}
+          <div className="flex items-center bg-[#222326] rounded-lg p-0.5 border border-[#393B3F]">
+            <button
+              onClick={() => setToolMode('select')}
+              className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+                timeline.toolMode === 'select'
+                  ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                  : 'text-[#FFF5F5]/70 hover:text-white'
+              }`}
+              title="Select Tool (V) - Click to position playhead or select clips"
+            >
+              <MousePointer className="w-3 h-3" />
+              <span className="hidden sm:inline">Select</span>
+            </button>
+            <button
+              onClick={() => {
+                setToolMode('razor');
+                toast.info('Razor Cut Mode: Click any clip on timeline to cut', 'Razor Tool');
+              }}
+              className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+                timeline.toolMode === 'razor'
+                  ? 'bg-amber-400 text-black font-bold shadow-sm animate-pulse'
+                  : 'text-[#FFF5F5]/70 hover:text-white'
+              }`}
+              title="Razor Cut Tool (C) - Click directly on any clip to cut"
+            >
+              <Scissors className="w-3 h-3" />
+              <span className="hidden sm:inline">Razor (C)</span>
+            </button>
+          </div>
+
+          {/* Razor Split Tool at Playhead */}
+          <button
+            onClick={handleSplitAtPlayhead}
+            className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono transition-colors shrink-0 bg-[#2A2C2F] hover:bg-[#34373B] text-[#FFF5F5] border border-[#393B3F] hover:border-[#E3B5BE]/60 active:scale-95"
+            title="Split Cut / Layer at Playhead (S)"
+          >
+            <Scissors className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span>Split (S)</span>
+          </button>
 
           {/* Magnetic Frame Snapping Toggle */}
           <button
             onClick={handleToggleSnap}
-            className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-0.5 rounded text-[11px] font-mono transition-colors shrink-0 ${
+            className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono transition-colors shrink-0 ${
               timeline.snap
                 ? 'bg-[#2A2C2F] text-[#F7D7D1] border border-[#E3B5BE]/40'
                 : 'bg-[#18191B] text-[#FFF5F5]/50 border border-[#393B3F] hover:text-[#FFF5F5]'
@@ -481,30 +608,26 @@ export const TimelineView: React.FC = () => {
           >
             <Magnet className="w-3.5 h-3.5" />
             <span>Snap {timeline.snap ? 'ON' : 'OFF'}</span>
-            <span className="hidden sm:inline text-[10px] text-[#FFF5F5]/40 font-mono">
-              ({fps}fps)
-            </span>
           </button>
 
-          {/* Razor Split Tool */}
-          <button
-            onClick={handleSplitAtPlayhead}
-            className="flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-2.5 py-0.5 rounded text-[11px] font-mono transition-colors shrink-0 bg-[#2A2C2F] hover:bg-[#34373B] text-[#FFF5F5] border border-[#393B3F] hover:border-[#E3B5BE]/60 active:scale-95"
-            title="Split Cut / Layer at Playhead (S)"
-          >
-            <Scissors className="w-3.5 h-3.5 text-[#E3B5BE]" />
-            <span>Split</span>
-            <span className="hidden sm:inline text-[9px] font-mono bg-[#18191B] px-1 py-0.2 rounded text-[#FFF5F5]/40 border border-[#393B3F]">
-              S
-            </span>
-          </button>
+          {/* Clean empty captions button if empty cues exist */}
+          {emptyCuesCount > 0 && (
+            <button
+              onClick={handleCleanEmptyCues}
+              className="flex items-center space-x-1 px-2 py-0.5 rounded bg-red-950/50 hover:bg-red-900/60 text-red-200 border border-red-700/60 text-[11px] transition-colors shrink-0 animate-in fade-in"
+              title="Clean empty caption cue blocks"
+            >
+              <Trash2 className="w-3 h-3 text-red-300" />
+              <span>Clean Empty ({emptyCuesCount})</span>
+            </button>
+          )}
 
           {/* Delete selected layer button */}
           {selectedLayerIds.length > 0 && (
             <button
               onClick={handleDeleteSelected}
               className="flex items-center space-x-1 px-2 py-0.5 rounded bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/50 text-[11px] transition-colors shrink-0"
-              title="Delete Selected Layers (Del)"
+              title="Delete Selected Layers or Cues (Del)"
             >
               <Trash2 className="w-3 h-3" />
               <span>Delete ({selectedLayerIds.length})</span>
@@ -514,11 +637,10 @@ export const TimelineView: React.FC = () => {
 
         {/* Zoom Controls & Fit to Window */}
         <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
-          {/* Fit to Window */}
           <button
             onClick={handleFitToWindow}
-            className="flex items-center space-x-1 px-2.5 py-1 rounded bg-[#2A2C2F] hover:bg-[#34373B] text-[#FFF5F5] text-[11px] border border-[#393B3F] transition-colors"
-            title="Fit timeline to window"
+            className="flex items-center space-x-1 px-2 py-1 rounded bg-[#2A2C2F] hover:bg-[#34373B] text-[#FFF5F5] text-[11px] border border-[#393B3F] transition-colors"
+            title="Fit timeline to window width"
           >
             <Maximize2 className="w-3 h-3 text-[#E3B5BE]" />
             <span>Fit</span>
@@ -532,8 +654,8 @@ export const TimelineView: React.FC = () => {
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="text-[11px] font-mono text-[#F7D7D1] px-2 min-w-[55px] text-center">
-              {zoom} px/s
+            <span className="text-[11px] font-mono text-[#F7D7D1] px-1.5 min-w-[50px] text-center">
+              {zoom}px/s
             </span>
             <button
               onClick={() => setZoom(zoom + 15)}
@@ -550,7 +672,12 @@ export const TimelineView: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Track Headers (Left sidebar) */}
         <div className="w-44 border-r border-[#393B3F] bg-[#18191B] flex flex-col shrink-0 text-xs">
-          <div className="h-6 border-b border-[#393B3F]" /> {/* Ruler spacer */}
+          <div className="h-6 border-b border-[#393B3F] flex items-center px-2 text-[10px] font-mono text-[#FFF5F5]/40 justify-between">
+            <span>TRACKS</span>
+            {sceneCuts.length > 0 && (
+              <span className="text-amber-400/80">{sceneCuts.length + 1} scenes</span>
+            )}
+          </div>
           {derivedTracks.map((track) => (
             <div
               key={track.id}
@@ -570,7 +697,9 @@ export const TimelineView: React.FC = () => {
           ref={scrollContainerRef}
           onScroll={handleScroll}
           onClick={() => selectLayer(null)}
-          className="flex-1 overflow-x-auto relative bg-[#121314]"
+          className={`flex-1 overflow-x-auto relative bg-[#121314] ${
+            timeline.toolMode === 'razor' ? 'cursor-crosshair' : ''
+          }`}
         >
           <div style={{ width: `${timelineWidth}px` }} className="relative h-full">
             {/* Time Ruler */}
@@ -588,6 +717,30 @@ export const TimelineView: React.FC = () => {
                   <span className="text-[9px] font-mono text-[#FFF5F5]/50">{sec}s</span>
                 </div>
               ))}
+
+              {/* Visual Scene Cut Markers on Ruler */}
+              {sceneCuts.map((cutItem: any, idx: number) => {
+                const cutSec =
+                  typeof cutItem === 'number'
+                    ? cutItem
+                    : cutItem?.timeMs
+                      ? cutItem.timeMs / 1000
+                      : 0;
+                return (
+                  <div
+                    key={`scene_cut_${idx}`}
+                    style={{ left: `${cutSec * zoom}px` }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCurrentTime(cutSec);
+                    }}
+                    className="absolute top-0 bottom-0 w-1 bg-amber-400/80 hover:bg-amber-300 cursor-pointer pointer-events-auto z-20 group/scenemarker"
+                    title={`Scene ${idx + 2} cut at ${cutSec.toFixed(2)}s (Click to seek)`}
+                  >
+                    <div className="w-2.5 h-2.5 bg-amber-400 rotate-45 -ml-[3px] -mt-1 shadow-sm opacity-80 group-hover/scenemarker:opacity-100" />
+                  </div>
+                );
+              })}
             </div>
 
             {/* Magnetic Snap Guideline */}
@@ -624,7 +777,14 @@ export const TimelineView: React.FC = () => {
                 const container = scrollContainerRef.current;
                 const rect = container.getBoundingClientRect();
                 const offsetX = e.clientX - rect.left + container.scrollLeft;
-                setCurrentTime(calculateSnappedTime(offsetX));
+                const clickedTime = calculateSnappedTime(offsetX);
+
+                if (timeline.toolMode === 'razor') {
+                  handleSplitAtPlayhead();
+                  setCurrentTime(clickedTime);
+                } else {
+                  setCurrentTime(clickedTime);
+                }
 
                 const handleMouseMove = (moveEvent: MouseEvent) => {
                   const moveOffsetX = moveEvent.clientX - rect.left + container.scrollLeft;
@@ -648,7 +808,9 @@ export const TimelineView: React.FC = () => {
                   {track.clips.map((clip) => {
                     const isSelected = !!clip.layerId && selectedLayerIds.includes(clip.layerId);
                     const leftPx = clip.startSec * zoom;
-                    const widthPx = Math.max(12, clip.durSec * zoom);
+                    const widthPx = Math.max(14, clip.durSec * zoom);
+                    const isEditingCue = editingTimelineCueIndex === clip.cueIndex;
+                    const isEditingColor = editingTimelineColorLayerId === clip.layerId;
 
                     return (
                       <div
@@ -656,10 +818,27 @@ export const TimelineView: React.FC = () => {
                         data-clip="true"
                         onClick={(e) => {
                           e.stopPropagation();
+                          const container = scrollContainerRef.current;
+                          let clickTime = clip.startSec;
+                          if (container) {
+                            const rect = container.getBoundingClientRect();
+                            const offsetX = e.clientX - rect.left + container.scrollLeft;
+                            clickTime = calculateSnappedTime(offsetX);
+                          }
+
+                          if (timeline.toolMode === 'razor') {
+                            const splitOk = splitLayerAtTime(clickTime, clip.layerId);
+                            if (splitOk) {
+                              toast.success(`Razor cut at ${clickTime.toFixed(2)}s`, 'Cut');
+                            }
+                            setCurrentTime(clickTime);
+                            return;
+                          }
+
                           if (clip.layerId) {
                             selectLayer(clip.layerId, e.shiftKey);
                           }
-                          setCurrentTime(clip.startSec);
+                          setCurrentTime(clickTime);
                         }}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
@@ -667,7 +846,8 @@ export const TimelineView: React.FC = () => {
                             const cue = project?.analysisSummary?.cues?.[clip.cueIndex];
                             handleStartTimelineCueEdit(
                               clip.cueIndex,
-                              cue?.text || clip.label.replace(/^"|"$/g, '')
+                              cue?.text || clip.label.replace(/^"|"$/g, ''),
+                              cue?.speaker || clip.speaker || 'Speaker 1'
                             );
                           } else if (clip.type === 'color' && clip.layerId) {
                             selectLayer(clip.layerId);
@@ -679,26 +859,37 @@ export const TimelineView: React.FC = () => {
                         style={{
                           left: `${leftPx}px`,
                           width: `${widthPx}px`,
+                          borderLeftColor: clip.speakerColor || undefined,
+                          borderLeftWidth: clip.speakerColor ? '3px' : undefined,
                         }}
-                        className={`absolute top-1 bottom-1 group ${getClipStyle(clip, isSelected)}`}
-                        title={`${clip.label} (${clip.startSec.toFixed(2)}s - ${(clip.startSec + clip.durSec).toFixed(2)}s)`}
+                        className={`absolute top-1 bottom-1 group ${
+                          isEditingCue || isEditingColor ? 'z-50 overflow-visible' : ''
+                        } ${getClipStyle(clip, isSelected)}`}
+                        title={`${clip.label} (${clip.startSec.toFixed(2)}s - ${(clip.startSec + clip.durSec).toFixed(2)}s)${
+                          clip.speaker ? ` • ${clip.speaker}` : ''
+                        }`}
                       >
                         {/* Inline Timeline Subtitle Editor Popover */}
-                        {editingTimelineCueIndex === clip.cueIndex && (
+                        {isEditingCue && (
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="absolute -top-16 left-0 min-w-[260px] max-w-[400px] bg-[#18191B]/95 backdrop-blur-md border border-[#E3B5BE] rounded-lg p-2.5 shadow-2xl z-50 flex flex-col gap-1.5 animate-in fade-in zoom-in-95 pointer-events-auto"
+                            className="absolute -top-32 left-0 min-w-[290px] max-w-[420px] bg-[#18191B]/98 backdrop-blur-md border border-[#E3B5BE] rounded-xl p-3 shadow-2xl z-50 flex flex-col gap-2 animate-in fade-in zoom-in-95 pointer-events-auto"
                           >
-                            <div className="flex items-center justify-between text-[10px] font-mono text-[#F7D7D1]">
-                              <span>Edit Subtitle on Timeline</span>
+                            <div className="flex items-center justify-between text-[11px] font-mono text-[#F7D7D1]">
+                              <span className="font-semibold flex items-center space-x-1">
+                                <Type className="w-3.5 h-3.5 text-[#E3B5BE]" />
+                                <span>Edit Subtitle #{clip.cueIndex! + 1}</span>
+                              </span>
                               <button
                                 type="button"
                                 onClick={() => setEditingTimelineCueIndex(null)}
-                                className="text-[#FFF5F5]/60 hover:text-white"
+                                className="text-[#FFF5F5]/60 hover:text-white p-0.5"
                               >
-                                ✕
+                                <X className="w-3.5 h-3.5" />
                               </button>
                             </div>
+
+                            {/* Subtitle text input */}
                             <input
                               type="text"
                               value={editingTimelineCueText}
@@ -712,40 +903,78 @@ export const TimelineView: React.FC = () => {
                                 }
                               }}
                               autoFocus
-                              className="w-full bg-[#121314] text-[#FFF5F5] text-xs font-semibold rounded px-2.5 py-1.5 border border-[#393B3F] focus:border-[#E3B5BE] focus:outline-none"
+                              placeholder="Type caption text..."
+                              className="w-full bg-[#121314] text-[#FFF5F5] text-xs font-medium rounded-lg px-2.5 py-1.5 border border-[#393B3F] focus:border-[#E3B5BE] focus:outline-none"
                             />
-                            <div className="flex items-center justify-between text-[9px] text-[#FFF5F5]/40 font-mono">
-                              <span>Enter save • Esc cancel</span>
+
+                            {/* Speaker selector & timing nudges */}
+                            <div className="flex items-center justify-between gap-2 text-[10px] font-mono">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="text-[#FFF5F5]/60">Speaker:</span>
+                                <input
+                                  type="text"
+                                  value={editingTimelineCueSpeaker}
+                                  onChange={(e) => setEditingTimelineCueSpeaker(e.target.value)}
+                                  className="w-24 bg-[#121314] text-[#F7D7D1] px-1.5 py-0.5 rounded border border-[#393B3F] text-[10px]"
+                                  placeholder="Speaker 1"
+                                />
+                              </div>
+                              <span className="text-[#FFF5F5]/40">
+                                {clip.startSec.toFixed(2)}s - {(clip.startSec + clip.durSec).toFixed(2)}s
+                              </span>
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="flex items-center justify-between pt-1 border-t border-[#393B3F]/60">
                               <button
                                 type="button"
-                                onClick={() => handleSaveTimelineCueText(clip.cueIndex!)}
-                                className="px-2.5 py-0.5 rounded bg-[#E3B5BE] text-[#18191B] font-bold text-[10px]"
+                                onClick={() => handleDeleteTimelineCue(clip.cueIndex!)}
+                                className="px-2 py-1 rounded bg-red-950/40 hover:bg-red-900/60 text-red-300 text-[10px] flex items-center space-x-1 border border-red-800/40 transition-colors"
                               >
-                                Save
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete</span>
                               </button>
+                              <div className="flex items-center space-x-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingTimelineCueIndex(null)}
+                                  className="px-2 py-1 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 text-[10px]"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveTimelineCueText(clip.cueIndex!)}
+                                  className="px-3 py-1 rounded bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] font-bold text-[10px] transition-colors"
+                                >
+                                  Save Subtitle
+                                </button>
+                              </div>
                             </div>
                           </div>
                         )}
 
-                        {/* Inline Timeline Color Grade LUT Preset Popover */}
-                        {editingTimelineColorLayerId === clip.layerId && (
+                        {/* Inline Timeline Color Grade LUT & Slider Popover */}
+                        {isEditingColor && (
                           <div
                             onClick={(e) => e.stopPropagation()}
-                            className="absolute -top-28 left-0 min-w-[280px] bg-[#18191B]/95 backdrop-blur-md border border-[#E3B5BE] rounded-lg p-2.5 shadow-2xl z-50 flex flex-col gap-2 animate-in fade-in zoom-in-95 pointer-events-auto"
+                            className="absolute -top-48 left-0 min-w-[320px] bg-[#18191B]/98 backdrop-blur-md border border-[#E3B5BE] rounded-xl p-3 shadow-2xl z-50 flex flex-col gap-2.5 animate-in fade-in zoom-in-95 pointer-events-auto"
                           >
-                            <div className="flex items-center justify-between text-[10px] font-mono text-[#F7D7D1]">
-                              <span className="flex items-center gap-1">
-                                <Palette className="w-3 h-3 text-[#E3B5BE]" />
-                                <span>Switch LUT Preset on Timeline</span>
+                            <div className="flex items-center justify-between text-[11px] font-mono text-[#F7D7D1]">
+                              <span className="flex items-center gap-1 font-semibold">
+                                <Palette className="w-3.5 h-3.5 text-[#E3B5BE]" />
+                                <span>Tune Color Grade & LUT Presets</span>
                               </span>
                               <button
                                 type="button"
                                 onClick={() => setEditingTimelineColorLayerId(null)}
-                                className="text-[#FFF5F5]/60 hover:text-white"
+                                className="text-[#FFF5F5]/60 hover:text-white p-0.5"
                               >
-                                ✕
+                                <X className="w-3.5 h-3.5" />
                               </button>
                             </div>
+
+                            {/* 6 Quick LUT Preset Buttons */}
                             <div className="grid grid-cols-3 gap-1.5">
                               {[
                                 { id: 'cinematic', label: 'Cinematic' },
@@ -775,14 +1004,12 @@ export const TimelineView: React.FC = () => {
                                           }
                                         }
                                       });
-                                      toast.success(
-                                        `Set LUT preset to ${preset.label}`,
-                                        'Color Grade'
-                                      );
+                                      toast.success(`Set LUT to ${preset.label}`, 'Color Grade');
+                                      syncColorChangesToServer();
                                     }}
                                     className={`px-1.5 py-1 rounded text-[10px] font-medium border text-center transition-all ${
                                       isActive
-                                        ? 'bg-[#E3B5BE]/25 text-[#F7D7D1] border-[#E3B5BE] font-semibold'
+                                        ? 'bg-[#E3B5BE]/25 text-[#F7D7D1] border-[#E3B5BE] font-semibold shadow-sm'
                                         : 'bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-[#393B3F]'
                                     }`}
                                   >
@@ -790,6 +1017,121 @@ export const TimelineView: React.FC = () => {
                                   </button>
                                 );
                               })}
+                            </div>
+
+                            {/* Live Sliders: Contrast, Saturation, Brightness */}
+                            {(() => {
+                              const resolved = resolveColorParams((clip.layerRef as any)?.params);
+                              return (
+                                <div className="space-y-2 bg-[#121314] p-2 rounded-lg border border-[#393B3F]/60 text-[10px]">
+                                  {/* Contrast */}
+                                  <div>
+                                    <div className="flex items-center justify-between text-[#FFF5F5]/70 mb-0.5">
+                                      <span>Contrast</span>
+                                      <span className="font-mono text-[#F7D7D1]">
+                                        {resolved.contrast.toFixed(2)}x
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="0.7"
+                                      max="1.5"
+                                      step="0.05"
+                                      value={resolved.contrast}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        updateDraft((d) => {
+                                          const l = d.layers.find((lyr) => lyr.id === clip.layerId) as any;
+                                          if (l) l.params.contrast = val;
+                                        });
+                                        syncColorChangesToServer();
+                                      }}
+                                      className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded cursor-pointer"
+                                    />
+                                  </div>
+
+                                  {/* Saturation */}
+                                  <div>
+                                    <div className="flex items-center justify-between text-[#FFF5F5]/70 mb-0.5">
+                                      <span>Saturation</span>
+                                      <span className="font-mono text-[#F7D7D1]">
+                                        {resolved.saturation.toFixed(2)}x
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="0"
+                                      max="2"
+                                      step="0.05"
+                                      value={resolved.saturation}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        updateDraft((d) => {
+                                          const l = d.layers.find((lyr) => lyr.id === clip.layerId) as any;
+                                          if (l) l.params.saturation = val;
+                                        });
+                                        syncColorChangesToServer();
+                                      }}
+                                      className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded cursor-pointer"
+                                    />
+                                  </div>
+
+                                  {/* Brightness */}
+                                  <div>
+                                    <div className="flex items-center justify-between text-[#FFF5F5]/70 mb-0.5">
+                                      <span>Brightness</span>
+                                      <span className="font-mono text-[#F7D7D1]">
+                                        {resolved.brightness > 0 ? '+' : ''}
+                                        {resolved.brightness.toFixed(2)}
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      min="-0.3"
+                                      max="0.3"
+                                      step="0.02"
+                                      value={resolved.brightness}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        updateDraft((d) => {
+                                          const l = d.layers.find((lyr) => lyr.id === clip.layerId) as any;
+                                          if (l) l.params.brightness = val;
+                                        });
+                                        syncColorChangesToServer();
+                                      }}
+                                      className="w-full accent-[#E3B5BE] h-1.5 bg-[#2A2C2F] rounded cursor-pointer"
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            {/* Action footer */}
+                            <div className="flex items-center justify-between pt-1 border-t border-[#393B3F]/60 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateDraft((d) => {
+                                    const l = d.layers.find((lyr) => lyr.id === clip.layerId) as any;
+                                    if (l) {
+                                      l.params = { preset: 'cinematic', contrast: 1, saturation: 1, brightness: 0 };
+                                    }
+                                  });
+                                  toast.info('Reset color grade to standard', 'Color Grade');
+                                  syncColorChangesToServer();
+                                }}
+                                className="text-[#FFF5F5]/50 hover:text-[#FFF5F5] flex items-center space-x-1"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>Reset</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingTimelineColorLayerId(null)}
+                                className="px-3 py-1 rounded bg-[#E3B5BE] text-[#18191B] font-bold"
+                              >
+                                Done
+                              </button>
                             </div>
                           </div>
                         )}
@@ -814,17 +1156,33 @@ export const TimelineView: React.FC = () => {
                               const cue = project?.analysisSummary?.cues?.[clip.cueIndex!];
                               handleStartTimelineCueEdit(
                                 clip.cueIndex!,
-                                cue?.text || clip.label.replace(/^"|"$/g, '')
+                                cue?.text || clip.label.replace(/^"|"$/g, ''),
+                                cue?.speaker || clip.speaker || 'Speaker 1'
                               );
                             }}
                             className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/20 text-[#FFF5F5] mr-1 shrink-0 z-20 pointer-events-auto"
-                            title="Double-click or click pencil to edit text"
+                            title="Click or double-click to edit subtitle text"
                           >
                             <Edit3 className="w-2.5 h-2.5 text-[#E3B5BE]" />
                           </button>
                         )}
 
-                        {/* Quick LUT preset button for color clips */}
+                        {/* Delete trash button directly on subtitle cue hover */}
+                        {clip.cueIndex !== undefined && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTimelineCue(clip.cueIndex!);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-red-500/30 text-red-300 mr-1 shrink-0 z-20 pointer-events-auto"
+                            title="Delete this caption cue"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+
+                        {/* Quick LUT preset & parameter button for color clips */}
                         {clip.type === 'color' && clip.layerId && (
                           <button
                             type="button"
@@ -835,14 +1193,17 @@ export const TimelineView: React.FC = () => {
                                 editingTimelineColorLayerId === clip.layerId ? null : (clip.layerId || null)
                               );
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-white/20 text-[#FFF5F5] mr-1 shrink-0 z-20 pointer-events-auto"
-                            title="Click or double-click to switch LUT preset"
+                            className="p-0.5 rounded hover:bg-white/20 text-[#FFF5F5] mr-1 shrink-0 z-20 pointer-events-auto"
+                            title="Click or double-click to adjust color grade & LUT"
                           >
-                            <Palette className="w-2.5 h-2.5 text-[#E3B5BE]" />
+                            <Palette className="w-3 h-3 text-[#E3B5BE]" />
                           </button>
                         )}
 
-                        <span className="truncate px-1 pointer-events-none">{clip.label}</span>
+                        {/* Clip label text (truncated cleanly inside span) */}
+                        <span className="truncate flex-1 min-w-0 px-1 pointer-events-none">
+                          {clip.label}
+                        </span>
 
                         {/* Right Edge Trim Handle */}
                         {clip.layerId && clip.durSec >= 0.2 && (

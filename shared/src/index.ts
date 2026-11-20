@@ -9,3 +9,4 @@ export * from './utils/colorGrading.js';
 export * from './constants/presets.js';
 export * from './constants/models.js';
 export * from './utils/planValidation.js';
+export * from './utils/mediaIndexing.js';

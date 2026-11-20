@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { EditPlan, EditLayer } from '@ai-video/shared';
+import {
+  EditPlan,
+  EditLayer,
+  MediaIndexSummary,
+  buildMediaIndex,
+  cleanEmptyCues,
+  renameSpeakerInCues,
+  getSpeakerColor,
+} from '@ai-video/shared';
 import { computeNaturalWordTimings } from '../utils/subtitleTiming';
 import { api } from '../api/client';
 
@@ -93,6 +101,7 @@ export interface EditorStoreState {
     scrollX: number;
     selectedLayerIds: string[];
     snap: boolean;
+    toolMode: 'select' | 'razor';
   };
 
   playback: {
@@ -167,7 +176,11 @@ export interface EditorStoreState {
   updateCues: (cues: TranscriptCue[]) => void;
   updateCueText: (index: number, newText: string) => void;
   updateCueTiming: (index: number, startSec: number, endSec: number) => void;
+  updateCueSpeaker: (index: number, speaker: string) => void;
   deleteCue: (index: number) => void;
+  cleanEmptySubtitleCues: () => number;
+  renameSpeaker: (oldName: string, newName: string) => void;
+  setToolMode: (mode: 'select' | 'razor') => void;
   setPreviewUrl: (
     url: string,
     planVersion: number,
@@ -196,6 +209,7 @@ export const useEditorStore = create<EditorStoreState>()(
       scrollX: 0,
       selectedLayerIds: [],
       snap: true,
+      toolMode: 'select',
     },
 
     playback: {
@@ -528,7 +542,9 @@ export const useEditorStore = create<EditorStoreState>()(
           const cues = state.project.analysisSummary.cues;
           const remainingCues = cues.filter((c, idx) => {
             const cueUniqueId = c.id || `cue_${idx + 1}`;
-            return !toDelete.has(cueUniqueId) && !toDelete.has(`cue_${idx}`);
+            if (toDelete.has(cueUniqueId)) return false;
+            if (!c.id && toDelete.has(`cue_${idx}`)) return false;
+            return true;
           });
           if (remainingCues.length !== cues.length) {
             state.project.analysisSummary.cues = remainingCues;
@@ -572,53 +588,59 @@ export const useEditorStore = create<EditorStoreState>()(
 
     splitLayerAtTime: (timeSec, layerId) => {
       let splitSuccess = false;
-      set((state) => {
-        if (!state.plan.draft && state.plan.current) {
-          state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
+      const state = get();
+      const totalDur = state.playback.duration || 60;
+      const splitPoint = Number(timeSec.toFixed(3));
+
+      if (splitPoint <= 0.05 || splitPoint >= totalDur - 0.05) return false;
+
+      // 1. If target is a subtitle cue or starts with cue_, split subtitle cue
+      const selectedId = layerId || state.timeline.selectedLayerIds[0];
+      if (selectedId && (selectedId.startsWith('cue_') || selectedId.startsWith('cue'))) {
+        return get().splitSubtitleCueAtTime(timeSec);
+      }
+
+      // Check if playhead is directly over a subtitle cue
+      const currentCues = state.project?.analysisSummary?.cues;
+      const curMs = Math.round(timeSec * 1000);
+      const cueUnderPlayhead = currentCues?.find(
+        (c) => curMs >= c.startMs + 80 && curMs <= c.endMs - 80
+      );
+
+      // If user specifically clicked a subtitle track or clip
+      if (selectedId?.includes('subtitle') && cueUnderPlayhead) {
+        return get().splitSubtitleCueAtTime(timeSec);
+      }
+
+      set((draftState) => {
+        if (!draftState.plan.draft && draftState.plan.current) {
+          draftState.plan.draft = JSON.parse(JSON.stringify(draftState.plan.current));
         }
-        const draft = state.plan.draft;
+        const draft = draftState.plan.draft;
         if (!draft) return;
 
-        const totalDur = state.playback.duration || 60;
-        const targetId =
-          layerId ||
-          (state.timeline.selectedLayerIds.length > 0
-            ? state.timeline.selectedLayerIds[0]
-            : undefined);
         let targetLayerIndex = -1;
 
-        if (targetId) {
+        if (selectedId && selectedId !== 'base_video' && !selectedId.startsWith('seg_')) {
           targetLayerIndex = draft.layers.findIndex((l) => {
-            if (l.id !== targetId || !l.enabled) return false;
+            if (l.id !== selectedId || !l.enabled) return false;
             const start = l.range?.start ?? 0;
             const end = l.range?.end ?? totalDur;
-            return timeSec > start + 0.05 && timeSec < end - 0.05;
+            return splitPoint > start + 0.05 && splitPoint < end - 0.05;
           });
         }
 
-        if (targetLayerIndex === -1) {
-          // Find any cut, speed, text, color, or overlay layer that spans timeSec
-          targetLayerIndex = draft.layers.findIndex((l) => {
-            if (!l.enabled) return false;
-            const start = l.range?.start ?? 0;
-            const end = l.range?.end ?? totalDur;
-            return timeSec > start + 0.05 && timeSec < end - 0.05;
-          });
-        }
-
+        // If a specific layer (e.g. Color, Text, Speed, Music) was selected and found, split it
         if (targetLayerIndex !== -1) {
           const originalLayer = draft.layers[targetLayerIndex];
           const origStart = originalLayer.range?.start ?? 0;
           const originalEnd = originalLayer.range?.end ?? totalDur;
-          const splitPoint = Number(timeSec.toFixed(3));
 
-          // 1. Truncate original layer end
           originalLayer.range = {
             start: origStart,
             end: splitPoint,
           };
 
-          // 2. Clone new split layer starting at splitPoint
           const newLayer = JSON.parse(JSON.stringify(originalLayer));
           newLayer.id = `l_${Date.now()}_split`;
           newLayer.range = {
@@ -626,35 +648,43 @@ export const useEditorStore = create<EditorStoreState>()(
             end: originalEnd,
           };
 
-          // Insert right after original
           draft.layers.splice(targetLayerIndex + 1, 0, newLayer);
-          state.timeline.selectedLayerIds = [newLayer.id];
-          state.preview.stale = true;
+          draftState.timeline.selectedLayerIds = [newLayer.id];
+          draftState.preview.stale = true;
           splitSuccess = true;
-        } else {
-          // If no existing layer spans timeSec, create a razor cut marker at timeSec
-          const splitPoint = Number(timeSec.toFixed(3));
-          const totalDur = state.playback.duration || 60;
-          const newCutEnd = Math.min(totalDur, splitPoint + 1.0);
-          const newCutLayer = {
-            id: `l_${Date.now()}_cut`,
-            layer: 'cut' as const,
-            enabled: true,
-            timebase: 'source' as const,
-            range: {
-              start: splitPoint,
-              end: Number(newCutEnd.toFixed(3)),
-            },
-            params: {
-              reason: 'user' as const,
-            },
-          };
-          draft.layers.push(newCutLayer);
-          state.timeline.selectedLayerIds = [newCutLayer.id];
-          state.preview.stale = true;
-          splitSuccess = true;
+          return;
         }
+
+        // If playhead spans a subtitle cue and no other specific layer is selected, delegate to cue split
+        if (!selectedId && cueUnderPlayhead) {
+          return;
+        }
+
+        // Split the video sequence by creating a razor cut marker at splitPoint
+        const newCutEnd = Math.min(totalDur, splitPoint + 0.5);
+        const newCutLayer = {
+          id: `l_${Date.now()}_cut`,
+          layer: 'cut' as const,
+          enabled: true,
+          timebase: 'source' as const,
+          range: {
+            start: splitPoint,
+            end: Number(newCutEnd.toFixed(3)),
+          },
+          params: {
+            reason: 'user' as const,
+          },
+        };
+        draft.layers.push(newCutLayer);
+        draftState.timeline.selectedLayerIds = [newCutLayer.id];
+        draftState.preview.stale = true;
+        splitSuccess = true;
       });
+
+      if (!splitSuccess && cueUnderPlayhead && (!selectedId || selectedId === 'base_video')) {
+        return get().splitSubtitleCueAtTime(timeSec);
+      }
+
       return splitSuccess;
     },
 
@@ -825,7 +855,22 @@ export const useEditorStore = create<EditorStoreState>()(
         target.words = newWords as any;
       }),
 
-    deleteCue: (index) =>
+    updateCueSpeaker: (index, speaker) => {
+      set((state) => {
+        if (!state.project?.analysisSummary?.cues) return;
+        const target = state.project.analysisSummary.cues[index];
+        if (target) {
+          target.speaker = speaker.trim() || 'Speaker 1';
+        }
+      });
+      const latestCues = get().project?.analysisSummary?.cues || [];
+      const pid = get().project?.id;
+      if (pid) {
+        api.updateCaptions(pid, latestCues).catch(() => {});
+      }
+    },
+
+    deleteCue: (index) => {
       set((state) => {
         if (!state.project?.analysisSummary?.cues) return;
         state.project.analysisSummary.cues.splice(index, 1);
@@ -834,6 +879,43 @@ export const useEditorStore = create<EditorStoreState>()(
           (sum, c) => sum + (c.words?.length || c.text?.split(/\s+/).filter(Boolean).length || 0),
           0
         );
+      });
+      const latestCues = get().project?.analysisSummary?.cues || [];
+      const pid = get().project?.id;
+      if (pid) {
+        api.updateCaptions(pid, latestCues).catch(() => {});
+      }
+    },
+
+    cleanEmptySubtitleCues: () => {
+      const state = get();
+      if (!state.project?.analysisSummary?.cues) return 0;
+      const cues = state.project.analysisSummary.cues as any[];
+      const cleaned = cleanEmptyCues(cues);
+      const removedCount = cues.length - cleaned.length;
+      if (removedCount > 0) {
+        state.updateCues(cleaned as any);
+        if (state.project.id) {
+          api.updateCaptions(state.project.id, cleaned).catch(() => {});
+        }
+      }
+      return removedCount;
+    },
+
+    renameSpeaker: (oldName: string, newName: string) => {
+      const state = get();
+      if (!state.project?.analysisSummary?.cues) return;
+      const cues = state.project.analysisSummary.cues as any[];
+      const updated = renameSpeakerInCues(cues, oldName, newName);
+      state.updateCues(updated as any);
+      if (state.project.id) {
+        api.updateCaptions(state.project.id, updated).catch(() => {});
+      }
+    },
+
+    setToolMode: (mode) =>
+      set((state) => {
+        state.timeline.toolMode = mode;
       }),
 
     setPreviewUrl: (url, planVersion, isRendered = false, baseProxyUrl) =>
@@ -902,6 +984,9 @@ export interface TrackClipVM {
   cueIndex?: number;
   cueId?: string;
   color?: string;
+  speaker?: string;
+  speakerColor?: string;
+  isEmpty?: boolean;
 }
 
 export interface DerivedTrackVM {
@@ -952,6 +1037,7 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
       startSec: mainVideoStart,
       durSec: Math.max(0.1, mainVideoEnd - mainVideoStart),
       type: 'video',
+      layerId: 'base_video',
     });
   } else {
     // Sort cuts chronologically
@@ -967,12 +1053,14 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
       const cutEnd = Math.min(mainVideoEnd, cut.range?.end || cutStart + 1.0);
 
       if (cutStart > cursor + 0.05) {
+        const segId = `seg_${clipNum++}`;
         videoClips.push({
-          id: `seg_${clipNum++}`,
+          id: segId,
           label: `Footage (${cursor.toFixed(1)}s - ${cutStart.toFixed(1)}s)`,
           startSec: cursor,
           durSec: cutStart - cursor,
           type: 'video',
+          layerId: segId,
         });
       }
 
@@ -990,12 +1078,14 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
     }
 
     if (cursor < mainVideoEnd - 0.05) {
+      const segId = `seg_${clipNum}`;
       videoClips.push({
-        id: `seg_${clipNum}`,
+        id: segId,
         label: `Footage (${cursor.toFixed(1)}s - ${mainVideoEnd.toFixed(1)}s)`,
         startSec: cursor,
         durSec: mainVideoEnd - cursor,
         type: 'video',
+        layerId: segId,
       });
     }
   }
@@ -1046,10 +1136,13 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
         name: 'T1: Subtitles',
         clips: cues.map((c, idx) => {
           const cueUniqueId = c.id || `cue_${idx + 1}`;
-          const cleanText = (c.text || '').trim();
+          const cleanText = (c.text || '').replace(/^["'\s]+|["'\s]+$/g, '').trim();
+          const isEmpty = cleanText.length === 0;
+          const speaker = (c.speaker || 'Speaker 1').trim();
+          const speakerColor = getSpeakerColor(speaker);
           return {
             id: cueUniqueId,
-            label: cleanText ? `"${cleanText}"` : `Cue ${idx + 1}`,
+            label: isEmpty ? '[Empty Caption]' : `"${cleanText}"`,
             startSec: Number((c.startMs / 1000).toFixed(2)),
             durSec: Math.max(0.15, Number(((c.endMs - c.startMs) / 1000).toFixed(2))),
             type: 'subtitle',
@@ -1057,6 +1150,9 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
             layerRef: subtitleLayer,
             cueIndex: idx,
             cueId: cueUniqueId,
+            speaker,
+            speakerColor,
+            isEmpty,
           };
         }),
       });
@@ -1192,4 +1288,14 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
   }
 
   return tracks;
+};
+
+export const selectMediaIndex = (state: EditorStoreState): MediaIndexSummary => {
+  const cues = state.project?.analysisSummary?.cues || [];
+  const rawSceneCuts = state.project?.analysisSummary?.sceneCuts || [];
+  const sceneCutSecs = rawSceneCuts.map((c: any) =>
+    typeof c === 'number' ? c : c?.timeMs ? c.timeMs / 1000 : 0
+  );
+  const durationSec = state.playback.duration || state.project?.durationSec || 60;
+  return buildMediaIndex(cues as any, sceneCutSecs, durationSec);
 };
