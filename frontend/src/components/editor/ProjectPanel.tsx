@@ -235,59 +235,73 @@ export const ProjectPanel: React.FC = () => {
 
       {/* Multimodal Index Explorer: Tabs for Transcript, Scenes, and Speakers */}
       <div className="bg-[#18191B] rounded-xl border border-[#393B3F] p-3 space-y-3">
-        {/* Navigation Tabs */}
-        <div className="flex items-center justify-between border-b border-[#393B3F]/70 pb-2">
-          <div className="flex items-center space-x-1">
-            <button
-              onClick={() => setActiveTab('transcript')}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors ${
-                activeTab === 'transcript'
-                  ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
-                  : 'text-[#FFF5F5]/70 hover:text-white'
-              }`}
-            >
-              <FileText className="w-3 h-3" />
-              <span>Transcript ({cues.length})</span>
-            </button>
+        {/* Navigation Header with Status Indicator */}
+        <div className="flex items-center justify-between text-xs font-semibold text-[#FFF5F5]">
+          <span className="flex items-center gap-1.5 uppercase tracking-wider text-[11px] text-[#FFF5F5]/70 font-mono">
+            <Sparkles className="w-3 h-3 text-[#E3B5BE]" />
+            <span>Media Indexing</span>
+          </span>
 
-            <button
-              onClick={() => setActiveTab('scenes')}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors ${
-                activeTab === 'scenes'
-                  ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
-                  : 'text-[#FFF5F5]/70 hover:text-white'
-              }`}
-            >
-              <Video className="w-3 h-3" />
-              <span>Scenes ({mediaIndex.scenes.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('speakers')}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg text-xs font-mono transition-colors ${
-                activeTab === 'speakers'
-                  ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
-                  : 'text-[#FFF5F5]/70 hover:text-white'
-              }`}
-            >
-              <Users className="w-3 h-3" />
-              <span>Speakers ({mediaIndex.speakers.length})</span>
-            </button>
-          </div>
-
-          {/* Quick status indicators */}
           {saveStatus === 'saving' && (
-            <span className="flex items-center space-x-1 text-[10px] text-[#E3B5BE]">
+            <span className="flex items-center space-x-1 text-[10px] text-[#E3B5BE] font-mono">
               <Loader2 className="w-2.5 h-2.5 animate-spin" />
               <span>Syncing</span>
             </span>
           )}
           {saveStatus === 'saved' && (
-            <span className="flex items-center space-x-1 text-[10px] text-emerald-400">
+            <span className="flex items-center space-x-1 text-[10px] text-emerald-400 font-mono">
               <Check className="w-2.5 h-2.5" />
               <span>Saved</span>
             </span>
           )}
+        </div>
+
+        {/* 3 Full-Width Equal Segmented Tabs */}
+        <div className="grid grid-cols-3 gap-1 bg-[#121314] p-1 rounded-xl border border-[#393B3F]/70">
+          <button
+            type="button"
+            onClick={() => setActiveTab('transcript')}
+            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium transition-all min-w-0 ${
+              activeTab === 'transcript'
+                ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
+            }`}
+            title={`Transcript Cues (${cues.length})`}
+          >
+            <FileText className="w-3 h-3 shrink-0" />
+            <span className="truncate">Transcript</span>
+            <span className="text-[10px] font-mono opacity-80 shrink-0">({cues.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('scenes')}
+            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium transition-all min-w-0 ${
+              activeTab === 'scenes'
+                ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
+            }`}
+            title={`Scene Cuts (${mediaIndex.scenes.length})`}
+          >
+            <Video className="w-3 h-3 shrink-0" />
+            <span className="truncate">Scenes</span>
+            <span className="text-[10px] font-mono opacity-80 shrink-0">({mediaIndex.scenes.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('speakers')}
+            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium transition-all min-w-0 ${
+              activeTab === 'speakers'
+                ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
+            }`}
+            title={`Speakers Diarization (${mediaIndex.speakers.length})`}
+          >
+            <Users className="w-3 h-3 shrink-0" />
+            <span className="truncate">Speakers</span>
+            <span className="text-[10px] font-mono opacity-80 shrink-0">({mediaIndex.speakers.length})</span>
+          </button>
         </div>
 
         {/* Tab 1: Transcript & Dialogue */}
@@ -295,7 +309,7 @@ export const ProjectPanel: React.FC = () => {
           <div className="space-y-2.5">
             {/* Search & Actions Bar */}
             <div className="flex items-center gap-1.5">
-              <div className="relative flex-1">
+              <div className="relative flex-1 min-w-0">
                 <Search className="w-3 h-3 absolute left-2 top-2 text-[#FFF5F5]/40" />
                 <input
                   type="text"
@@ -306,22 +320,11 @@ export const ProjectPanel: React.FC = () => {
                 />
               </div>
 
-              {selectedSpeakerFilter && (
-                <button
-                  onClick={() => setSelectedSpeakerFilter(null)}
-                  className="px-2 py-1 rounded bg-[#2A2C2F] text-[10px] text-[#F7D7D1] border border-[#E3B5BE]/40 flex items-center space-x-1"
-                  title="Clear speaker filter"
-                >
-                  <span>{selectedSpeakerFilter}</span>
-                  <span>✕</span>
-                </button>
-              )}
-
               {cues.some((c) => !(c.text || '').replace(/^["'\s]+|["'\s]+$/g, '').trim()) && (
                 <button
                   type="button"
                   onClick={handleCleanEmptyCues}
-                  className="px-2 py-1 rounded text-[10px] bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/40 flex items-center space-x-1"
+                  className="px-2 py-1 rounded text-[10px] bg-red-950/40 hover:bg-red-900/50 text-red-300 border border-red-800/40 flex items-center space-x-1 shrink-0"
                   title="Remove empty subtitle cues"
                 >
                   <Trash2 className="w-2.5 h-2.5" />
@@ -332,7 +335,7 @@ export const ProjectPanel: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsEditing(!isEditing)}
-                className="px-2 py-1 rounded text-[10px] bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5] border border-[#393B3F] flex items-center space-x-1"
+                className="px-2 py-1 rounded text-[10px] bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5] border border-[#393B3F] flex items-center space-x-1 shrink-0"
               >
                 {isEditing ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Edit3 className="w-2.5 h-2.5 text-[#E3B5BE]" />}
                 <span>{isEditing ? 'Done' : 'Edit'}</span>
@@ -342,7 +345,7 @@ export const ProjectPanel: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleAddCueLine}
-                  className="px-2 py-1 rounded text-[10px] bg-[#E3B5BE] text-[#18191B] font-bold flex items-center space-x-0.5"
+                  className="px-2 py-1 rounded text-[10px] bg-[#E3B5BE] text-[#18191B] font-bold flex items-center space-x-0.5 shrink-0"
                   title="Add cue at playhead"
                 >
                   <Plus className="w-2.5 h-2.5" />
@@ -350,6 +353,24 @@ export const ProjectPanel: React.FC = () => {
                 </button>
               )}
             </div>
+
+            {/* Active Speaker Filter Chip */}
+            {selectedSpeakerFilter && (
+              <div className="flex items-center justify-between bg-[#141517] px-2 py-1 rounded-lg border border-[#E3B5BE]/30 text-[10px]">
+                <span className="text-[#FFF5F5]/70 flex items-center gap-1.5 truncate">
+                  <span className="text-[#FFF5F5]/40">Filter:</span>
+                  <span className="font-semibold text-[#F7D7D1]">{selectedSpeakerFilter}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSpeakerFilter(null)}
+                  className="text-[#FFF5F5]/50 hover:text-white px-1 font-mono"
+                  title="Clear speaker filter"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             {/* Cue List */}
             <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
