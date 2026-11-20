@@ -166,7 +166,17 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
 
     const cleanText = extractCleanErrorMessage(rawText);
 
+    const detailsSummary =
+      Array.isArray(payload?.error?.details) && payload.error.details.length > 0
+        ? payload.error.details
+            .map((d: any) => `${d.field ? d.field + ': ' : ''}${d.issue || d.message || JSON.stringify(d)}`)
+            .join('; ')
+        : null;
+
     const message =
+      (detailsSummary && payload?.error?.message
+        ? `${payload.error.message} (${detailsSummary})`
+        : null) ||
       payload?.error?.message ||
       (typeof payload?.error === 'string' ? payload.error : null) ||
       (typeof payload?.message === 'string' ? payload.message : null) ||

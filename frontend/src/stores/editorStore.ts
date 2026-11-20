@@ -20,6 +20,13 @@ export interface ChatMessageItem {
   timestamp: string;
 }
 
+export interface TrackState {
+  muted?: boolean;
+  locked?: boolean;
+  hidden?: boolean;
+  solo?: boolean;
+}
+
 export interface TrackVM {
   id: string;
   kind: 'video' | 'subtitle' | 'text' | 'fx' | 'music';
@@ -102,6 +109,7 @@ export interface EditorStoreState {
     selectedLayerIds: string[];
     snap: boolean;
     toolMode: 'select' | 'razor';
+    trackStates: Record<string, TrackState>;
   };
 
   playback: {
@@ -168,6 +176,19 @@ export interface EditorStoreState {
   updateLayerRange: (layerId: string, startSec: number, endSec: number) => void;
   splitLayerAtTime: (timeSec: number, layerId?: string) => boolean;
   splitSubtitleCueAtTime: (timeSec: number) => boolean;
+  moveClip: (
+    clipId: string,
+    newStartSec: number,
+    newEndSec: number,
+    isCue?: boolean,
+    cueIndex?: number
+  ) => void;
+  duplicateLayer: (layerId: string) => void;
+  duplicateCue: (cueIndex: number) => void;
+  addTimelineLayer: (type: 'text' | 'music' | 'color' | 'cut' | 'overlay') => void;
+  toggleTrackMute: (trackId: string) => void;
+  toggleTrackLock: (trackId: string) => void;
+  toggleTrackHidden: (trackId: string) => void;
   addChatMessage: (msg: Omit<ChatMessageItem, 'id' | 'timestamp'>) => void;
   setChatMessages: (messages: ChatMessageItem[]) => void;
   clearChat: () => void;
@@ -210,6 +231,7 @@ export const useEditorStore = create<EditorStoreState>()(
       selectedLayerIds: [],
       snap: true,
       toolMode: 'select',
+      trackStates: {},
     },
 
     playback: {
@@ -630,29 +652,32 @@ export const useEditorStore = create<EditorStoreState>()(
           });
         }
 
-        // If a specific layer (e.g. Color, Text, Speed, Music) was selected and found, split it
+        // If a specific splittable layer (e.g. Text, Speed, Overlay) was selected and found, split it
         if (targetLayerIndex !== -1) {
           const originalLayer = draft.layers[targetLayerIndex];
-          const origStart = originalLayer.range?.start ?? 0;
-          const originalEnd = originalLayer.range?.end ?? totalDur;
+          const singletonTypes = ['color', 'subtitle', 'audio', 'music', 'intro', 'outro'];
+          if (!singletonTypes.includes(originalLayer.layer)) {
+            const origStart = originalLayer.range?.start ?? 0;
+            const originalEnd = originalLayer.range?.end ?? totalDur;
 
-          originalLayer.range = {
-            start: origStart,
-            end: splitPoint,
-          };
+            originalLayer.range = {
+              start: origStart,
+              end: splitPoint,
+            };
 
-          const newLayer = JSON.parse(JSON.stringify(originalLayer));
-          newLayer.id = `l_${Date.now()}_split`;
-          newLayer.range = {
-            start: splitPoint,
-            end: originalEnd,
-          };
+            const newLayer = JSON.parse(JSON.stringify(originalLayer));
+            newLayer.id = `l_${Date.now()}_split`;
+            newLayer.range = {
+              start: splitPoint,
+              end: originalEnd,
+            };
 
-          draft.layers.splice(targetLayerIndex + 1, 0, newLayer);
-          draftState.timeline.selectedLayerIds = [newLayer.id];
-          draftState.preview.stale = true;
-          splitSuccess = true;
-          return;
+            draft.layers.splice(targetLayerIndex + 1, 0, newLayer);
+            draftState.timeline.selectedLayerIds = [newLayer.id];
+            draftState.preview.stale = true;
+            splitSuccess = true;
+            return;
+          }
         }
 
         // If playhead spans a subtitle cue and no other specific layer is selected, delegate to cue split
@@ -749,6 +774,257 @@ export const useEditorStore = create<EditorStoreState>()(
       get().updateCues(newCues);
       return true;
     },
+
+    moveClip: (clipId, newStartSec, newEndSec, isCue = false, cueIndex) =>
+      set((state) => {
+        const cleanStart = Math.max(0, Number(newStartSec.toFixed(3)));
+        const cleanEnd = Math.max(cleanStart + 0.1, Number(newEndSec.toFixed(3)));
+
+        if (isCue && cueIndex !== undefined) {
+          if (!state.project?.analysisSummary?.cues) return;
+          const target = state.project.analysisSummary.cues[cueIndex];
+          if (!target) return;
+          const startMs = Math.round(cleanStart * 1000);
+          const endMs = Math.round(cleanEnd * 1000);
+          const tokens = (target.text || '').trim().split(/\s+/).filter(Boolean);
+          target.startMs = startMs;
+          target.endMs = endMs;
+          target.words = computeNaturalWordTimings(
+            tokens,
+            startMs,
+            endMs,
+            target.words as any
+          ) as any;
+          return;
+        }
+
+        if (!state.plan.draft && state.plan.current) {
+          state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
+        }
+        if (state.plan.draft) {
+          const layer = state.plan.draft.layers.find((l) => l.id === clipId);
+          if (layer) {
+            layer.range = {
+              start: cleanStart,
+              end: cleanEnd,
+            };
+            state.preview.stale = true;
+          }
+        }
+      }),
+
+    duplicateLayer: (layerId) =>
+      set((state) => {
+        if (!state.plan.draft && state.plan.current) {
+          state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
+        }
+        if (!state.plan.draft) return;
+        const target = state.plan.draft.layers.find((l) => l.id === layerId);
+        if (!target) return;
+
+        const singletonTypes = ['color', 'subtitle', 'audio', 'music', 'intro', 'outro'];
+        if (singletonTypes.includes(target.layer)) {
+          return;
+        }
+
+        const clone = JSON.parse(JSON.stringify(target));
+        clone.id = `lyr_${clone.layer}_${Date.now()}`;
+        if (clone.range) {
+          const dur = clone.range.end - clone.range.start;
+          clone.range.start = Number((clone.range.end + 0.5).toFixed(3));
+          clone.range.end = Number((clone.range.start + dur).toFixed(3));
+        }
+        state.plan.draft.layers.push(clone);
+        state.timeline.selectedLayerIds = [clone.id];
+        state.preview.stale = true;
+      }),
+
+    duplicateCue: (cueIndex) =>
+      set((state) => {
+        if (!state.project?.analysisSummary?.cues) return;
+        const cues = state.project.analysisSummary.cues;
+        const target = cues[cueIndex];
+        if (!target) return;
+
+        const durMs = target.endMs - target.startMs;
+        const clone = {
+          ...JSON.parse(JSON.stringify(target)),
+          id: `cue_user_${Date.now()}`,
+          startMs: target.endMs + 300,
+          endMs: target.endMs + 300 + durMs,
+        };
+        cues.splice(cueIndex + 1, 0, clone);
+        state.project.analysisSummary.cuesCount = cues.length;
+        state.timeline.selectedLayerIds = [clone.id];
+      }),
+
+    addTimelineLayer: (type) =>
+      set((state) => {
+        if (!state.plan.draft && state.plan.current) {
+          state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
+        }
+        if (!state.plan.draft) return;
+        const playhead = state.playback.currentTime;
+        const totalDur = state.playback.duration || 60;
+        const startSec = Math.max(0, Math.min(playhead, totalDur - 1));
+        const endSec = Math.min(totalDur, startSec + 4.0);
+        const newId = `lyr_${type}_${Date.now()}`;
+
+        let newLayer: EditLayer;
+        switch (type) {
+          case 'text':
+            newLayer = {
+              id: newId,
+              layer: 'text',
+              enabled: true,
+              timebase: 'source',
+              range: { start: Number(startSec.toFixed(2)), end: Number(endSec.toFixed(2)) },
+              params: {
+                content: 'Graphic Title Overlay',
+                animation: 'fade',
+                position: { x: 0.5, y: 0.8 },
+                font: 'Montserrat',
+                size: 48,
+                color: '#FFF5F5',
+              },
+            };
+            break;
+          case 'music': {
+            const existingMusic = state.plan.draft.layers.find((l) => l.layer === 'music');
+            if (existingMusic) {
+              existingMusic.enabled = true;
+              state.timeline.selectedLayerIds = [existingMusic.id];
+              state.preview.stale = true;
+              return;
+            }
+            newLayer = {
+              id: newId,
+              layer: 'music',
+              enabled: true,
+              timebase: 'output',
+              params: {
+                trackId: 'ambient_soundtrack',
+                volume: 0.7,
+                duckUnderSpeech: true,
+              },
+            };
+            break;
+          }
+          case 'color': {
+            const existingColor = state.plan.draft.layers.find((l) => l.layer === 'color');
+            if (existingColor) {
+              existingColor.enabled = true;
+              state.timeline.selectedLayerIds = [existingColor.id];
+              state.preview.stale = true;
+              return;
+            }
+            newLayer = {
+              id: newId,
+              layer: 'color',
+              enabled: true,
+              timebase: 'global',
+              params: {
+                preset: 'cinematic',
+                contrast: 1.05,
+                saturation: 1.1,
+                brightness: 0,
+              },
+            };
+            break;
+          }
+          case 'overlay':
+            newLayer = {
+              id: newId,
+              layer: 'overlay',
+              enabled: true,
+              timebase: 'source',
+              range: { start: Number(startSec.toFixed(2)), end: Number(endSec.toFixed(2)) },
+              params: {
+                asset: 'lens_flare',
+                opacity: 0.8,
+              },
+            };
+            break;
+          case 'cut':
+            newLayer = {
+              id: newId,
+              layer: 'cut',
+              enabled: true,
+              timebase: 'source',
+              range: {
+                start: Number(startSec.toFixed(2)),
+                end: Number(Math.min(totalDur, startSec + 1.0).toFixed(2)),
+              },
+              params: {
+                reason: 'user',
+              },
+            };
+            break;
+          default:
+            return;
+        }
+
+        state.plan.draft.layers.push(newLayer);
+        state.timeline.selectedLayerIds = [newId];
+        state.preview.stale = true;
+      }),
+
+    toggleTrackMute: (trackId) =>
+      set((state) => {
+        if (!state.timeline.trackStates) state.timeline.trackStates = {};
+        const curr = state.timeline.trackStates[trackId] || {};
+        const nextMuted = !curr.muted;
+        state.timeline.trackStates[trackId] = { ...curr, muted: nextMuted };
+
+        if (trackId === 'trk_audio') {
+          if (!state.plan.draft && state.plan.current) {
+            state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
+          }
+          if (state.plan.draft) {
+            state.plan.draft.layers.forEach((l) => {
+              if (l.layer === 'music' || l.layer === 'audio') {
+                l.enabled = !nextMuted;
+              }
+            });
+            state.preview.stale = true;
+          }
+        }
+      }),
+
+    toggleTrackLock: (trackId) =>
+      set((state) => {
+        if (!state.timeline.trackStates) state.timeline.trackStates = {};
+        const curr = state.timeline.trackStates[trackId] || {};
+        state.timeline.trackStates[trackId] = { ...curr, locked: !curr.locked };
+      }),
+
+    toggleTrackHidden: (trackId) =>
+      set((state) => {
+        if (!state.timeline.trackStates) state.timeline.trackStates = {};
+        const curr = state.timeline.trackStates[trackId] || {};
+        const nextHidden = !curr.hidden;
+        state.timeline.trackStates[trackId] = { ...curr, hidden: nextHidden };
+
+        if (!state.plan.draft && state.plan.current) {
+          state.plan.draft = JSON.parse(JSON.stringify(state.plan.current));
+        }
+        if (state.plan.draft) {
+          const kindMap: Record<string, string[]> = {
+            trk_video: ['video', 'cut', 'speed', 'intro', 'outro'],
+            trk_subtitle: ['subtitle'],
+            trk_text: ['text'],
+            trk_audio: ['music', 'audio'],
+            trk_fx: ['color', 'overlay', 'transition'],
+          };
+          const layerTypes = kindMap[trackId] || [];
+          state.plan.draft.layers.forEach((l) => {
+            if (layerTypes.includes(l.layer)) {
+              l.enabled = !nextHidden;
+            }
+          });
+          state.preview.stale = true;
+        }
+      }),
 
     addChatMessage: (msg) =>
       set((state) => {
@@ -994,6 +1270,9 @@ export interface DerivedTrackVM {
   kind: 'video' | 'subtitle' | 'text' | 'music' | 'fx';
   name: string;
   clips: TrackClipVM[];
+  locked?: boolean;
+  muted?: boolean;
+  hidden?: boolean;
 }
 
 export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] => {
@@ -1287,7 +1566,13 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
     });
   }
 
-  return tracks;
+  const trackStates = state.timeline.trackStates || {};
+  return tracks.map((t) => ({
+    ...t,
+    locked: trackStates[t.id]?.locked ?? false,
+    muted: trackStates[t.id]?.muted ?? false,
+    hidden: trackStates[t.id]?.hidden ?? false,
+  }));
 };
 
 export const selectMediaIndex = (state: EditorStoreState): MediaIndexSummary => {

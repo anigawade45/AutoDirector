@@ -185,6 +185,14 @@ describe('Media Indexing & Direct Timeline Editing Suite', () => {
                 timebase: 'global',
                 params: { preset: 'cinematic', contrast: 1, saturation: 1 },
               },
+              {
+                id: 'l_text_1',
+                layer: 'text',
+                enabled: true,
+                timebase: 'source',
+                range: { start: 1.0, end: 10.0 },
+                params: { content: 'Intro Title', position: { x: 0.5, y: 0.5 }, animation: 'fade' },
+              },
             ],
           },
           draft: null,
@@ -252,19 +260,19 @@ describe('Media Indexing & Direct Timeline Editing Suite', () => {
       expect(useEditorStore.getState().timeline.selectedLayerIds).toEqual([]);
     });
 
-    it('splits color grade layer when explicitly selected', () => {
+    it('splits timeline text layer cleanly when explicitly selected', () => {
       useEditorStore.setState((state) => {
-        state.timeline.selectedLayerIds = ['l_color_1'];
+        state.timeline.selectedLayerIds = ['l_text_1'];
       });
 
-      const splitSuccess = useEditorStore.getState().splitLayerAtTime(5.0, 'l_color_1');
+      const splitSuccess = useEditorStore.getState().splitLayerAtTime(5.0, 'l_text_1');
       expect(splitSuccess).toBe(true);
 
       const layers = useEditorStore.getState().plan.draft?.layers || [];
-      const colorLayers = layers.filter((l) => l.layer === 'color');
-      expect(colorLayers.length).toBe(2);
-      expect(colorLayers[0].range?.end).toBe(5.0);
-      expect(colorLayers[1].range?.start).toBe(5.0);
+      const textLayers = layers.filter((l) => l.layer === 'text');
+      expect(textLayers.length).toBe(2);
+      expect(textLayers[0].range?.end).toBe(5.0);
+      expect(textLayers[1].range?.start).toBe(5.0);
     });
   });
 });

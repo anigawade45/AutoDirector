@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseRoute } from '../App';
+import { parseRoute } from '../utils/routeParser';
 
 describe('Frontend HTML5 Routing & Deep Linking Engine', () => {
   it('parses root / as landing page', () => {

@@ -9,6 +9,7 @@ import { EditPlanSchema, EditPlan, validateEditPlan } from '@ai-video/shared';
 import { PlanNormalizer } from '../services/planner/planNormalizer.js';
 import { AppError } from '../middleware/errorHandler.js';
 import fastJsonPatch from 'fast-json-patch';
+import { ZodError } from 'zod';
 import crypto from 'crypto';
 
 export class PlansController {
@@ -196,7 +197,24 @@ export class PlansController {
       normalizedPlan.parentVersion = effectiveBaseVersion;
 
       // Validate patched object with Zod schema
-      const validatedPlan = EditPlanSchema.parse(normalizedPlan) as EditPlan;
+      let validatedPlan: EditPlan;
+      try {
+        validatedPlan = EditPlanSchema.parse(normalizedPlan) as EditPlan;
+      } catch (err: any) {
+        if (err instanceof ZodError) {
+          const detailStr = err.errors
+            .map((e) => `${e.path.join('.') || 'plan'}: ${e.message}`)
+            .join('; ');
+          console.error(`[PlansController.patchPlan] Plan Zod validation failed: ${detailStr}`);
+          throw new AppError(
+            400,
+            'INVALID_PLAN_SCHEMA',
+            `Plan schema validation failed: ${detailStr}`,
+            err.errors.map((e) => ({ field: e.path.join('.'), issue: e.message }))
+          );
+        }
+        throw err;
+      }
 
       const planValidation = validateEditPlan(validatedPlan, {
         assetDurationSec,
@@ -367,7 +385,24 @@ export class PlansController {
       normalizedPlan.version = nextVersion;
       normalizedPlan.parentVersion = project.headVersion;
 
-      const validatedPlan = EditPlanSchema.parse(normalizedPlan) as EditPlan;
+      let validatedPlan: EditPlan;
+      try {
+        validatedPlan = EditPlanSchema.parse(normalizedPlan) as EditPlan;
+      } catch (err: any) {
+        if (err instanceof ZodError) {
+          const detailStr = err.errors
+            .map((e) => `${e.path.join('.') || 'plan'}: ${e.message}`)
+            .join('; ');
+          console.error(`[PlansController.revertPlan] Plan Zod validation failed: ${detailStr}`);
+          throw new AppError(
+            400,
+            'INVALID_PLAN_SCHEMA',
+            `Plan schema validation failed: ${detailStr}`,
+            err.errors.map((e) => ({ field: e.path.join('.'), issue: e.message }))
+          );
+        }
+        throw err;
+      }
 
       // Persist new EditPlan version (with duplicate-key resilience)
       let newPlanDoc: any;

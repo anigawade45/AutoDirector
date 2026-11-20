@@ -102,10 +102,12 @@ export const TextLayerSchema = z.object({
   params: z.object({
     content: z.string().max(120),
     animation: z.enum(['fade', 'slide_up', 'typewriter', 'scale']).default('fade'),
-    position: z.object({
-      x: z.number().min(0).max(1).default(0.5),
-      y: z.number().min(0).max(1).default(0.5),
-    }),
+    position: z
+      .object({
+        x: z.number().min(0).max(1).default(0.5),
+        y: z.number().min(0).max(1).default(0.5),
+      })
+      .default({ x: 0.5, y: 0.5 }),
     font: z.string().optional(),
     size: z.number().positive().optional(),
     color: z

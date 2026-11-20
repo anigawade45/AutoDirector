@@ -22,6 +22,14 @@ import {
   Plus,
   Minus,
   RotateCcw,
+  Eye,
+  EyeOff,
+  Volume2,
+  VolumeX,
+  Lock,
+  Unlock,
+  Copy,
+  ChevronDown,
 } from 'lucide-react';
 import {
   useEditorStore,
@@ -57,6 +65,13 @@ export const TimelineView: React.FC = () => {
     updateCueSpeaker,
     deleteCue,
     cleanEmptySubtitleCues,
+    moveClip,
+    duplicateLayer,
+    duplicateCue,
+    addTimelineLayer,
+    toggleTrackMute,
+    toggleTrackLock,
+    toggleTrackHidden,
     updateDraft,
     commitDraft,
     project,
@@ -74,6 +89,8 @@ export const TimelineView: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [activeSnapLine, setActiveSnapLine] = useState<number | null>(null);
+
+  // Trimming State
   const [activeTrim, setActiveTrim] = useState<{
     layerId: string;
     handle: 'left' | 'right';
@@ -83,11 +100,42 @@ export const TimelineView: React.FC = () => {
     currentEnd: number;
   } | null>(null);
 
+  // Moving / Drag-and-Drop Clip State
+  const [activeMove, setActiveMove] = useState<{
+    clipId: string;
+    isCue: boolean;
+    cueIndex?: number;
+    initialStart: number;
+    durSec: number;
+    currentStart: number;
+  } | null>(null);
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    clip: TrackClipVM;
+    track: DerivedTrackVM;
+  } | null>(null);
+
+  // "+ Add Layer" Dropdown State
+  const [isAddLayerOpen, setIsAddLayerOpen] = useState(false);
+
   const zoom = timeline.zoom; // pixels per second
   const totalDuration = playback.duration || project?.durationSec || 60;
   const fps = project?.fps || effectivePlan?.global?.fps || 30;
   const frameDuration = 1 / fps;
   const timelineWidth = Math.max(900, totalDuration * zoom);
+
+  // Dismiss context menu on click outside or escape
+  useEffect(() => {
+    const handleCloseMenu = () => {
+      setContextMenu(null);
+      setIsAddLayerOpen(false);
+    };
+    window.addEventListener('click', handleCloseMenu);
+    return () => window.removeEventListener('click', handleCloseMenu);
+  }, []);
 
   // Collect boundary snap points from all clips
   const snapBoundaries = useRef<number[]>([]);
@@ -181,10 +229,15 @@ export const TimelineView: React.FC = () => {
   const handleStartTrim = (
     e: React.MouseEvent,
     clip: TrackClipVM,
+    track: DerivedTrackVM,
     handle: 'left' | 'right'
   ) => {
     e.stopPropagation();
     e.preventDefault();
+    if (track.locked) {
+      toast.warning('Track is locked. Unlock to trim.', 'Track Locked');
+      return;
+    }
     if (!clip.layerId && clip.cueIndex === undefined) return;
 
     const initialStart = clip.startSec;
@@ -269,7 +322,6 @@ export const TimelineView: React.FC = () => {
         const latestCues = useEditorStore.getState().project?.analysisSummary?.cues || [];
         api.updateCaptions(project.id, latestCues).catch(() => {});
       } else if (!isCue && project && clip.layerId) {
-        // Sync trimmed plan layer to server
         const currentPlan = useEditorStore.getState().plan;
         if (currentPlan.current && currentPlan.draft) {
           const patch = compare(currentPlan.current, currentPlan.draft);
@@ -289,6 +341,112 @@ export const TimelineView: React.FC = () => {
         }
       }
       setActiveTrim(null);
+      setActiveSnapLine(null);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Handle interactive horizontal clip moving (Drag & Drop)
+  const handleStartMoveClip = (
+    e: React.MouseEvent,
+    clip: TrackClipVM,
+    track: DerivedTrackVM
+  ) => {
+    if (timeline.toolMode === 'razor') return;
+    if (track.locked) {
+      toast.warning('Track is locked. Unlock to move clips.', 'Track Locked');
+      return;
+    }
+    if (!clip.layerId && clip.cueIndex === undefined) return;
+
+    const startX = e.clientX;
+    const initialStart = clip.startSec;
+    const durSec = clip.durSec;
+    const isCue = clip.cueIndex !== undefined;
+    const cueIdx = clip.cueIndex;
+    const clipId = clip.layerId || clip.id;
+
+    let hasMoved = false;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaPx = moveEvent.clientX - startX;
+      if (!hasMoved && Math.abs(deltaPx) > 4) {
+        hasMoved = true;
+        setActiveMove({
+          clipId,
+          isCue,
+          cueIndex: cueIdx,
+          initialStart,
+          durSec,
+          currentStart: initialStart,
+        });
+      }
+
+      if (hasMoved) {
+        const deltaSec = deltaPx / zoom;
+        let newStart = Math.max(0, initialStart + deltaSec);
+
+        if (timeline.snap) {
+          const snapRadiusSec = 10 / zoom;
+          const nearest = snapBoundaries.current.find(
+            (pt) => Math.abs(pt - newStart) <= snapRadiusSec
+          );
+          if (nearest !== undefined) {
+            newStart = nearest;
+            setActiveSnapLine(nearest * zoom);
+          } else {
+            newStart = Math.round(newStart / frameDuration) * frameDuration;
+            setActiveSnapLine(null);
+          }
+        }
+
+        const newEnd = Math.min(totalDuration, newStart + durSec);
+        moveClip(clipId, newStart, newEnd, isCue, cueIdx);
+        setCurrentTime(newStart);
+
+        setActiveMove((prev) =>
+          prev
+            ? {
+                ...prev,
+                currentStart: newStart,
+              }
+            : null
+        );
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (hasMoved) {
+        if (isCue && project) {
+          const latestCues = useEditorStore.getState().project?.analysisSummary?.cues || [];
+          api.updateCaptions(project.id, latestCues).catch(() => {});
+        } else if (!isCue && project && clip.layerId) {
+          const currentPlan = useEditorStore.getState().plan;
+          if (currentPlan.current && currentPlan.draft) {
+            const patch = compare(currentPlan.current, currentPlan.draft);
+            if (patch.length > 0) {
+              api
+                .patchPlan(project.id, currentPlan.version, {
+                  patch: patch as any,
+                  baseVersion: currentPlan.version,
+                })
+                .then((res) => {
+                  commitDraft(res.plan);
+                })
+                .catch((err) => {
+                  console.warn('Move patch sync failed:', err);
+                });
+            }
+          }
+        }
+        toast.info(`Moved "${clip.label}"`, 'Timeline');
+      }
+
+      setActiveMove(null);
       setActiveSnapLine(null);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
@@ -396,6 +554,24 @@ export const TimelineView: React.FC = () => {
     }
   };
 
+  const handleDuplicateSelected = () => {
+    const selectedId = timeline.selectedLayerIds[0];
+    if (!selectedId) return;
+
+    if (selectedId.startsWith('cue_')) {
+      const cues = project?.analysisSummary?.cues || [];
+      const idx = cues.findIndex((c, i) => (c.id || `cue_${i + 1}`) === selectedId);
+      if (idx !== -1) {
+        duplicateCue(idx);
+        toast.success('Duplicated subtitle cue', 'Duplicate');
+        return;
+      }
+    }
+
+    duplicateLayer(selectedId);
+    toast.success('Duplicated layer', 'Duplicate');
+  };
+
   const handleToggleSnap = () => {
     const nextSnap = !timeline.snap;
     toggleSnap();
@@ -411,18 +587,22 @@ export const TimelineView: React.FC = () => {
     }
   };
 
-  // Keyboard shortcuts: Delete, Split (S), Razor Tool (C), Select Tool (V)
+  // Keyboard shortcuts: Delete, Duplicate (Ctrl+D), Split (S), Razor Tool (C), Select Tool (V), Nudges
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return;
       }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (timeline.selectedLayerIds.length > 0) {
           e.preventDefault();
           handleDeleteSelected();
         }
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        handleDuplicateSelected();
       } else if (e.key === 's' || e.key === 'S') {
         e.preventDefault();
         handleSplitAtPlayhead();
@@ -433,12 +613,25 @@ export const TimelineView: React.FC = () => {
       } else if (e.key === 'v' || e.key === 'V') {
         e.preventDefault();
         setToolMode('select');
+      } else if (e.key === '[' || e.key === ']') {
+        const selectedId = timeline.selectedLayerIds[0];
+        if (selectedId) {
+          e.preventDefault();
+          const nudgeSec = (e.shiftKey ? 1.0 : 0.1) * (e.key === '[' ? -1 : 1);
+          const clip = derivedTracks.flatMap((t) => t.clips).find((c) => (c.layerId || c.id) === selectedId);
+          if (clip) {
+            const newStart = Math.max(0, clip.startSec + nudgeSec);
+            const newEnd = newStart + clip.durSec;
+            moveClip(selectedId, newStart, newEnd, clip.cueIndex !== undefined, clip.cueIndex);
+            setCurrentTime(newStart);
+          }
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [timeline.selectedLayerIds, deleteSelectedLayers, handleSplitAtPlayhead, setToolMode]);
+  }, [timeline.selectedLayerIds, deleteSelectedLayers, handleSplitAtPlayhead, setToolMode, derivedTracks, moveClip, setCurrentTime]);
 
   // Generate ruler tick marks based on zoom level
   const tickStep = zoom > 120 ? 1 : zoom > 50 ? 5 : 10;
@@ -473,7 +666,6 @@ export const TimelineView: React.FC = () => {
   };
 
   const getClipStyle = (clip: TrackClipVM, isSelected: boolean) => {
-    // Note: Do NOT add 'truncate' here! Keep outer clip overflow visible so popovers render cleanly.
     const base =
       'h-full rounded-md cursor-pointer flex items-center px-2 text-xs transition-all select-none relative ';
     if (isSelected) {
@@ -564,7 +756,7 @@ export const TimelineView: React.FC = () => {
                   ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
                   : 'text-[#FFF5F5]/70 hover:text-white'
               }`}
-              title="Select Tool (V) - Click to position playhead or select clips"
+              title="Select Tool (V) - Click to position playhead or drag clips"
             >
               <MousePointer className="w-3 h-3" />
               <span className="hidden sm:inline">Select</span>
@@ -595,6 +787,64 @@ export const TimelineView: React.FC = () => {
             <Scissors className="w-3.5 h-3.5 text-[#E3B5BE]" />
             <span>Split (S)</span>
           </button>
+
+          {/* Duplicate selected layer/clip button */}
+          {selectedLayerIds.length > 0 && (
+            <button
+              onClick={handleDuplicateSelected}
+              className="flex items-center space-x-1 px-2 py-0.5 rounded bg-[#2A2C2F] hover:bg-[#34373B] text-[#FFF5F5] border border-[#393B3F] text-[11px] transition-colors shrink-0"
+              title="Duplicate Selected Clip (Ctrl+D)"
+            >
+              <Copy className="w-3 h-3 text-[#E3B5BE]" />
+              <span className="hidden sm:inline">Duplicate</span>
+            </button>
+          )}
+
+          {/* + Add Track / Layer Dropdown */}
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsAddLayerOpen(!isAddLayerOpen);
+              }}
+              className="flex items-center space-x-1 px-2 py-0.5 rounded bg-[#2A2C2F] hover:bg-[#34373B] text-[#F7D7D1] border border-[#E3B5BE]/40 text-[11px] font-mono transition-colors shrink-0"
+              title="Add track or layer to timeline"
+            >
+              <Plus className="w-3 h-3 text-[#E3B5BE]" />
+              <span>Add Clip</span>
+              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+            </button>
+
+            {isAddLayerOpen && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute left-0 top-full mt-1 w-44 bg-[#18191B] border border-[#393B3F] rounded-lg shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95"
+              >
+                <div className="px-2.5 py-1 text-[9px] font-mono text-[#FFF5F5]/40 uppercase tracking-wider border-b border-[#393B3F]/50">
+                  New Timeline Layer
+                </div>
+                {[
+                  { id: 'text', label: 'Graphic Text', icon: <Layers className="w-3 h-3 text-[#FFF5F5]" /> },
+                  { id: 'music', label: 'Audio Soundtrack', icon: <Music className="w-3 h-3 text-[#F7D7D1]" /> },
+                  { id: 'color', label: 'Color Grade FX', icon: <Palette className="w-3 h-3 text-[#E3B5BE]" /> },
+                  { id: 'cut', label: 'Razor Cut Exclude', icon: <Scissors className="w-3 h-3 text-red-300" /> },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      addTimelineLayer(item.id as any);
+                      setIsAddLayerOpen(false);
+                      toast.success(`Added ${item.label} to timeline`, 'Timeline');
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 hover:bg-[#2A2C2F] text-xs text-[#FFF5F5] flex items-center space-x-2 transition-colors"
+                  >
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Magnetic Frame Snapping Toggle */}
           <button
@@ -670,10 +920,10 @@ export const TimelineView: React.FC = () => {
 
       {/* Main Tracks & Playhead Area */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Track Headers (Left sidebar) */}
-        <div className="w-44 border-r border-[#393B3F] bg-[#18191B] flex flex-col shrink-0 text-xs">
+        {/* Track Headers (Left sidebar with Track Controls: Lock, Mute, Hide) */}
+        <div className="w-48 border-r border-[#393B3F] bg-[#18191B] flex flex-col shrink-0 text-xs">
           <div className="h-6 border-b border-[#393B3F] flex items-center px-2 text-[10px] font-mono text-[#FFF5F5]/40 justify-between">
-            <span>TRACKS</span>
+            <span>MULTI-TRACK LANES</span>
             {sceneCuts.length > 0 && (
               <span className="text-amber-400/80">{sceneCuts.length + 1} scenes</span>
             )}
@@ -681,10 +931,80 @@ export const TimelineView: React.FC = () => {
           {derivedTracks.map((track) => (
             <div
               key={track.id}
-              className="h-11 border-b border-[#393B3F] px-3 flex items-center space-x-2 text-[#FFF5F5]"
+              className={`h-11 border-b border-[#393B3F] px-2.5 flex items-center justify-between text-[#FFF5F5] transition-colors ${
+                track.locked
+                  ? 'bg-[#121314]/80'
+                  : track.hidden
+                    ? 'opacity-60 bg-[#151618]'
+                    : 'bg-[#18191B]'
+              }`}
             >
-              {getTrackIcon(track.kind)}
-              <span className="font-medium text-[11px] truncate">{track.name}</span>
+              {/* Track Name & Icon */}
+              <div className="flex items-center space-x-1.5 min-w-0 mr-1">
+                {getTrackIcon(track.kind)}
+                <span className="font-medium text-[11px] truncate" title={track.name}>
+                  {track.name}
+                </span>
+              </div>
+
+              {/* Track Controls: Hide, Mute, Lock */}
+              <div className="flex items-center space-x-1 shrink-0">
+                {/* Hide / Show Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleTrackHidden(track.id);
+                    toast.info(
+                      track.hidden ? `Shown ${track.name}` : `Hidden ${track.name}`,
+                      'Track Visibility'
+                    );
+                  }}
+                  className={`p-1 rounded hover:bg-[#2A2C2F] transition-colors ${
+                    track.hidden ? 'text-amber-400' : 'text-[#FFF5F5]/40 hover:text-white'
+                  }`}
+                  title={track.hidden ? 'Show Track' : 'Hide Track'}
+                >
+                  {track.hidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                </button>
+
+                {/* Mute Toggle (Audio/Music/Video) */}
+                {(track.kind === 'music' || track.kind === 'video') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleTrackMute(track.id);
+                      toast.info(
+                        track.muted ? `Unmuted ${track.name}` : `Muted ${track.name}`,
+                        'Track Audio'
+                      );
+                    }}
+                    className={`p-1 rounded hover:bg-[#2A2C2F] transition-colors ${
+                      track.muted ? 'text-red-400' : 'text-[#FFF5F5]/40 hover:text-white'
+                    }`}
+                    title={track.muted ? 'Unmute Track' : 'Mute Track'}
+                  >
+                    {track.muted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                  </button>
+                )}
+
+                {/* Lock Toggle */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleTrackLock(track.id);
+                    toast.info(
+                      track.locked ? `Unlocked ${track.name}` : `Locked ${track.name}`,
+                      'Track Lock'
+                    );
+                  }}
+                  className={`p-1 rounded hover:bg-[#2A2C2F] transition-colors ${
+                    track.locked ? 'text-amber-400' : 'text-[#FFF5F5]/40 hover:text-white'
+                  }`}
+                  title={track.locked ? 'Unlock Track' : 'Lock Track'}
+                >
+                  {track.locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                </button>
+              </div>
             </div>
           ))}
           {derivedTracks.length === 0 && (
@@ -696,7 +1016,10 @@ export const TimelineView: React.FC = () => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          onClick={() => selectLayer(null)}
+          onClick={() => {
+            selectLayer(null);
+            setContextMenu(null);
+          }}
           className={`flex-1 overflow-x-auto relative bg-[#121314] ${
             timeline.toolMode === 'razor' ? 'cursor-crosshair' : ''
           }`}
@@ -804,7 +1127,12 @@ export const TimelineView: React.FC = () => {
               className="flex flex-col relative select-none"
             >
               {derivedTracks.map((track) => (
-                <div key={track.id} className="h-11 border-b border-[#393B3F]/60 relative py-1">
+                <div
+                  key={track.id}
+                  className={`h-11 border-b border-[#393B3F]/60 relative py-1 transition-opacity ${
+                    track.hidden ? 'opacity-30' : track.locked ? 'bg-[#151618]/50' : ''
+                  }`}
+                >
                   {track.clips.map((clip) => {
                     const isSelected = !!clip.layerId && selectedLayerIds.includes(clip.layerId);
                     const leftPx = clip.startSec * zoom;
@@ -816,6 +1144,24 @@ export const TimelineView: React.FC = () => {
                       <div
                         key={clip.id}
                         data-clip="true"
+                        onMouseDown={(e) => {
+                          if (e.button === 0) {
+                            handleStartMoveClip(e, clip, track);
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (clip.layerId) {
+                            selectLayer(clip.layerId);
+                          }
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            clip,
+                            track,
+                          });
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           const container = scrollContainerRef.current;
@@ -827,6 +1173,10 @@ export const TimelineView: React.FC = () => {
                           }
 
                           if (timeline.toolMode === 'razor') {
+                            if (track.locked) {
+                              toast.warning('Track is locked. Unlock to cut.', 'Track Locked');
+                              return;
+                            }
                             const splitOk = splitLayerAtTime(clickTime, clip.layerId);
                             if (splitOk) {
                               toast.success(`Razor cut at ${clickTime.toFixed(2)}s`, 'Cut');
@@ -842,6 +1192,10 @@ export const TimelineView: React.FC = () => {
                         }}
                         onDoubleClick={(e) => {
                           e.stopPropagation();
+                          if (track.locked) {
+                            toast.warning('Track is locked. Unlock to edit.', 'Track Locked');
+                            return;
+                          }
                           if (clip.cueIndex !== undefined) {
                             const cue = project?.analysisSummary?.cues?.[clip.cueIndex];
                             handleStartTimelineCueEdit(
@@ -864,10 +1218,13 @@ export const TimelineView: React.FC = () => {
                         }}
                         className={`absolute top-1 bottom-1 group ${
                           isEditingCue || isEditingColor ? 'z-50 overflow-visible' : ''
-                        } ${getClipStyle(clip, isSelected)}`}
+                        } ${track.locked ? 'cursor-not-allowed opacity-85' : 'cursor-grab active:cursor-grabbing'} ${getClipStyle(
+                          clip,
+                          isSelected
+                        )}`}
                         title={`${clip.label} (${clip.startSec.toFixed(2)}s - ${(clip.startSec + clip.durSec).toFixed(2)}s)${
                           clip.speaker ? ` • ${clip.speaker}` : ''
-                        }`}
+                        }${track.locked ? ' [Track Locked]' : ''}`}
                       >
                         {/* Inline Timeline Subtitle Editor Popover */}
                         {isEditingCue && (
@@ -1137,9 +1494,9 @@ export const TimelineView: React.FC = () => {
                         )}
 
                         {/* Left Edge Trim Handle */}
-                        {clip.layerId && clip.durSec >= 0.2 && (
+                        {clip.layerId && clip.durSec >= 0.2 && !track.locked && (
                           <div
-                            onMouseDown={(e) => handleStartTrim(e, clip, 'left')}
+                            onMouseDown={(e) => handleStartTrim(e, clip, track, 'left')}
                             className="absolute left-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-[#E3B5BE] active:bg-[#F7D7D1] rounded-l flex items-center justify-center group/trim z-30 transition-colors pointer-events-auto"
                             title="Drag to trim start boundary"
                           >
@@ -1148,7 +1505,7 @@ export const TimelineView: React.FC = () => {
                         )}
 
                         {/* Edit pencil button for subtitle cues */}
-                        {clip.cueIndex !== undefined && (
+                        {clip.cueIndex !== undefined && !track.locked && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1168,7 +1525,7 @@ export const TimelineView: React.FC = () => {
                         )}
 
                         {/* Delete trash button directly on subtitle cue hover */}
-                        {clip.cueIndex !== undefined && (
+                        {clip.cueIndex !== undefined && !track.locked && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1183,7 +1540,7 @@ export const TimelineView: React.FC = () => {
                         )}
 
                         {/* Quick LUT preset & parameter button for color clips */}
-                        {clip.type === 'color' && clip.layerId && (
+                        {clip.type === 'color' && clip.layerId && !track.locked && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1206,9 +1563,9 @@ export const TimelineView: React.FC = () => {
                         </span>
 
                         {/* Right Edge Trim Handle */}
-                        {clip.layerId && clip.durSec >= 0.2 && (
+                        {clip.layerId && clip.durSec >= 0.2 && !track.locked && (
                           <div
-                            onMouseDown={(e) => handleStartTrim(e, clip, 'right')}
+                            onMouseDown={(e) => handleStartTrim(e, clip, track, 'right')}
                             className="absolute right-0 top-0 bottom-0 w-2.5 cursor-ew-resize hover:bg-[#E3B5BE] active:bg-[#F7D7D1] rounded-r flex items-center justify-center group/trim z-30 transition-colors pointer-events-auto"
                             title="Drag to trim end boundary"
                           >
@@ -1222,6 +1579,13 @@ export const TimelineView: React.FC = () => {
                             {activeTrim.currentStart.toFixed(2)}s - {activeTrim.currentEnd.toFixed(2)}s ({(activeTrim.currentEnd - activeTrim.currentStart).toFixed(2)}s)
                           </div>
                         )}
+
+                        {/* Floating Move Timecode Badge */}
+                        {activeMove && activeMove.clipId === (clip.layerId || clip.id) && (
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-amber-400 text-black font-bold text-[10px] font-mono px-2.5 py-0.5 rounded shadow-xl z-50 pointer-events-none whitespace-nowrap animate-in zoom-in-95">
+                            Moving: {activeMove.currentStart.toFixed(2)}s - {(activeMove.currentStart + activeMove.durSec).toFixed(2)}s
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1231,6 +1595,125 @@ export const TimelineView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Clip Right-Click Context Menu */}
+      {contextMenu && (
+        <div
+          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 min-w-[190px] bg-[#18191B] border border-[#393B3F] rounded-xl shadow-2xl py-1.5 text-xs text-[#FFF5F5] animate-in fade-in zoom-in-95 backdrop-blur-md"
+        >
+          <div className="px-3 py-1 font-mono text-[10px] text-[#F7D7D1] border-b border-[#393B3F]/60 truncate font-semibold">
+            {contextMenu.clip.label}
+          </div>
+
+          {/* Split at Playhead */}
+          <button
+            onClick={() => {
+              if (contextMenu.track.locked) {
+                toast.warning('Track is locked. Unlock to split.', 'Track Locked');
+              } else {
+                splitLayerAtTime(playback.currentTime, contextMenu.clip.layerId);
+                toast.success(`Split at ${playback.currentTime.toFixed(2)}s`, 'Split');
+              }
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-[#2A2C2F] flex items-center space-x-2 text-[#FFF5F5] transition-colors"
+          >
+            <Scissors className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span>Split at Playhead (S)</span>
+          </button>
+
+          {/* Duplicate Clip */}
+          <button
+            onClick={() => {
+              if (contextMenu.track.locked) {
+                toast.warning('Track is locked.', 'Track Locked');
+              } else if (contextMenu.clip.cueIndex !== undefined) {
+                duplicateCue(contextMenu.clip.cueIndex);
+                toast.success('Duplicated subtitle cue', 'Duplicate');
+              } else if (contextMenu.clip.layerId) {
+                duplicateLayer(contextMenu.clip.layerId);
+                toast.success('Duplicated layer', 'Duplicate');
+              }
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-[#2A2C2F] flex items-center space-x-2 text-[#FFF5F5] transition-colors"
+          >
+            <Copy className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span>Duplicate Clip (Ctrl+D)</span>
+          </button>
+
+          {/* Move to Playhead */}
+          <button
+            onClick={() => {
+              if (contextMenu.track.locked) {
+                toast.warning('Track is locked.', 'Track Locked');
+              } else {
+                const targetStart = playback.currentTime;
+                const targetEnd = targetStart + contextMenu.clip.durSec;
+                moveClip(
+                  contextMenu.clip.layerId || contextMenu.clip.id,
+                  targetStart,
+                  targetEnd,
+                  contextMenu.clip.cueIndex !== undefined,
+                  contextMenu.clip.cueIndex
+                );
+                toast.success(`Moved clip to ${targetStart.toFixed(2)}s`, 'Timeline');
+              }
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-[#2A2C2F] flex items-center space-x-2 text-[#FFF5F5] transition-colors"
+          >
+            <Sliders className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span>Move to Playhead</span>
+          </button>
+
+          {/* Edit Properties */}
+          <button
+            onClick={() => {
+              if (contextMenu.clip.cueIndex !== undefined) {
+                const cue = project?.analysisSummary?.cues?.[contextMenu.clip.cueIndex];
+                handleStartTimelineCueEdit(
+                  contextMenu.clip.cueIndex,
+                  cue?.text || contextMenu.clip.label.replace(/^"|"$/g, ''),
+                  cue?.speaker || contextMenu.clip.speaker || 'Speaker 1'
+                );
+              } else if (contextMenu.clip.layerId) {
+                selectLayer(contextMenu.clip.layerId);
+                if (contextMenu.clip.type === 'color') {
+                  setEditingTimelineColorLayerId(contextMenu.clip.layerId);
+                }
+              }
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-[#2A2C2F] flex items-center space-x-2 text-[#FFF5F5] transition-colors"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-[#E3B5BE]" />
+            <span>Edit Properties</span>
+          </button>
+
+          {/* Delete Clip */}
+          <button
+            onClick={() => {
+              if (contextMenu.track.locked) {
+                toast.warning('Track is locked. Unlock to delete.', 'Track Locked');
+              } else if (contextMenu.clip.cueIndex !== undefined) {
+                deleteCue(contextMenu.clip.cueIndex);
+                toast.info('Deleted subtitle cue', 'Captions');
+              } else if (contextMenu.clip.layerId) {
+                selectLayer(contextMenu.clip.layerId);
+                deleteSelectedLayers();
+              }
+              setContextMenu(null);
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-red-500/20 flex items-center space-x-2 text-red-300 transition-colors border-t border-[#393B3F]/60 mt-1"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete Clip (Del)</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

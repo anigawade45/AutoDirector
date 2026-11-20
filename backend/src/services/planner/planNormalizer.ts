@@ -768,8 +768,22 @@ export class PlanNormalizer {
       });
     }
 
+    // Enforce singleton layer invariants (Spec §3.7 #5: intro, outro, color, subtitle, audio, music)
+    const singletonTypes = ['intro', 'outro', 'color', 'subtitle', 'audio', 'music'];
+    const seenSingletons = new Set<string>();
+    const deduplicatedLayers: any[] = [];
+    for (const l of normalizedLayers) {
+      if (singletonTypes.includes(l.layer)) {
+        if (seenSingletons.has(l.layer)) {
+          continue; // Deduplicate: keep first primary singleton layer
+        }
+        seenSingletons.add(l.layer);
+      }
+      deduplicatedLayers.push(l);
+    }
+
     // Combine cut layers with other normalized layers
-    plan.layers = [...boundedCuts, ...normalizedLayers];
+    plan.layers = [...boundedCuts, ...deduplicatedLayers];
 
     return plan;
   }
