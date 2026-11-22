@@ -160,7 +160,7 @@ describe('Where AI Earns Its Place: 5 Frontier Capabilities Acceptance Suite', (
         systemInstructions: '',
       };
 
-      const result = await adapter.generateEditPlan(input);
+      const result = await adapter.generateEditPlan(input as any);
       const plan = result.structuredOutput as EditPlan;
 
       expect(plan.global?.aspect).toBe('9:16');
@@ -255,7 +255,7 @@ describe('Where AI Earns Its Place: 5 Frontier Capabilities Acceptance Suite', (
         systemInstructions: '',
       };
 
-      const result = await adapter.generateEditPlan(input);
+      const result = await adapter.generateEditPlan(input as any);
       const plan = result.structuredOutput as EditPlan;
 
       const ops = extractTimelineOperations(plan);
@@ -286,9 +286,10 @@ describe('Where AI Earns Its Place: 5 Frontier Capabilities Acceptance Suite', (
         systemInstructions: '',
       };
 
-      return adapter.generateEditPlan(input).then((output) => {
+      return adapter.generateEditPlan(input as any).then((output) => {
         const rawPlan = output.structuredOutput;
         const normalized = PlanNormalizer.normalize(rawPlan, {
+          assetDurationSec: 45,
           projectId: 'prj_e2e_test',
           baseAssetId: 'ast_base',
           version: 1,

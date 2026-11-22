@@ -174,11 +174,11 @@ describe('N Workers Horizontal Render Scaling Architecture Suite', () => {
         save: vi.fn().mockResolvedValue(true),
       };
 
-      vi.spyOn(RenderJobModel, 'findById').mockImplementation(async (id: string) => {
+      vi.spyOn(RenderJobModel, 'findById').mockImplementation((async (id: string) => {
         if (id.includes('1111')) return mockJob1;
         if (id.includes('2222')) return mockJob2;
         return null;
-      });
+      }) as any);
 
       const workerA = 'render-node-alpha-w1';
       const workerB = 'render-node-beta-w2';

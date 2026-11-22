@@ -7,6 +7,10 @@ export interface NormalizerOptions {
   prompt?: string;
   beats?: any;
   silences?: Array<{ startMs: number; endMs: number; avgDb?: number }>;
+  maxLayers?: number;
+  projectId?: string;
+  baseAssetId?: string;
+  version?: number;
 }
 
 export class PlanNormalizer {

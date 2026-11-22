@@ -241,7 +241,7 @@ describe('Killer Video Demo Architecture & End-to-End Flow Verification', () => 
         }),
       };
 
-      const result = await adapter.generateEditPlan(input);
+      const result = await adapter.generateEditPlan(input as any);
       const plan = result.structuredOutput as EditPlan;
 
       expect(plan.schemaVersion).toBe('1.0');
@@ -331,7 +331,7 @@ describe('Killer Video Demo Architecture & End-to-End Flow Verification', () => 
         }),
       };
 
-      const result = await adapter.generateEditPlan(input);
+      const result = await adapter.generateEditPlan(input as any);
       const output = result.structuredOutput as { patch: Array<any> };
 
       expect(output.patch).toBeDefined();

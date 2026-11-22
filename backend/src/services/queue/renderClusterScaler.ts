@@ -29,6 +29,8 @@ export interface ClusterStatusMetrics {
   nodes: WorkerNodeMetadata[];
 }
 
+export type ClusterMetrics = ClusterStatusMetrics;
+
 export interface RenderChunkSpec {
   chunkIndex: number;
   totalChunks: number;
