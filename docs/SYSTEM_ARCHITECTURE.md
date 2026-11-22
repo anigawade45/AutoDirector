@@ -85,11 +85,11 @@ flowchart TB
 
     Worker2 --> S3Storage
     WorkerN --> S3Storage
-    Worker2 -.->|Signed HMAC Progress Callback| HMACGuard
-    WorkerN -.->|Signed HMAC Progress Callback| HMACGuard
+    Worker2 -.->|"Signed HMAC Progress Callback"| HMACGuard
+    WorkerN -.->|"Signed HMAC Progress Callback"| HMACGuard
 
     HMACGuard --> API
-    API -.->|Server-Sent Events (SSE)| UI
+    API -.->|"Server-Sent Events (SSE)"| UI
 ```
 
 ---
@@ -97,6 +97,7 @@ flowchart TB
 ## 2. Core Architectural Pillars
 
 ### 2.1 Separation of LLM Intelligence and Media Compilation
+
 - **Problem**: Large Language Models hallucinate if asked to output raw FFmpeg shell scripts or binary media manipulations directly, creating catastrophic security vulnerabilities (command injection) and broken codecs.
 - **Solution**: The platform strictly enforces **data-only LLM output**.
   1. The LLM translates natural language instructions into a strictly typed, schema-validated **Edit Plan AST** (JSON).
@@ -105,9 +106,11 @@ flowchart TB
   4. Execution uses `child_process.spawn('ffmpeg', argsArray)` with zero shell expansion (`shell: false`).
 
 ### 2.2 Timebase Separation: Source Time vs. Output Time
+
 Video editing operates on two fundamentally distinct coordinate systems:
-- **Source Time ($T_{src}$)**: The physical timeline of the raw footage recorded by the camera (e.g. silence cuts, repetitive take removals, speech timestamps, scene boundaries).
-- **Output Time ($T_{out}$)**: The exported composite presentation timeline (e.g. intro titles, background music, transition overlays, watermarks).
+
+- **Source Time ($T\_{src}$)**: The physical timeline of the raw footage recorded by the camera (e.g. silence cuts, repetitive take removals, speech timestamps, scene boundaries).
+- **Output Time ($T\_{out}$)**: The exported composite presentation timeline (e.g. intro titles, background music, transition overlays, watermarks).
 
 ```mermaid
 flowchart LR
@@ -148,6 +151,7 @@ $$\text{outToSrc}(t_{out}) = c_m.start + \left(t_{out} - \sum_{i < m} \text{dura
 ## 3. End-to-End Execution Lifecycles
 
 ### 3.1 Asynchronous Raw-Media Upload & Chunking Pipeline
+
 Large raw footage files (gigabytes in size) cannot be streamed through standard HTTP multi-part form bodies without risking gateway timeouts, buffer overflows, and connection drops.
 
 ```mermaid
@@ -190,7 +194,9 @@ sequenceDiagram
 ---
 
 ### 3.2 Multimodal Indexing & 3-Hour Raw Footage Architecture
+
 When handling up to 3 hours of continuous raw media (~345MB uncompressed 16kHz WAV audio):
+
 1. **Streaming Audio Chunking**: The audio track is mathematically segmented into 36 continuous 300-second windows without exceeding Node.js memory limits.
 2. **Word-Level Transcription**: Whisper extracts word timestamps (`word`, `startMs`, `endMs`, `confidence`).
 3. **Timestamp Dilation Correction**: If audio drift occurs between AI models and video frame rates, an automatic linear calibration factor scales cues to match physical frame counts:
@@ -206,7 +212,7 @@ stateDiagram-v2
     [*] --> Idle: Initial Project Loaded
     Idle --> StagedDraft: User or Agent Emits Operations
     StagedDraft --> InvariantCheck: Schema & Monotonic Time Validation
-    
+
     state InvariantCheck {
         [*] --> RangeCheck: start < end & in video bounds
         RangeCheck --> OverlapResolution: resolveCutOverlaps()
@@ -221,12 +227,13 @@ stateDiagram-v2
 ```
 
 #### Performance Benchmarks Achieved:
-| Benchmark Gate | Spec Target | Measured Production Result | Status |
-| :--- | :--- | :--- | :--- |
-| **500+ Operations Extraction** | < 100 ms | **3.52 ms** (Cold), **0.012 ms** (Warm) | **Passed (Exceeded by 83x)** |
-| **1,000+ Operations Throughput** | > 10,000 ops/sec | **203,221 ops/second** | **Passed (Exceeded by 20x)** |
-| **Scrubbing Latency @ 500+ Ops** | < 16.6 ms (60 fps) | **0.26 ms / scrub** (1.6% of budget) | **Passed (Zero UI Blocking)** |
-| **Selector Throughput** | 1,000 calls < 100 ms | **48.58 ms** (48 µs per call) | **Passed** |
+
+| Benchmark Gate                   | Spec Target          | Measured Production Result              | Status                        |
+| :------------------------------- | :------------------- | :-------------------------------------- | :---------------------------- |
+| **500+ Operations Extraction**   | < 100 ms             | **3.52 ms** (Cold), **0.012 ms** (Warm) | **Passed (Exceeded by 83x)**  |
+| **1,000+ Operations Throughput** | > 10,000 ops/sec     | **203,221 ops/second**                  | **Passed (Exceeded by 20x)**  |
+| **Scrubbing Latency @ 500+ Ops** | < 16.6 ms (60 fps)   | **0.26 ms / scrub** (1.6% of budget)    | **Passed (Zero UI Blocking)** |
+| **Selector Throughput**          | 1,000 calls < 100 ms | **48.58 ms** (48 µs per call)           | **Passed**                    |
 
 ---
 
@@ -264,6 +271,7 @@ sequenceDiagram
 ```
 
 #### Telemetry Metrics Tracked:
+
 - **Queue Wait Latency**: Time elapsed from `POST /api/projects/:id/export` until an available worker picks up the job.
 - **Render Execution Time**: Pure FFmpeg encoding time per output second.
 - **p50, p90, p95, and p99 Aggregations**: Sliding in-memory circular buffer with automated alerts when p95 exceeds 120 seconds for standard 1080p jobs.
@@ -273,19 +281,20 @@ sequenceDiagram
 ### 3.5 The "Killer Demo" End-to-End Pipeline
 
 When a creator uploads a raw, multi-take recording and inputs:
-> *"Tighten the first 15 seconds, remove repeated takes, add B-roll and generate three Shorts."*
+
+> _"Tighten the first 15 seconds, remove repeated takes, add B-roll and generate three Shorts."_
 
 The platform processes this via four orchestrated stages:
 
 ```mermaid
 flowchart TD
     Prompt["Creator Natural Language Prompt"] --> Adapter["Gemini Edit Planner Adapter"]
-    
+
     subgraph MultiModalAnalysis ["Context Fed to LLM"]
         Summary["Project Analysis Summary (Whisper Cues + Audio Spikes + Scenes)"]
         Transcript["Full Transcript with Repeated Take Markers"]
     end
-    
+
     Summary --> Adapter
     Transcript --> Adapter
 
@@ -319,15 +328,15 @@ flowchart TD
 
 ## 5. Technology Stack Summary
 
-| Layer | Technologies Used | Key Responsibilities |
-| :--- | :--- | :--- |
-| **Frontend UI** | React 18, TypeScript, TailwindCSS, Lucide Icons | Responsive studio interface, virtualized timeline, subtitle in-place editor. |
-| **Client State** | Zustand, Immer | Immutable version tree navigation, instant undo/redo, 500+ ops state derivation. |
-| **Player & Canvas** | HTML5 Video, HTML5 Canvas 2D | Word-by-word dynamic karaoke subtitle overlays, frame-accurate seeking. |
-| **Backend API** | Node.js (v22), Express 4, TypeScript | REST endpoints, SSE streaming, S3 presigning, auth guards. |
-| **Databases** | MongoDB 7 (Replica Set), Mongoose 8 | Multi-document transactions, version snapshots, project metadata. |
-| **Queue / Cache** | Redis 7, BullMQ (v5) | Distributed job scheduling, worker concurrency pooling, SSE pub/sub. |
-| **Media Processing** | FFmpeg 6.0+, FFprobe | Audio extraction, scene detection, 5-pass video composition, H.264/AAC encoding. |
-| **Cloud Storage** | AWS S3 / MinIO | Resumable multipart uploads, presigned direct PUTs, CDN distribution. |
-| **AI Intelligence** | Google Gemini (1.5/2.0), OpenAI Whisper | Multimodal vision & language reasoning, word-level audio transcription. |
-| **Test Engineering** | Vitest (Monorepo), Supertest | 70 test files, 702 automated tests across unit, integration, and scaling gates. |
+| Layer                | Technologies Used                               | Key Responsibilities                                                             |
+| :------------------- | :---------------------------------------------- | :------------------------------------------------------------------------------- |
+| **Frontend UI**      | React 18, TypeScript, TailwindCSS, Lucide Icons | Responsive studio interface, virtualized timeline, subtitle in-place editor.     |
+| **Client State**     | Zustand, Immer                                  | Immutable version tree navigation, instant undo/redo, 500+ ops state derivation. |
+| **Player & Canvas**  | HTML5 Video, HTML5 Canvas 2D                    | Word-by-word dynamic karaoke subtitle overlays, frame-accurate seeking.          |
+| **Backend API**      | Node.js (v22), Express 4, TypeScript            | REST endpoints, SSE streaming, S3 presigning, auth guards.                       |
+| **Databases**        | MongoDB 7 (Replica Set), Mongoose 8             | Multi-document transactions, version snapshots, project metadata.                |
+| **Queue / Cache**    | Redis 7, BullMQ (v5)                            | Distributed job scheduling, worker concurrency pooling, SSE pub/sub.             |
+| **Media Processing** | FFmpeg 6.0+, FFprobe                            | Audio extraction, scene detection, 5-pass video composition, H.264/AAC encoding. |
+| **Cloud Storage**    | AWS S3 / MinIO                                  | Resumable multipart uploads, presigned direct PUTs, CDN distribution.            |
+| **AI Intelligence**  | Google Gemini (1.5/2.0), OpenAI Whisper         | Multimodal vision & language reasoning, word-level audio transcription.          |
+| **Test Engineering** | Vitest (Monorepo), Supertest                    | 70 test files, 702 automated tests across unit, integration, and scaling gates.  |

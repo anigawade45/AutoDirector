@@ -2,7 +2,7 @@
 
 > **Production-grade, fullstack AI video creation platform that transforms raw long-form footage into polished multi-track edits and viral 9:16 Shorts via natural language prompts.**
 
-[![Tests](https://img.shields.io/badge/Tests-702%20Passed%20(70%20Suites)-emerald)](file:///d:/Fullstack/AI-Navtive%20Video%20Creation%20Platform)
+[![Tests](<https://img.shields.io/badge/Tests-702%20Passed%20(70%20Suites)-emerald>)](file:///d:/Fullstack/AI-Navtive%20Video%20Creation%20Platform)
 [![Frontend](https://img.shields.io/badge/Frontend-React%2018%20%7C%20TypeScript%20%7C%20Zustand-blue)](file:///d:/Fullstack/AI-Navtive%20Video%20Creation%20Platform/frontend)
 [![Backend](https://img.shields.io/badge/Backend-Node.js%2022%20%7C%20Express%20%7C%20BullMQ-purple)](file:///d:/Fullstack/AI-Navtive%20Video%20Creation%20Platform/backend)
 [![Database](https://img.shields.io/badge/Database-MongoDB%207%20%7C%20Redis%207-green)](file:///d:/Fullstack/AI-Navtive%20Video%20Creation%20Platform)
@@ -12,6 +12,7 @@
 ---
 
 ## 📑 Table of Contents
+
 1. [Core Features](#-core-features)
 2. [The Killer Demo](#-the-killer-demo)
 3. [System Architecture Diagram](#-system-architecture-diagram)
@@ -26,35 +27,42 @@
 ## ⚡ Core Features
 
 ### 1. Resumable Direct-to-S3 Multipart Upload
+
 - Uploads multi-gigabyte raw footage directly to **AWS S3** / MinIO in 10MB chunks with 3x parallel streams.
 - Client-side SHA-256 checksum verification and retry logic eliminate API gateway timeouts and server memory buffering.
 
 ### 2. Multimodal Footage Indexing (Up to 3 Hours Asynchronously)
+
 - **Word-Level Transcription**: Word-by-word timestamps via Whisper with start/end millisecond precision.
 - **Acoustic Waveform & Silence Detection**: Automatic extraction of speech intervals, silences, and acoustic energy peaks using FFmpeg.
 - **Scene Boundary Detection**: Identifies visual cut candidates and scene shifts.
 - **Timestamp Dilation Auto-Calibration**: Automatically corrects AI timestamp dilation against physical video durations.
 
 ### 3. Schema-Validated AI Edit Planner
+
 - Translates natural language editing requests into an immutable **Edit Plan Abstract Syntax Tree (AST)** validated with strict **Zod** discriminated union schemas.
 - **Zero Hallucination / Zero Injection**: The LLM outputs data only (JSON), never executable shell commands.
 
 ### 4. High-Performance Multi-Track Timeline (500+ Operations)
+
 - Visual tracks for **Video Cuts**, **B-Roll Overlays**, **Subtitle Karaoke**, **Background Music**, and **Color Grading**.
 - **Blazing Fast State Engine**: Processes 500+ operations in under **3.52ms cold** and **0.012ms warm**, scrubbing at **0.26ms per scrub** (1.6% of the 60fps frame budget).
-- **Timebase Separation**: Bidirectional coordinate mapping between raw **Source Time ($T_{src}$)** and composite **Output Time ($T_{out}$)**.
+- **Timebase Separation**: Bidirectional coordinate mapping between raw **Source Time ($T\_{src}$)** and composite **Output Time ($T\_{out}$)**.
 
 ### 5. Multi-Layer Video Compositing
+
 - **Visual Media Overlays**: Full-screen B-roll cutaways, Picture-in-Picture (PIP) windows, and floating graphic overlays with crossfade transitions.
 - **Generative Media**: Integrated Imagen / AI B-roll prompt generator for instant illustrative media insertion.
 - **Audio Ducking & Music**: Lowers background music by 12dB automatically during active vocal speech.
 - **Animated Subtitles**: HTML5 Canvas 2D overlay rendering dynamic karaoke highlights synchronized to the video playback playhead.
 
 ### 6. Version History & Bidirectional Rebase
+
 - Immutable snapshot tree with instant undo/redo.
 - Optimistic concurrency control and RFC 6902 JSON patch rebasing allow users to edit in parallel with asynchronous AI agent suggestions.
 
 ### 7. Horizontally Scalable Asynchronous Render Pipeline
+
 - Distributed **BullMQ** worker fleet with concurrency pooling.
 - **5-Pass Pure FFmpeg Argument Compiler**: Generates clean, shell-safe parameter arrays for broadcast-quality 1080p and 4K exports.
 - **p95 Latency Tracking & Telemetry**: Continuous monitoring of queue wait times and transcode performance.
@@ -77,7 +85,7 @@ flowchart LR
 
 1. **Upload Raw Media**: Click **"1-Click Killer Demo"** on the dashboard to instantiate a pre-analyzed multi-take raw footage project.
 2. **Execute Natural Language Prompt**:
-   > *"Tighten the first 15 seconds, remove repeated takes, add B-roll and generate three Shorts."*
+   > _"Tighten the first 15 seconds, remove repeated takes, add B-roll and generate three Shorts."_
 3. **Instant Visual Timeline Transformation**:
    - Cut at `0:00.0 - 0:01.8` (`reason: tighten_pacing`).
    - Cut at `0:02.5 - 0:08.2` (`reason: repeated_take`).
@@ -152,10 +160,10 @@ flowchart TB
 
     RenderWorker1 --> S3
     RenderWorkerN --> S3
-    RenderWorker1 -.->|HMAC Signed Progress| API
-    RenderWorkerN -.->|HMAC Signed Progress| API
+    RenderWorker1 -.->|"HMAC Signed Progress"| API
+    RenderWorkerN -.->|"HMAC Signed Progress"| API
 
-    API -.->|Server-Sent Events (SSE)| UI
+    API -.->|"Server-Sent Events (SSE)"| UI
 ```
 
 ---
@@ -164,47 +172,52 @@ flowchart TB
 
 Rigorous automated benchmark gates verify that the platform scales reliably under high volume:
 
-| Benchmark Gate | Target Specification | Production Result | Headroom |
-| :--- | :--- | :--- | :--- |
-| **500+ Operations Extraction** | < 100 ms | **3.52 ms** (Cold), **0.012 ms** (Warm) | **83x faster than target** |
-| **1,000+ Operations Throughput** | > 10,000 ops/second | **203,221 ops/second** | **20x higher than target** |
-| **Scrubbing Latency @ 500+ Ops** | < 16.6 ms (60fps budget) | **0.26 ms / scrub** | **Uses only 1.6% of frame budget** |
-| **Canvas 2D Word Highlight Draw** | < 4.0 ms / frame | **0.003 ms / frame** | **Instantaneous 60fps subtitle rendering** |
-| **Derived Track Selectors** | 1,000 calls < 100 ms | **48.58 ms** (48 µs / call) | **Sub-millisecond state updates** |
-| **Long-Form Audio Slicing** | 3 hours (~345MB WAV) | **36 continuous monotonic chunks** | **Zero memory spikes / zero OOMs** |
+| Benchmark Gate                    | Target Specification     | Production Result                       | Headroom                                   |
+| :-------------------------------- | :----------------------- | :-------------------------------------- | :----------------------------------------- |
+| **500+ Operations Extraction**    | < 100 ms                 | **3.52 ms** (Cold), **0.012 ms** (Warm) | **83x faster than target**                 |
+| **1,000+ Operations Throughput**  | > 10,000 ops/second      | **203,221 ops/second**                  | **20x higher than target**                 |
+| **Scrubbing Latency @ 500+ Ops**  | < 16.6 ms (60fps budget) | **0.26 ms / scrub**                     | **Uses only 1.6% of frame budget**         |
+| **Canvas 2D Word Highlight Draw** | < 4.0 ms / frame         | **0.003 ms / frame**                    | **Instantaneous 60fps subtitle rendering** |
+| **Derived Track Selectors**       | 1,000 calls < 100 ms     | **48.58 ms** (48 µs / call)             | **Sub-millisecond state updates**          |
+| **Long-Form Audio Slicing**       | 3 hours (~345MB WAV)     | **36 continuous monotonic chunks**      | **Zero memory spikes / zero OOMs**         |
 
 ---
 
 ## 🛠 Tech Stack
 
-| Layer | Technologies | Role in System |
-| :--- | :--- | :--- |
-| **Frontend UI** | React 18, Vite, TypeScript, TailwindCSS, Lucide Icons | Responsive studio UI, virtualized multi-track timeline, in-place cue editor. |
-| **Client State** | Zustand, Immer | Immutable version tree navigation, instant undo/redo, derived selectors. |
-| **Player / Canvas** | HTML5 Video, HTML5 Canvas 2D | Word-accurate karaoke subtitle highlights, frame-accurate seeking. |
-| **Backend API** | Node.js 22, Express 4, TypeScript | REST endpoints, SSE streaming, S3 presigning, HMAC security guards. |
-| **Databases** | MongoDB 7 (Replica Set), Mongoose 8 | Multi-document transactions, version snapshots, project metadata. |
-| **Queue / Cache** | Redis 7, BullMQ v5 | Distributed job scheduling, worker concurrency pooling, SSE pub/sub. |
-| **Media Processing** | FFmpeg 6.0+, FFprobe | Audio extraction, scene detection, 5-pass video compilation, H.264/AAC. |
-| **Cloud Storage** | AWS S3 / MinIO | Resumable multipart uploads, presigned direct PUTs, CDN distribution. |
-| **AI Intelligence** | Google Gemini (1.5 / 2.0), OpenAI Whisper | Multimodal edit planning, word-level audio transcription. |
-| **Testing** | Vitest, Supertest | 70 test suites, 702 tests across unit, integration, and scaling gates. |
+| Layer                | Technologies                                          | Role in System                                                               |
+| :------------------- | :---------------------------------------------------- | :--------------------------------------------------------------------------- |
+| **Frontend UI**      | React 18, Vite, TypeScript, TailwindCSS, Lucide Icons | Responsive studio UI, virtualized multi-track timeline, in-place cue editor. |
+| **Client State**     | Zustand, Immer                                        | Immutable version tree navigation, instant undo/redo, derived selectors.     |
+| **Player / Canvas**  | HTML5 Video, HTML5 Canvas 2D                          | Word-accurate karaoke subtitle highlights, frame-accurate seeking.           |
+| **Backend API**      | Node.js 22, Express 4, TypeScript                     | REST endpoints, SSE streaming, S3 presigning, HMAC security guards.          |
+| **Databases**        | MongoDB 7 (Replica Set), Mongoose 8                   | Multi-document transactions, version snapshots, project metadata.            |
+| **Queue / Cache**    | Redis 7, BullMQ v5                                    | Distributed job scheduling, worker concurrency pooling, SSE pub/sub.         |
+| **Media Processing** | FFmpeg 6.0+, FFprobe                                  | Audio extraction, scene detection, 5-pass video compilation, H.264/AAC.      |
+| **Cloud Storage**    | AWS S3 / MinIO                                        | Resumable multipart uploads, presigned direct PUTs, CDN distribution.        |
+| **AI Intelligence**  | Google Gemini (1.5 / 2.0), OpenAI Whisper             | Multimodal edit planning, word-level audio transcription.                    |
+| **Testing**          | Vitest, Supertest                                     | 70 test suites, 702 tests across unit, integration, and scaling gates.       |
 
 ---
 
 ## 🚀 Getting Started & Local Setup
 
 ### 1. Prerequisites
+
 - **Node.js**: v20+ (recommended: v22.18.0+)
 - **Docker & Docker Compose** (for MongoDB, Redis, and MinIO)
 - **FFmpeg**: v6.0+ installed and available in system PATH
 
 ### 2. Environment Configuration
+
 Clone the repository and prepare your environment file:
+
 ```bash
 cp backend/.env.example backend/.env
 ```
+
 Ensure the following variables are configured in `backend/.env`:
+
 ```env
 PORT=4000
 MONGODB_URI=mongodb://localhost:27017/ai-video-studio?replicaSet=rs0
@@ -221,19 +234,24 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ### 3. Start Infrastructure Services
+
 Start MongoDB (with replica set enabled) and Redis using Docker Compose:
+
 ```bash
 docker-compose up -d mongo redis minio
 ```
 
 ### 4. Install Dependencies & Build Packages
+
 ```bash
 npm install
 npm --workspace=shared run build
 ```
 
 ### 5. Start Development Servers
+
 In separate terminals:
+
 ```bash
 # Terminal 1: Backend API
 npm --workspace=backend run dev
@@ -247,6 +265,7 @@ npm --workspace=backend run worker:render
 # Terminal 4: Frontend Web Client
 npm --workspace=frontend run dev
 ```
+
 Open **`http://localhost:5173`** in your browser to launch the Studio.
 
 ---
