@@ -138,6 +138,9 @@ export const envSchema = z
       .default('false')
       .transform((val) => val === 'true'),
 
+    WORKER_CONCURRENCY: z.string().optional().default('2').transform(Number),
+    RENDER_CLUSTER_SIZE: z.string().optional().default('2').transform(Number),
+
     FFMPEG_PATH: z
       .string()
       .optional()

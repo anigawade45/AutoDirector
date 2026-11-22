@@ -48,14 +48,14 @@ services:
         max-file: '5'
 
   # -------------------------------------------------------------
-  # 2. Asynchronous Analysis Worker Pool
+  # 2. Asynchronous Analysis Worker Pool (Scalable to N Replicas)
   # -------------------------------------------------------------
   worker-analysis:
     image: ai-video-api:latest
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: ai_video_prod_worker_analysis
+    # container_name omitted to allow horizontal scaling via: docker compose up --scale worker-analysis=N
     restart: always
     command: ['node', 'backend/dist/workers/analysisWorker.js']
     networks:
@@ -72,6 +72,7 @@ services:
       redis:
         condition: service_healthy
     deploy:
+      replicas: 2
       resources:
         limits:
           cpus: '2.0'
@@ -83,14 +84,14 @@ services:
         max-file: '5'
 
   # -------------------------------------------------------------
-  # 3. Asynchronous Video Render & Export Worker Pool
+  # 3. Asynchronous Video Render & Export Worker Pool (Scalable to N Replicas)
   # -------------------------------------------------------------
   worker-render:
     image: ai-video-api:latest
     build:
       context: .
       dockerfile: backend/Dockerfile
-    container_name: ai_video_prod_worker_render
+    # container_name omitted to allow horizontal scaling via: docker compose up --scale worker-render=N
     restart: always
     command: ['node', 'backend/dist/workers/renderWorker.js']
     networks:
@@ -110,6 +111,7 @@ services:
       redis:
         condition: service_healthy
     deploy:
+      replicas: 2
       resources:
         limits:
           cpus: '2.0'

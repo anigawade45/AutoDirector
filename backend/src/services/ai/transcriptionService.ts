@@ -697,7 +697,6 @@ If there is no spoken dialogue in the audio, return: [].`;
     }
 
     const sortedSegs = [...speechSegments].sort((a, b) => a.startMs - b.startMs);
-
     const aligned = cues.map((cue, idx) => {
       const cueObj = (cue as any).toObject ? (cue as any).toObject() : cue;
       const cueStart = Number(cueObj.startMs) || 0;

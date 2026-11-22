@@ -29,15 +29,28 @@ interface RenderJobPayload {
   profile: 'preview_480p' | 'final_1080p' | 'final_4k';
 }
 
-export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
+export interface RenderWorkerOptions {
+  concurrency?: number;
+  workerId?: string;
+  skipVersionCheck?: boolean;
+}
+
+export function startRenderWorker(
+  queueName: 'preview' | 'render' = 'preview',
+  options?: RenderWorkerOptions
+) {
   const queueConfig = QUEUE_CONFIGS[queueName];
+  const concurrency = options?.concurrency ?? queueConfig.concurrency;
+  const workerId =
+    options?.workerId ||
+    `render-worker-${queueName}-${process.pid}-${crypto.randomBytes(3).toString('hex')}`;
 
   const worker = new Worker<RenderJobPayload>(
     queueName,
     async (job: Job<RenderJobPayload>) => {
       const { jobId, projectId, planVersion, profile, type } = job.data;
       console.log(
-        `[RenderWorker:${queueName}] Processing ${type} job ${jobId} for project ${projectId} v${planVersion}`
+        `[RenderWorker:${queueName}:${workerId}] Processing ${type} job ${jobId} for project ${projectId} v${planVersion}`
       );
 
       const scratch = new JobScratchDirectory(jobId);
@@ -84,7 +97,10 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
           }
         }
 
-        await RenderJobLifecycle.transition(jobId, 'processing', { percent: 15 });
+        await RenderJobLifecycle.transition(jobId, 'processing', {
+          percent: 15,
+          workerId,
+        });
 
         // 2. Prepare Subtitles ASS file if subtitle layer enabled
         const subtitleLayer = planDoc.plan.layers.find(
@@ -391,37 +407,48 @@ export function startRenderWorker(queueName: 'preview' | 'render' = 'preview') {
     },
     {
       connection: redisConnection,
-      concurrency: queueConfig.concurrency,
+      concurrency,
       lockDuration: queueConfig.lockDurationMs,
       maxStalledCount: 1,
       stalledInterval: 300000, // 5 minutes (prevents burning Upstash request quota on idle checks)
       drainDelay: 10000, // 10s wait when queue is empty instead of default 5ms
-      skipVersionCheck: true,
+      skipVersionCheck: options?.skipVersionCheck ?? true,
     }
   );
 
   worker.on('failed', (job, err) => {
-    console.error(`[RenderWorker:${queueName}] Job ${job?.id} failed:`, err.message);
+    console.error(`[RenderWorker:${queueName}:${workerId}] Job ${job?.id} failed:`, err.message);
   });
 
   return worker;
 }
 
 async function bootstrapStandalone() {
-  console.log('--- Starting Standalone Render Worker Process ---');
+  const clusterSize = Math.max(
+    1,
+    parseInt(process.env.RENDER_CLUSTER_SIZE || process.env.WORKER_REPLICAS || '1', 10)
+  );
+  console.log(`--- Starting Standalone Render Worker Cluster (${clusterSize} worker instances) ---`);
   await connectDatabase();
   console.log('[MongoDB] Connected successfully');
   await redisConnection.ping();
   console.log('[Redis] Connected successfully');
   await S3Service.ensureBucketExists();
   console.log('[S3] Bucket verified');
-  const previewWorker = startRenderWorker('preview');
-  const renderWorker = startRenderWorker('render');
-  console.log('[RenderWorker] Workers initialized on queues "preview" and "render"');
+
+  const workers: Worker[] = [];
+  for (let i = 0; i < clusterSize; i++) {
+    const workerInstanceId = `render-node-${process.pid}-w${i + 1}`;
+    workers.push(startRenderWorker('preview', { workerId: `${workerInstanceId}-prev` }));
+    workers.push(startRenderWorker('render', { workerId: `${workerInstanceId}-rend` }));
+  }
+  console.log(
+    `[RenderWorker] Cluster pool initialized with ${workers.length} active queue workers on "preview" and "render"`
+  );
 
   const shutdown = async () => {
-    console.log('\n[RenderWorker] Shutting down gracefully...');
-    await Promise.all([previewWorker.close(), renderWorker.close()]);
+    console.log('\n[RenderWorker] Shutting down worker cluster gracefully...');
+    await Promise.all(workers.map((w) => w.close()));
     await disconnectDatabase();
     redisConnection.disconnect();
     process.exit(0);

@@ -30,6 +30,9 @@ export const StorageKeys = {
   finalRender: (userId: string, projectId: string, jobId: string) =>
     `users/${userId}/projects/${projectId}/renders/${jobId}.mp4`,
 
+  renderChunk: (userId: string, projectId: string, jobId: string, chunkIndex: number) =>
+    `users/${userId}/projects/${projectId}/renders/${jobId}_chunk_${chunkIndex}.mp4`,
+
   catalogItem: (kind: 'music' | 'luts' | 'templates' | 'fonts', filename: string) =>
     `library/${kind}/${filename}`,
 };
