@@ -35,6 +35,7 @@ export interface IRenderJobDocument extends Document {
     queuedAt: Date;
     startedAt?: Date;
     finishedAt?: Date;
+    queueWaitMs?: number;
     durationMs?: number;
     cpuSec?: number;
   };
@@ -93,6 +94,7 @@ const RenderJobSchema = new Schema<IRenderJobDocument>(
       queuedAt: { type: Date, default: Date.now },
       startedAt: { type: Date },
       finishedAt: { type: Date },
+      queueWaitMs: { type: Number },
       durationMs: { type: Number },
       cpuSec: { type: Number },
     },

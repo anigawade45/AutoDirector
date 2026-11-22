@@ -9,6 +9,7 @@ import { ProjectModel } from '../../models/Project.js';
 import { JobEventsPublisher } from '../queue/queueService.js';
 import { QuotaService } from '../auth/quotaService.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { RenderLatencyTracker } from '../telemetry/renderLatencyTracker.js';
 
 export const VALID_STATE_TRANSITIONS: Record<JobState, JobState[]> = {
   queued: ['processing', 'active', 'failed', 'canceled'],
@@ -144,12 +145,32 @@ export class RenderJobLifecycle {
     if (targetState === 'processing' || targetState === 'active') {
       if (!job.timings.startedAt) {
         job.timings.startedAt = now;
+        if (job.timings.queuedAt) {
+          const queueWaitMs = Math.max(0, now.getTime() - new Date(job.timings.queuedAt).getTime());
+          job.timings.queueWaitMs = queueWaitMs;
+          RenderLatencyTracker.recordQueueLatency(queueWaitMs, {
+            type: job.type,
+            profile: job.profile,
+          });
+        }
       }
     } else if (targetState === 'completed') {
       job.timings.finishedAt = now;
       job.percent = 100;
       if (job.timings.startedAt) {
-        job.timings.durationMs = now.getTime() - job.timings.startedAt.getTime();
+        const renderDurationMs = Math.max(0, now.getTime() - new Date(job.timings.startedAt).getTime());
+        job.timings.durationMs = renderDurationMs;
+        RenderLatencyTracker.recordRenderLatency(renderDurationMs, {
+          type: job.type,
+          profile: job.profile,
+        });
+        if (job.timings.queuedAt) {
+          const totalE2EMs = Math.max(0, now.getTime() - new Date(job.timings.queuedAt).getTime());
+          RenderLatencyTracker.recordE2ELatency(totalE2EMs, {
+            type: job.type,
+            profile: job.profile,
+          });
+        }
       }
       if (updates?.output) {
         job.output = updates.output;

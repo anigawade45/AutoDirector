@@ -8,6 +8,7 @@ export const jobsRouter = Router();
 jobsRouter.use(authMiddleware);
 jobsRouter.use(jobsRateLimiter);
 
+jobsRouter.get('/metrics/latency', JobsController.getLatencyMetrics);
 jobsRouter.get('/:id', JobsController.getJob);
 jobsRouter.get('/:id/events', JobsController.getJobEvents);
 jobsRouter.post('/:id/events-ticket', JobsController.getJobEventsTicket);

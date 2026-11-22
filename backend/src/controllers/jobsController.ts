@@ -4,8 +4,22 @@ import { S3Service } from '../services/storage/s3Service.js';
 import { SSEManager } from '../services/events/sseManager.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { TokenService } from '../services/auth/tokenService.js';
+import { RenderLatencyTracker } from '../services/telemetry/renderLatencyTracker.js';
 
 export class JobsController {
+  static async getLatencyMetrics(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const report = RenderLatencyTracker.getLatencyReport();
+      res.status(200).json({
+        success: true,
+        data: report,
+        requestId: req.id,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   static async getJob(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
@@ -31,6 +45,7 @@ export class JobsController {
           etaSec: job.etaSec,
           error: job.error,
           output: job.output,
+          timings: job.timings,
         },
         requestId: req.id,
       });
