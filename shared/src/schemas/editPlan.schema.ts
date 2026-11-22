@@ -26,7 +26,15 @@ export const CutLayerSchema = z.object({
     })
     .refine((r) => r.end > r.start, { message: 'Cut end must be greater than start' }),
   params: z.object({
-    reason: z.enum(['silence', 'filler', 'user', 'lowlight']),
+    reason: z.enum([
+      'silence',
+      'filler',
+      'user',
+      'lowlight',
+      'repeated_take',
+      'tighten_pacing',
+      'short_extraction_trim',
+    ]),
     padding: z.number().min(0).max(0.3).default(0.05),
   }),
 });
@@ -246,6 +254,16 @@ export const EditLayerSchema = z.discriminatedUnion('layer', [
   AudioLayerSchema,
 ]);
 
+export const ShortVideoSegmentSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  hook: z.string().optional(),
+  startSec: z.number().min(0),
+  endSec: z.number().min(0),
+  aspect: AspectRatioSchema.default('9:16'),
+  score: z.number().min(0).max(1).optional(),
+});
+
 export const EditPlanMetaSchema = z.object({
   prompt: z.string(),
   model: z.string(),
@@ -255,6 +273,7 @@ export const EditPlanMetaSchema = z.object({
   requestedModel: z.string().optional(),
   fallbackReason: z.string().optional(),
   assumptions: z.record(z.unknown()).optional(),
+  shorts: z.array(ShortVideoSegmentSchema).optional(),
 });
 
 // Complete EditPlan envelope
@@ -267,6 +286,7 @@ export const EditPlanSchema = z.object({
   global: GlobalVideoSettingsSchema,
   layers: z.array(EditLayerSchema).max(2000),
   meta: EditPlanMetaSchema,
+  shorts: z.array(ShortVideoSegmentSchema).optional(),
 });
 
 // RFC 6902 Patch Operation Schema

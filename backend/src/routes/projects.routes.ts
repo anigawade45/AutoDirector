@@ -14,6 +14,7 @@ projectsRouter.use(authMiddleware);
 // Project management - collection level
 projectsRouter.get('/', ProjectsController.listProjects);
 projectsRouter.post('/', ProjectsController.createProject);
+projectsRouter.post('/demo', ProjectsController.createDemoProject);
 
 // Project management - item level (enforced via requireProjectOwner tenant isolation middleware)
 projectsRouter.get('/:id', requireProjectOwner, ProjectsController.getProject);

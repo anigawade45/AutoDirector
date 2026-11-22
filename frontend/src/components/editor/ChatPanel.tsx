@@ -115,6 +115,7 @@ export const ChatPanel: React.FC = () => {
     AVAILABLE_GEMINI_MODELS.find((m) => m.id === selectedAiModel) || AVAILABLE_GEMINI_MODELS[0];
 
   const quickPrompts = [
+    'Tighten the first 15 seconds, remove repeated takes, add B-roll and generate three Shorts',
     'Extract 60s viral TikTok short (9:16) from best highlight',
     'Apply Alex Hormozi style: snappy cuts & bold yellow word-pop',
     'Apply Ali Abdaal aesthetic: warm film grade & clean minimal captions',

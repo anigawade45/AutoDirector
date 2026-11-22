@@ -61,6 +61,24 @@ export function extractTimelineOperations(plan: EditPlan): PlanTimelineOperation
     }
   }
 
+  // Include viral Shorts as structured timeline operations
+  const shortsList = plan.shorts || plan.meta?.shorts || [];
+  for (const s of shortsList) {
+    operations.push({
+      id: s.id,
+      layer: 'short',
+      trackKind: 'video',
+      trackName: 'V1: Video / Edits',
+      title: s.title || `Short: ${s.id}`,
+      summary: `Vertical Short (${s.aspect || '9:16'}) from ${s.startSec}s to ${s.endSec}s (${s.hook || 'Viral highlight'})`,
+      startSec: s.startSec,
+      endSec: s.endSec,
+      durSec: Number((s.endSec - s.startSec).toFixed(2)),
+      parameters: s as any,
+    });
+    tracksSet.add('V1: Video / Edits');
+  }
+
   const summary: PlanTimelineOperationsSummary = {
     version: plan.version,
     prompt: plan.meta?.prompt || 'User Edit',
@@ -83,12 +101,20 @@ function mapLayerToTimelineOperation(layer: EditLayer): TimelineOperationItem | 
   switch (layer.layer) {
     case 'cut': {
       const reason = layer.params?.reason || 'user';
+      let title = 'Cut Dead Air / Silence';
+      if (reason === 'repeated_take') {
+        title = 'Cut Repeated Take';
+      } else if (reason === 'tighten_pacing') {
+        title = 'Tighten Opening Pacing';
+      } else if (reason === 'short_extraction_trim') {
+        title = 'Short Boundary Cut';
+      }
       return {
         id: layer.id,
         layer: 'cut',
         trackKind: 'video',
         trackName: 'V1: Video / Edits',
-        title: 'Cut Dead Air / Silence',
+        title,
         summary: `Splits & removes interval ${startSec?.toFixed(2)}s - ${endSec?.toFixed(2)}s (${durSec?.toFixed(2)}s, reason: ${reason})`,
         startSec,
         endSec,

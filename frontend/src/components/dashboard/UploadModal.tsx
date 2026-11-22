@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   WifiOff,
   Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
@@ -588,6 +589,38 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
         <p className="text-xs text-[#FFF5F5]/70 mb-4 font-mono">
           Upload raw footage. Resumable multi-part chunks with AI speech sync & media intelligence.
         </p>
+
+        {/* Killer Demo One-Click Card */}
+        <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-[#2A2326] to-[#1F2023] border border-[#E3B5BE]/60 flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="flex items-center space-x-1.5 font-bold text-xs text-[#F7D7D1]">
+              <Sparkles className="w-3.5 h-3.5 text-[#E3B5BE]" />
+              <span>Instant Video Demo (No Upload Required)</span>
+            </span>
+            <p className="text-[10px] text-[#FFF5F5]/70">
+              Loads 3-minute uncut studio footage with false starts & repeated takes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                toast.info('Loading Killer Demo Footage...', 'Demo');
+                const res = await api.createDemoProject();
+                const proj = res?.data || res;
+                if (proj?.publicId) {
+                  onProjectCreated(proj.publicId);
+                  onClose();
+                }
+              } catch (err: any) {
+                toast.error('Could not load demo project: ' + err.message);
+              }
+            }}
+            className="px-3 py-1.5 rounded-lg bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] font-bold text-xs shadow-sm whitespace-nowrap transition-all"
+          >
+            Load Demo
+          </button>
+        </div>
 
         {/* Resumable Session Alert Banner */}
         {pendingResume && !isUploading && (

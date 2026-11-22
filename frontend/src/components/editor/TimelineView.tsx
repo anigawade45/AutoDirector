@@ -77,6 +77,8 @@ export const TimelineView: React.FC = () => {
     commitDraft,
     project,
     plan,
+    activeShortId,
+    setActiveShortId,
   } = useEditorStore();
 
   const togglePlay = useCallback(() => {
@@ -686,11 +688,24 @@ export const TimelineView: React.FC = () => {
         return (
           base + 'bg-[#2A262C] border border-[#E3B5BE]/50 text-[#FFF5F5] hover:border-[#E3B5BE]'
         );
-      case 'cut':
+      case 'cut': {
+        if (clip.label?.includes('Repeated Take')) {
+          return (
+            base +
+            'bg-rose-950/70 border border-rose-500/70 text-rose-200 hover:bg-rose-900/80 text-[10px] font-mono justify-center shadow-sm'
+          );
+        }
+        if (clip.label?.includes('Tightened Opening')) {
+          return (
+            base +
+            'bg-amber-950/70 border border-amber-500/70 text-amber-200 hover:bg-amber-900/80 text-[10px] font-mono justify-center shadow-sm'
+          );
+        }
         return (
           base +
           'bg-[#362225] border border-[#E3B5BE]/50 text-[#F7D7D1] hover:bg-[#3D2529] text-[10px] font-mono justify-center'
         );
+      }
       case 'speed':
         return base + 'bg-[#25282B] border border-[#393B3F] text-[#FFF5F5] hover:border-[#E3B5BE]';
       case 'subtitle':
@@ -709,7 +724,8 @@ export const TimelineView: React.FC = () => {
         );
       case 'overlay':
         return (
-          base + 'bg-[#2E282B] border border-[#E3B5BE]/30 text-[#FFF5F5] hover:border-[#E3B5BE]'
+          base +
+          'bg-emerald-950/60 border border-emerald-500/70 text-emerald-100 hover:border-emerald-400 text-[11px] font-medium shadow-sm'
         );
       case 'transition':
         return (
@@ -726,6 +742,74 @@ export const TimelineView: React.FC = () => {
       onWheel={handleWheel}
       className="h-full lg:h-56 flex-1 lg:flex-initial lg:flex-shrink-0 bg-[#18191B] border-t-0 lg:border-t border-[#393B3F] flex flex-col select-none font-sans min-h-0"
     >
+      {/* Killer Demo: Viral Shorts Switcher Bar */}
+      {(() => {
+        const shortsList =
+          effectivePlan?.shorts || (effectivePlan?.meta as any)?.shorts || [];
+        if (!shortsList || shortsList.length === 0) return null;
+
+        return (
+          <div className="bg-[#1F2023] border-b border-[#393B3F] px-3 py-1.5 flex items-center justify-between text-xs overflow-x-auto gap-2 shrink-0">
+            <div className="flex items-center space-x-1.5 shrink-0">
+              <span className="text-[10px] font-mono text-[#E3B5BE] font-bold uppercase tracking-wider flex items-center mr-1">
+                <Sparkles className="w-3.5 h-3.5 mr-1 text-[#E3B5BE] animate-pulse" />
+                Shorts Studio:
+              </span>
+              <button
+                onClick={() => {
+                  setActiveShortId(null);
+                  updateDraft((d) => {
+                    d.global.aspect = '16:9';
+                  });
+                  toast.info('Viewing Master 16:9 Timeline', 'Full Sequence');
+                }}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  !activeShortId
+                    ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                    : 'bg-[#2A2C2F] text-[#FFF5F5]/70 hover:bg-[#393B3F]'
+                }`}
+              >
+                🎬 Master Timeline (16:9)
+              </button>
+              {shortsList.map((short: any) => {
+                const isActive = activeShortId === short.id;
+                return (
+                  <button
+                    key={short.id}
+                    onClick={() => {
+                      setActiveShortId(short.id);
+                      setCurrentTime(short.startSec);
+                      updateDraft((d) => {
+                        d.global.aspect = '9:16';
+                      });
+                      toast.success(
+                        `Active Short: ${short.title} (${short.startSec}s - ${short.endSec}s • 9:16)`,
+                        'Short Selected'
+                      );
+                    }}
+                    className={`flex items-center space-x-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                      isActive
+                        ? 'bg-gradient-to-r from-[#E3B5BE] to-[#F7D7D1] text-[#18191B] font-bold shadow-sm ring-1 ring-[#FFF5F5]'
+                        : 'bg-[#2A2C2F] text-[#FFF5F5]/70 hover:bg-[#393B3F]'
+                    }`}
+                  >
+                    <span>📱 {short.title}</span>
+                    <span className="text-[9px] opacity-75 font-mono">
+                      ({Math.round(short.endSec - short.startSec)}s)
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center space-x-2 text-[10px] font-mono text-[#F7D7D1]/90 shrink-0">
+              <span className="bg-[#2E2729] px-2.5 py-0.5 rounded border border-[#E3B5BE]/40 text-[#F7D7D1] flex items-center space-x-1">
+                <span>✨ 2 Repeated Takes Cut • Opening Tightened • 2 B-Roll Added • Ready to Render</span>
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Timeline Controls Header */}
       <div className="h-10 border-b border-[#393B3F] px-2 sm:px-4 flex items-center justify-between bg-[#18191B] overflow-x-auto gap-2 custom-scrollbar shrink-0">
         <div className="flex items-center space-x-2 sm:space-x-2.5 text-xs text-[#FFF5F5]/70 shrink-0">

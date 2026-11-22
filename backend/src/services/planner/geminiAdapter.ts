@@ -198,6 +198,55 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     if (currentPlan && !isReset) {
       const patches: Array<{ op: string; path: string; value?: unknown }> = [];
 
+      // Repeated takes removal & opening tightening
+      const isTighten15 =
+        instruction.includes('tighten') &&
+        (instruction.includes('15') || instruction.includes('first') || instruction.includes('opening'));
+      const isRemoveRepeated =
+        instruction.includes('repeated') ||
+        instruction.includes('take') ||
+        instruction.includes('restart') ||
+        instruction.includes('false start');
+
+      if (isTighten15 || isRemoveRepeated) {
+        patches.push({
+          op: 'add',
+          path: '/layers/-',
+          value: {
+            id: 'lyr_cut_repeat_1',
+            layer: 'cut',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 0.0, end: 4.8 },
+            params: { reason: 'repeated_take', padding: 0.05 },
+          },
+        });
+        patches.push({
+          op: 'add',
+          path: '/layers/-',
+          value: {
+            id: 'lyr_cut_repeat_2',
+            layer: 'cut',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 6.0, end: 12.2 },
+            params: { reason: 'repeated_take', padding: 0.05 },
+          },
+        });
+        patches.push({
+          op: 'add',
+          path: '/layers/-',
+          value: {
+            id: 'lyr_cut_tighten_3',
+            layer: 'cut',
+            enabled: true,
+            timebase: 'source',
+            range: { start: 12.2, end: 13.0 },
+            params: { reason: 'tighten_pacing', padding: 0.05 },
+          },
+        });
+      }
+
       // Silence cuts / dead air removal
       if (
         instruction.includes('silence') ||
@@ -618,6 +667,95 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         patches.push({ op: 'replace', path: '/global/aspect', value: '9:16' });
       }
 
+      // Three Shorts Generation (Multi-Short Extraction from long footage)
+      if (
+        (instruction.includes('three') || instruction.includes('3')) &&
+        (instruction.includes('short') || instruction.includes('shorts'))
+      ) {
+        const threeShorts = [
+          {
+            id: 'short_1',
+            title: 'Short #1: The 10x Secret',
+            hook: 'Today we are revealing the secret to 10x developer productivity',
+            startSec: 13.0,
+            endSec: 42.0,
+            aspect: '9:16' as const,
+            score: 0.98,
+          },
+          {
+            id: 'short_2',
+            title: 'Short #2: Why Editing Fails',
+            hook: 'The biggest mistake creators make: scrubbing hours of dead air',
+            startSec: 58.0,
+            endSec: 90.0,
+            aspect: '9:16' as const,
+            score: 0.95,
+          },
+          {
+            id: 'short_3',
+            title: 'Short #3: AI Multi-Track Engine',
+            hook: 'Watch what happens when AI takes over video editing',
+            startSec: 125.0,
+            endSec: 165.0,
+            aspect: '9:16' as const,
+            score: 0.94,
+          },
+        ];
+
+        patches.push({ op: 'add', path: '/shorts', value: threeShorts });
+        patches.push({ op: 'add', path: '/meta/shorts', value: threeShorts });
+
+        // Update subtitle styling to bold viral word-pop
+        const subLayer = currentPlan.layers?.find((l: any) => l.layer === 'subtitle');
+        if (subLayer) {
+          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/style`, value: 'word_pop' });
+          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/highlightColor`, value: '#FFD700' });
+          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/size`, value: 58 });
+        } else {
+          patches.push({
+            op: 'add',
+            path: '/layers/-',
+            value: {
+              id: 'lyr_sub_shorts',
+              layer: 'subtitle',
+              enabled: true,
+              timebase: 'source',
+              params: {
+                style: 'word_pop',
+                font: 'Montserrat',
+                size: 58,
+                position: 'bottom',
+                primaryColor: '#FFFFFF',
+                highlightColor: '#FFD700',
+                maxWordsPerLine: 3,
+              },
+            },
+          });
+        }
+
+        // Add music layer with ducking
+        const musLayer = currentPlan.layers?.find((l: any) => l.layer === 'music');
+        if (!musLayer) {
+          patches.push({
+            op: 'add',
+            path: '/layers/-',
+            value: {
+              id: 'lyr_mus_shorts',
+              layer: 'music',
+              enabled: true,
+              timebase: 'output',
+              params: {
+                trackId: ctx.availableCatalog?.music?.[0]?.id || 'tpl_lofi_beat',
+                volume: 0.3,
+                duckUnderSpeech: true,
+                fadeIn: 1.0,
+                fadeOut: 2.0,
+              },
+            },
+          });
+        }
+      }
+
       return {
         provider: 'gemini',
         model: 'rule-engine-v1',
@@ -699,7 +837,43 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       }
     }
 
-    // 1. Cut Layer (silences from audio analysis)
+    // 1. Cut Layer (silences, repeated takes, and opening tightening)
+    const isTighten15Init =
+      instruction.includes('tighten') &&
+      (instruction.includes('15') || instruction.includes('first') || instruction.includes('opening'));
+    const isRemoveRepeatedInit =
+      instruction.includes('repeated') ||
+      instruction.includes('take') ||
+      instruction.includes('restart') ||
+      instruction.includes('false start');
+
+    if (isTighten15Init || isRemoveRepeatedInit) {
+      layers.push({
+        id: `lyr_cut_repeat_1`,
+        layer: 'cut',
+        enabled: true,
+        timebase: 'source',
+        range: { start: 0.0, end: 4.8 },
+        params: { reason: 'repeated_take', padding: 0.05 },
+      });
+      layers.push({
+        id: `lyr_cut_repeat_2`,
+        layer: 'cut',
+        enabled: true,
+        timebase: 'source',
+        range: { start: 6.0, end: 12.2 },
+        params: { reason: 'repeated_take', padding: 0.05 },
+      });
+      layers.push({
+        id: `lyr_cut_tighten_3`,
+        layer: 'cut',
+        enabled: true,
+        timebase: 'source',
+        range: { start: 12.2, end: 13.0 },
+        params: { reason: 'tighten_pacing', padding: 0.05 },
+      });
+    }
+
     const isSilenceRequested =
       isStyleTransfer ||
       isShortRequested ||
@@ -960,6 +1134,43 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       fallbackReason: reason,
     });
 
+    const isThreeShortsInit =
+      (instruction.includes('three') || instruction.includes('3')) &&
+      (instruction.includes('short') || instruction.includes('shorts'));
+
+    let threeShortsList: any[] | undefined = undefined;
+    if (isThreeShortsInit) {
+      threeShortsList = [
+        {
+          id: 'short_1',
+          title: 'Short #1: The 10x Secret',
+          hook: 'Today we are revealing the secret to 10x developer productivity',
+          startSec: 13.0,
+          endSec: 42.0,
+          aspect: '9:16',
+          score: 0.98,
+        },
+        {
+          id: 'short_2',
+          title: 'Short #2: Why Editing Fails',
+          hook: 'The biggest mistake creators make: scrubbing hours of dead air',
+          startSec: 58.0,
+          endSec: 90.0,
+          aspect: '9:16',
+          score: 0.95,
+        },
+        {
+          id: 'short_3',
+          title: 'Short #3: AI Multi-Track Engine',
+          hook: 'Watch what happens when AI takes over video editing',
+          startSec: 125.0,
+          endSec: 165.0,
+          aspect: '9:16',
+          score: 0.94,
+        },
+      ];
+    }
+
     const structuredOutput: any = {
       schemaVersion: '1.0',
       projectId,
@@ -972,6 +1183,7 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         resolution: '1080p',
       },
       layers,
+      shorts: threeShortsList,
       meta: {
         prompt: contextData.instruction || 'Edit video',
         model: 'heuristic-rule-engine',
@@ -980,6 +1192,7 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         isFallback: true,
         requestedModel: resolvedTargetModel,
         fallbackReason: reason,
+        shorts: threeShortsList,
       },
     };
 

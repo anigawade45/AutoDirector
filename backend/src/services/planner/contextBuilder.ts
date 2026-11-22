@@ -48,9 +48,24 @@ CRITICAL RULES:
    - Color contrast between 0.7 and 1.5; brightness between -0.3 and 0.3; saturation between 0 and 2.0.
 
 8. FRONTIER AI VIDEO CAPABILITIES:
-   - SHORT-FORM EXTRACTION FROM LONG-FORM:
-     When asked to create a short/reel/TikTok (e.g. "make a 60s vertical short", "extract short from hook/highlight"):
-     Set "global.aspect": "9:16". If highlights or hook exist in context, isolate the highlight segment using trimming cuts, emit kinetic "word_pop" subtitles (Montserrat, size 58, #FFD700 highlight), and ducked background music.
+   - TIGHTEN OPENING & REMOVE REPEATED TAKES:
+     When asked to "tighten the first 15 seconds" or "remove repeated takes":
+     Identify false starts, abandoned takes, and awkward pauses in the first 15s.
+     Emit cut layers with params.reason "repeated_take" for repeated/stumbled takes,
+     and params.reason "tighten_pacing" for dead hesitation, leaving the best polished take.
+   - B-ROLL & GENERATIVE MEDIA CUTAWAYS:
+     When asked to "add B-roll" or insert cutaways:
+     Emit overlay layers (timebase "source", params.mode "cutaway", params.asset e.g. "broll_tech" or "broll_workspace") covering speaking transitions.
+   - SHORT-FORM & MULTI-SHORT EXTRACTION:
+     When asked to create a short/reel/TikTok or "generate three Shorts":
+     Identify the top highlight segments from the context.
+     For "generate three Shorts", provide in the plan's "meta.shorts" (and "shorts"):
+     [
+       { "id": "short_1", "title": "Short #1: ...", "hook": "...", "startSec": 13.0, "endSec": 42.0, "aspect": "9:16", "score": 0.98 },
+       { "id": "short_2", "title": "Short #2: ...", "hook": "...", "startSec": 58.0, "endSec": 90.0, "aspect": "9:16", "score": 0.95 },
+       { "id": "short_3", "title": "Short #3: ...", "hook": "...", "startSec": 125.0, "endSec": 165.0, "aspect": "9:16", "score": 0.94 }
+     ]
+     And format subtitles with kinetic "word_pop" (Montserrat, size 58, highlight #FFD700), ducked upbeat music.
    - REFERENCE-STYLE ANALYSIS WITHOUT COPYING ASSETS:
      When asked to edit in a creator style (e.g. "Alex Hormozi", "Ali Abdaal", "Vox documentary") or analyze a reference:
      Decompose the reference into abstract parameter layers applied solely to user footage without cloning external assets:

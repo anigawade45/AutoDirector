@@ -271,6 +271,11 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  createDemoProject: () =>
+    request<any>('/projects/demo', {
+      method: 'POST',
+    }),
+
   getProject: (projectId: string) => request<any>(`/projects/${projectId}`),
 
   updateProject: (projectId: string, data: { title?: string; settings?: any; status?: string }) =>

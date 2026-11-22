@@ -169,9 +169,11 @@ export interface EditorStoreState {
   };
 
   selectedAiModel: string;
+  activeShortId: string | null;
 
   // Actions
   setSelectedAiModel: (model: string) => void;
+  setActiveShortId: (id: string | null) => void;
   setActiveTab: (tab: 'project' | 'inspector') => void;
   setProject: (project: any, analysisSummary?: AnalysisSummaryData | null) => void;
   setPlan: (plan: EditPlan) => void;
@@ -282,10 +284,16 @@ export const useEditorStore = create<EditorStoreState>()(
     },
 
     selectedAiModel: 'gemini-3.5-flash-lite',
+    activeShortId: null,
 
     setSelectedAiModel: (model) =>
       set((state) => {
         state.selectedAiModel = model;
+      }),
+
+    setActiveShortId: (id) =>
+      set((state) => {
+        state.activeShortId = id;
       }),
 
     setActiveTab: (tab) =>
@@ -1448,9 +1456,21 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
         });
       }
 
+      const r = cut.params?.reason;
+      let cutLabel = `Cut: ${r || 'user'} (${(cutEnd - cutStart).toFixed(2)}s)`;
+      if (r === 'repeated_take') {
+        cutLabel = `🚫 Cut: Repeated Take (${(cutEnd - cutStart).toFixed(2)}s)`;
+      } else if (r === 'tighten_pacing') {
+        cutLabel = `⚡ Cut: Tightened Opening (${(cutEnd - cutStart).toFixed(2)}s)`;
+      } else if (r === 'silence') {
+        cutLabel = `Cut: Silence (${(cutEnd - cutStart).toFixed(2)}s)`;
+      } else if (r === 'short_extraction_trim') {
+        cutLabel = `Cut: Short Trim (${(cutEnd - cutStart).toFixed(2)}s)`;
+      }
+
       videoClips.push({
         id: cut.id,
-        label: `Cut: ${cut.params?.reason || 'user'} (${(cutEnd - cutStart).toFixed(2)}s)`,
+        label: cutLabel,
         startSec: cutStart,
         durSec: Math.max(0.1, cutEnd - cutStart),
         type: 'cut',

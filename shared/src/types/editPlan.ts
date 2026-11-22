@@ -25,7 +25,14 @@ export interface BaseLayer {
 }
 
 export interface CutParams {
-  reason: 'silence' | 'filler' | 'user' | 'lowlight';
+  reason:
+    | 'silence'
+    | 'filler'
+    | 'user'
+    | 'lowlight'
+    | 'repeated_take'
+    | 'tighten_pacing'
+    | 'short_extraction_trim';
   padding?: number; // 0 to 0.3s
 }
 
@@ -213,6 +220,16 @@ export type EditLayer =
 
 export type PlannerExecutionMode = 'primary_llm' | 'fallback_llm' | 'heuristic_fallback';
 
+export interface ShortVideoSegment {
+  id: string; // e.g. "short_1"
+  title: string;
+  hook?: string;
+  startSec: number;
+  endSec: number;
+  aspect: AspectRatio;
+  score?: number;
+}
+
 export interface EditPlanMeta {
   prompt: string;
   model: string;
@@ -222,6 +239,7 @@ export interface EditPlanMeta {
   requestedModel?: string;
   fallbackReason?: string;
   assumptions?: Record<string, unknown>;
+  shorts?: ShortVideoSegment[];
 }
 
 export interface EditPlan {
@@ -233,6 +251,7 @@ export interface EditPlan {
   global: GlobalVideoSettings;
   layers: EditLayer[];
   meta: EditPlanMeta;
+  shorts?: ShortVideoSegment[];
 }
 
 export interface JsonPatchOperation {

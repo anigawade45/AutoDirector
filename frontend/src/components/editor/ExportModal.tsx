@@ -115,6 +115,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
         <div className="p-6 space-y-5">
           {status === 'idle' && (
             <>
+              {(() => {
+                const shortsList = plan.shorts || (plan.meta as any)?.shorts || [];
+                if (!shortsList || shortsList.length === 0) return null;
+                return (
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-[#2A2326] to-[#1F2023] border border-[#E3B5BE]/60 text-xs text-[#FFF5F5] flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center space-x-1.5 font-bold text-[#F7D7D1]">
+                        <Sparkles className="w-3.5 h-3.5 text-[#E3B5BE]" />
+                        <span>3 Viral Shorts Ready for Export (9:16)</span>
+                      </div>
+                      <p className="text-[10px] text-[#FFF5F5]/70">
+                        {shortsList.map((s: any) => s.title).join(' • ')}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#E3B5BE]/20 text-[#E3B5BE] border border-[#E3B5BE]/40 font-semibold">
+                      Shorts Bundle
+                    </span>
+                  </div>
+                );
+              })()}
+
               <div>
                 <label className="block text-xs font-mono uppercase tracking-wider text-[#FFF5F5]/80 mb-2">
                   Select Output Resolution

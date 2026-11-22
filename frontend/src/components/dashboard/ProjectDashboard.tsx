@@ -44,8 +44,30 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
     null
   );
   const [filterTab, setFilterTab] = useState<'active' | 'archived'>('active');
+  const [isCreatingDemo, setIsCreatingDemo] = useState(false);
   const queryClient = useQueryClient();
   const { user, isAuthenticated, logout } = useAuthStore();
+
+  const handleLoadKillerDemo = async () => {
+    try {
+      setIsCreatingDemo(true);
+      toast.info('Loading Killer Demo: Long Raw Studio Recording...', 'Demo Initializing');
+      const res = await api.createDemoProject();
+      const proj = res?.data || res;
+      if (proj && proj.publicId) {
+        queryClient.invalidateQueries({ queryKey: ['projects'] });
+        toast.success(
+          'Loaded 3-minute raw footage with repeated takes & false starts!',
+          'Demo Ready'
+        );
+        onSelectProject(proj.publicId);
+      }
+    } catch (err: any) {
+      toast.error('Failed to load demo project: ' + (err.message || 'Error'), 'Demo Error');
+    } finally {
+      setIsCreatingDemo(false);
+    }
+  };
 
   const {
     data: projects = [],
@@ -161,6 +183,21 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-3">
+          <button
+            onClick={handleLoadKillerDemo}
+            disabled={isCreatingDemo}
+            className="flex items-center space-x-1.5 sm:space-x-2 bg-gradient-to-r from-[#E3B5BE] via-[#F7D7D1] to-[#E3B5BE] hover:opacity-90 text-[#18191B] transition-all px-3 sm:px-3.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm disabled:opacity-50"
+            title="Load a 3-minute uncut studio podcast with false starts, repeated takes, and rich acoustic analysis"
+          >
+            {isCreatingDemo ? (
+              <Loader2 className="w-4 h-4 animate-spin text-[#18191B]" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-[#18191B]" />
+            )}
+            <span className="hidden md:inline">Killer Demo: Raw Footage</span>
+            <span className="md:hidden">Demo</span>
+          </button>
+
           <button
             onClick={() => setIsUploadOpen(true)}
             className="flex items-center space-x-1.5 sm:space-x-2 bg-[#E3B5BE] hover:bg-[#F7D7D1] text-[#18191B] transition-colors px-3 sm:px-3.5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm"
