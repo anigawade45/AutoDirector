@@ -115,11 +115,12 @@ export const ChatPanel: React.FC = () => {
     AVAILABLE_GEMINI_MODELS.find((m) => m.id === selectedAiModel) || AVAILABLE_GEMINI_MODELS[0];
 
   const quickPrompts = [
+    'Extract 60s viral TikTok short (9:16) from best highlight',
+    'Apply Alex Hormozi style: snappy cuts & bold yellow word-pop',
+    'Apply Ali Abdaal aesthetic: warm film grade & clean minimal captions',
     'Make it cinematic with teal & orange color grade',
     'Remove all silent pauses longer than 0.6s',
-    'Add animated word-pop subtitles with yellow highlights',
     'Add upbeat background music with speech ducking',
-    'Make subtitles bigger and positioned at top',
   ];
 
   const handleSendPrompt = async (textToSend?: string) => {

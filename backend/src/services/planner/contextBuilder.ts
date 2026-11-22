@@ -45,7 +45,18 @@ CRITICAL RULES:
    - Maximum 200 layers per plan.
    - Intro and outro durations must be between 2 and 10 seconds.
    - Subtitle size between 24 and 96.
-   - Color contrast between 0.7 and 1.5; brightness between -0.3 and 0.3; saturation between 0 and 2.0.`;
+   - Color contrast between 0.7 and 1.5; brightness between -0.3 and 0.3; saturation between 0 and 2.0.
+
+8. FRONTIER AI VIDEO CAPABILITIES:
+   - SHORT-FORM EXTRACTION FROM LONG-FORM:
+     When asked to create a short/reel/TikTok (e.g. "make a 60s vertical short", "extract short from hook/highlight"):
+     Set "global.aspect": "9:16". If highlights or hook exist in context, isolate the highlight segment using trimming cuts, emit kinetic "word_pop" subtitles (Montserrat, size 58, #FFD700 highlight), and ducked background music.
+   - REFERENCE-STYLE ANALYSIS WITHOUT COPYING ASSETS:
+     When asked to edit in a creator style (e.g. "Alex Hormozi", "Ali Abdaal", "Vox documentary") or analyze a reference:
+     Decompose the reference into abstract parameter layers applied solely to user footage without cloning external assets:
+     * Alex Hormozi style: Aggressive silence cuts, high contrast cinematic grade, bold yellow word_pop subtitles (Montserrat, size 58, highlight #FFD700), ducked upbeat music.
+     * Ali Abdaal style: Warm filmic grade, minimal Inter captions (highlight #38BDF8), gentle lo-fi music.
+     * Vox style: Cinematic teal/orange grade, classic captions, ambient soundtrack.`;
   }
 
   static buildUserContext(
@@ -82,6 +93,28 @@ CRITICAL RULES:
             loudnessLufs: analysis.loudness?.integratedLufs || -16,
           },
           transcriptExcerpts: analysis.transcriptExcerpt || [],
+          highlights: (analysis.highlights || []).map((h) => ({
+            id: h.id,
+            startSec: Number((h.startMs / 1000).toFixed(2)),
+            endSec: Number((h.endMs / 1000).toFixed(2)),
+            score: h.score,
+            reason: h.reason,
+          })),
+          chapters: (analysis.chapters || []).map((ch) => ({
+            id: ch.id,
+            startSec: Number((ch.startMs / 1000).toFixed(2)),
+            endSec: Number((ch.endMs / 1000).toFixed(2)),
+            title: ch.title,
+            summary: ch.summary,
+          })),
+          hook: analysis.hook
+            ? {
+                startSec: Number((analysis.hook.startMs / 1000).toFixed(2)),
+                endSec: Number((analysis.hook.endMs / 1000).toFixed(2)),
+                score: analysis.hook.score,
+                reason: analysis.hook.reason,
+              }
+            : null,
           availableCatalog: {
             templates: catalog.templates || [],
             luts: catalog.luts || [],

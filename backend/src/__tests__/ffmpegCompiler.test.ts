@@ -263,11 +263,11 @@ describe('Phase 3 Task 2: Pure FFmpeg Compiler compile(plan, analysis, profile)'
   describe('Pass 4: Overlays & Graphic Text', () => {
     it('burns in graphic text layer with drawtext filter and boundary timings', () => {
       const plan = createBasePlan();
-      plan.layers.push({
+      (plan.layers as any).push({
         id: 'txt_1',
         layer: 'text',
         enabled: true,
-        timebase: 'global',
+        timebase: 'source',
         range: { start: 2, end: 8 },
         params: {
           content: 'Breaking Tech News',
@@ -288,11 +288,11 @@ describe('Phase 3 Task 2: Pure FFmpeg Compiler compile(plan, analysis, profile)'
 
     it('overlays image and B-roll media when source path is provided', () => {
       const plan = createBasePlan();
-      plan.layers.push({
+      (plan.layers as any).push({
         id: 'ov_broll_1',
         layer: 'overlay',
         enabled: true,
-        timebase: 'global',
+        timebase: 'source',
         range: { start: 4, end: 10 },
         params: {
           asset: 'broll_coding',

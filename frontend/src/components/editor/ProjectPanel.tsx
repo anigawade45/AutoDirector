@@ -22,6 +22,9 @@ import {
   Users,
   Video,
   Tag,
+  Flame,
+  Zap,
+  Bookmark,
 } from 'lucide-react';
 import {
   useEditorStore,
@@ -43,6 +46,9 @@ export const ProjectPanel: React.FC = () => {
     deleteCue,
     cleanEmptySubtitleCues,
     renameSpeaker,
+    setPlan,
+    addChatMessage,
+    setChatPending,
   } = useEditorStore();
   const effectivePlan = useEditorStore(selectEffectivePlan);
   const mediaIndex = useEditorStore(selectMediaIndex);
@@ -168,6 +174,36 @@ export const ProjectPanel: React.FC = () => {
     toast.success(`Renamed "${oldName}" to "${cleanName}" across all cues`, 'Speaker Diarization');
   };
 
+  const handleTriggerPrompt = async (promptMsg: string) => {
+    if (!project) return;
+    try {
+      addChatMessage({ role: 'user', text: promptMsg });
+      setChatPending(true);
+      toast.info(`Processing "${promptMsg.slice(0, 35)}..."`, 'AI Director');
+
+      const res = await api.submitPrompt(project.id, {
+        prompt: promptMsg,
+        model: useEditorStore.getState().selectedAiModel,
+      });
+
+      if (res?.plan) {
+        setPlan(res.plan);
+      }
+      const ops = res?.plan ? (extractTimelineOperations(res.plan).operations as any) : undefined;
+      addChatMessage({
+        role: 'assistant',
+        text: `Applied edit plan v${res?.plan?.version || 'next'} for: "${promptMsg}".`,
+        planVersion: res?.plan?.version,
+        operations: ops,
+      });
+      toast.success(`Plan updated to v${res?.plan?.version || 1}!`, 'AI Director');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to process AI prompt', 'AI Director');
+    } finally {
+      setChatPending(false);
+    }
+  };
+
   // Filtered dialogue cues
   const filteredCues = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -261,46 +297,58 @@ export const ProjectPanel: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('transcript')}
-            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-medium transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
+            className={`flex items-center justify-center gap-1.5 py-1.5 px-1.5 rounded-lg text-[11px] font-semibold transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
               activeTab === 'transcript'
-                ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm'
                 : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
             }`}
             title={`Transcript Cues (${cues.length})`}
           >
-            <FileText className="w-3 h-3 shrink-0" />
+            <FileText className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Transcript</span>
-            <span className="text-[9.5px] font-mono opacity-75 shrink-0">({cues.length})</span>
+            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
+              activeTab === 'transcript' ? 'bg-[#18191B]/20 text-[#18191B]' : 'bg-white/10 text-[#FFF5F5]/60'
+            }`}>
+              {cues.length}
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('scenes')}
-            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-medium transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
+            className={`flex items-center justify-center gap-1.5 py-1.5 px-1.5 rounded-lg text-[11px] font-semibold transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
               activeTab === 'scenes'
-                ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm'
                 : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
             }`}
             title={`Scene Cuts (${mediaIndex.scenes.length})`}
           >
-            <Video className="w-3 h-3 shrink-0" />
+            <Video className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Scenes</span>
-            <span className="text-[9.5px] font-mono opacity-75 shrink-0">({mediaIndex.scenes.length})</span>
+            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
+              activeTab === 'scenes' ? 'bg-[#18191B]/20 text-[#18191B]' : 'bg-white/10 text-[#FFF5F5]/60'
+            }`}>
+              {mediaIndex.scenes.length}
+            </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('speakers')}
-            className={`flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-medium transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
+            className={`flex items-center justify-center gap-1.5 py-1.5 px-1.5 rounded-lg text-[11px] font-semibold transition-all min-w-0 whitespace-nowrap overflow-hidden select-none ${
               activeTab === 'speakers'
-                ? 'bg-[#E3B5BE] text-[#18191B] font-bold shadow-sm'
+                ? 'bg-[#E3B5BE] text-[#18191B] shadow-sm'
                 : 'text-[#FFF5F5]/70 hover:text-white hover:bg-white/5'
             }`}
             title={`Speakers Diarization (${mediaIndex.speakers.length})`}
           >
-            <Users className="w-3 h-3 shrink-0" />
+            <Users className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Speakers</span>
-            <span className="text-[9.5px] font-mono opacity-75 shrink-0">({mediaIndex.speakers.length})</span>
+            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
+              activeTab === 'speakers' ? 'bg-[#18191B]/20 text-[#18191B]' : 'bg-white/10 text-[#FFF5F5]/60'
+            }`}>
+              {mediaIndex.speakers.length}
+            </span>
           </button>
         </div>
 
@@ -620,6 +668,130 @@ export const ProjectPanel: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* AI Discovery: Hooks, Chapters & Short-Form Extraction */}
+      <div className="bg-[#18191B] rounded-xl border border-[#393B3F] p-3 space-y-3">
+        <div className="flex items-center justify-between text-xs font-semibold text-[#FFF5F5]">
+          <span className="flex items-center gap-1.5 uppercase tracking-wider text-[11px] text-[#FFF5F5]/70 font-mono">
+            <Flame className="w-3.5 h-3.5 text-amber-400" />
+            <span>AI Discovery & Viral Hooks</span>
+          </span>
+          <span className="text-[10px] text-amber-400 font-mono bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+            Multimodal AI
+          </span>
+        </div>
+
+        {/* Viral Hook Card */}
+        {analysis?.hook && (
+          <div className="bg-[#121314] rounded-lg border border-amber-400/30 p-2.5 space-y-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="flex items-center gap-1 font-semibold text-amber-300">
+                <Zap className="w-3 h-3 text-amber-400" />
+                <span>Viral Hook Segment</span>
+              </span>
+              <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-200 font-bold">
+                {Math.round((analysis.hook.score || 0.95) * 100)}% Match
+              </span>
+            </div>
+            <p className="text-[11px] text-[#FFF5F5]/80 italic">
+              "{analysis.hook.reason || 'High-cadence opening delivery'}"
+            </p>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] font-mono text-[#FFF5F5]/60 flex items-center gap-1">
+                <Clock className="w-2.5 h-2.5" />
+                {formatTime(analysis.hook.startMs)} - {formatTime(analysis.hook.endMs)}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCurrentTime(analysis.hook!.startMs / 1000)}
+                  className="px-2 py-1 rounded text-[10px] font-mono bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
+                >
+                  Play Hook
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleTriggerPrompt('Extract 60s viral TikTok short (9:16) from this hook')
+                  }
+                  className="px-2 py-1 rounded text-[10px] font-semibold bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-black shadow-sm transition-all flex items-center gap-1"
+                >
+                  <Zap className="w-2.5 h-2.5" />
+                  <span>9:16 Short</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Semantic Chapters */}
+        {analysis?.chapters && analysis.chapters.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] text-[#FFF5F5]/50 font-mono uppercase tracking-wider">
+              <span className="flex items-center gap-1">
+                <Bookmark className="w-3 h-3 text-[#E3B5BE]" />
+                <span>Video Chapters ({analysis.chapters.length})</span>
+              </span>
+            </div>
+            <div className="space-y-1">
+              {analysis.chapters.map((ch, idx) => (
+                <div
+                  key={ch.id || idx}
+                  onClick={() => setCurrentTime(ch.startMs / 1000)}
+                  className="px-2.5 py-1.5 rounded-lg bg-[#121314] hover:bg-[#2A2C2F] border border-[#393B3F]/60 flex items-center justify-between cursor-pointer transition-colors group"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[9.5px] font-mono text-[#E3B5BE] shrink-0">
+                      {formatTime(ch.startMs)}
+                    </span>
+                    <span className="text-[11px] font-medium text-[#FFF5F5]/90 group-hover:text-white truncate">
+                      {ch.title}
+                    </span>
+                  </div>
+                  <ChevronRight className="w-3 h-3 text-[#FFF5F5]/30 group-hover:text-[#E3B5BE] group-hover:translate-x-0.5 transition-transform shrink-0" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Reference-Style Transfer Quick Archetypes */}
+        <div className="pt-1 border-t border-[#393B3F]/50 space-y-1.5">
+          <p className="text-[10px] text-[#FFF5F5]/50 font-mono font-semibold uppercase tracking-wider">
+            Reference-Style Transfer (No Media Cloned)
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() =>
+                handleTriggerPrompt(
+                  'Apply Alex Hormozi style: snappy cuts, high contrast, bold yellow word-pop subtitles, ducked music'
+                )
+              }
+              className="px-2 py-1.5 rounded-lg bg-[#121314] hover:bg-[#2A2C2F] border border-[#393B3F] hover:border-[#E3B5BE]/60 text-left transition-colors"
+            >
+              <div className="text-[10.5px] font-semibold text-[#FFF5F5]">Hormozi Style</div>
+              <div className="text-[9px] text-[#FFF5F5]/50 font-mono truncate">
+                Fast cuts & yellow pop
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                handleTriggerPrompt(
+                  'Apply Ali Abdaal aesthetic: warm film grade, clean minimal Inter captions, gentle lo-fi music'
+                )
+              }
+              className="px-2 py-1.5 rounded-lg bg-[#121314] hover:bg-[#2A2C2F] border border-[#393B3F] hover:border-[#E3B5BE]/60 text-left transition-colors"
+            >
+              <div className="text-[10.5px] font-semibold text-[#FFF5F5]">Ali Abdaal Style</div>
+              <div className="text-[9px] text-[#FFF5F5]/50 font-mono truncate">
+                Warm film & clean Inter
+              </div>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Active Edit Plan Layers Overview */}

@@ -136,6 +136,9 @@ export class PromptsController {
         beats: analysis.beats || { bpm: 120, grid: [] },
         loudness: analysis.loudness || { integratedLufs: -16, truePeakDb: -1.5 },
         transcriptExcerpt,
+        highlights: analysis.highlights || [],
+        chapters: analysis.chapters || [],
+        hook: analysis.hook || undefined,
       };
 
       // Record user chat message

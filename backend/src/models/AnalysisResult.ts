@@ -16,11 +16,25 @@ export interface IAnalysisResultDocument extends Document {
   };
   transcriptRef?: mongoose.Types.ObjectId;
   highlights?: Array<{
+    id?: string;
     startMs: number;
     endMs: number;
     score: number;
     reason: string;
   }>;
+  chapters?: Array<{
+    id: string;
+    startMs: number;
+    endMs: number;
+    title: string;
+    summary?: string;
+  }>;
+  hook?: {
+    startMs: number;
+    endMs: number;
+    score: number;
+    reason: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,12 +75,30 @@ const AnalysisResultSchema = new Schema<IAnalysisResultDocument>(
     highlights: [
       {
         _id: false,
+        id: { type: String },
         startMs: { type: Number, required: true },
         endMs: { type: Number, required: true },
         score: { type: Number, required: true },
         reason: { type: String, required: true },
       },
     ],
+    chapters: [
+      {
+        _id: false,
+        id: { type: String, required: true },
+        startMs: { type: Number, required: true },
+        endMs: { type: Number, required: true },
+        title: { type: String, required: true },
+        summary: { type: String },
+      },
+    ],
+    hook: {
+      _id: false,
+      startMs: { type: Number },
+      endMs: { type: Number },
+      score: { type: Number },
+      reason: { type: String },
+    },
   },
   { timestamps: true }
 );

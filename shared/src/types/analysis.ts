@@ -20,10 +20,59 @@ export interface LoudnessMetrics {
 }
 
 export interface HighlightSegment {
+  id?: string;
   startMs: number;
   endMs: number;
   score: number;
   reason: string;
+}
+
+export interface ChapterSegment {
+  id: string;
+  startMs: number;
+  endMs: number;
+  title: string;
+  summary?: string;
+}
+
+export interface HookSegment {
+  startMs: number;
+  endMs: number;
+  score: number;
+  reason: string;
+}
+
+export interface ReferenceStyleProfile {
+  styleName: string;
+  description: string;
+  pacing: {
+    targetCutDurationSec: number;
+    silencePaddingSec: number;
+    cutSilences: boolean;
+  };
+  color: {
+    preset: 'cinematic' | 'warm' | 'cool' | 'bw' | 'vivid' | 'faded';
+    lut: string;
+    contrast: number;
+    saturation: number;
+    vignette?: number;
+    grain?: number;
+  };
+  typography: {
+    style: 'word_pop' | 'classic' | 'karaoke' | 'minimal';
+    font: string;
+    size: number;
+    position: 'bottom' | 'top' | 'middle';
+    primaryColor: string;
+    highlightColor: string;
+    maxWordsPerLine: number;
+  };
+  audio: {
+    trackGenre: string;
+    duckUnderSpeech: boolean;
+    duckToDb: number;
+    musicVolume: number;
+  };
 }
 
 export interface AnalysisResult {
@@ -36,6 +85,8 @@ export interface AnalysisResult {
   loudness: LoudnessMetrics;
   transcriptRef?: string;
   highlights?: HighlightSegment[];
+  chapters?: ChapterSegment[];
+  hook?: HookSegment;
 }
 
 export interface WordTiming {
@@ -79,4 +130,7 @@ export interface CompactAnalysisSummary {
     endMs: number;
     text: string;
   }>;
+  highlights?: HighlightSegment[];
+  chapters?: ChapterSegment[];
+  hook?: HookSegment;
 }

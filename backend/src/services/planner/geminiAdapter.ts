@@ -7,6 +7,7 @@ import {
 } from './plannerProvider.interface.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { MetricsService } from '../observability/metrics.js';
+import { ReferenceStyleService } from '../ai/referenceStyleService.js';
 import { PlannerExecutionMode } from '@ai-video/shared';
 
 export class GeminiPlannerAdapter implements PlannerProvider {
@@ -571,6 +572,52 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         });
       }
 
+      // Reference-Style Analysis and Transfer Without Copying Assets (Patches)
+      if (
+        instruction.includes('style') ||
+        instruction.includes('reference') ||
+        instruction.includes('hormozi') ||
+        instruction.includes('abdaal') ||
+        instruction.includes('vox')
+      ) {
+        const profile = ReferenceStyleService.analyzeStyle(instruction);
+
+        // Patch color layer
+        const colLayer = currentPlan.layers?.find((l: any) => l.layer === 'color');
+        if (colLayer) {
+          patches.push({ op: 'replace', path: `/layers/${colLayer.id}/params/preset`, value: profile.color.preset });
+          patches.push({ op: 'replace', path: `/layers/${colLayer.id}/params/contrast`, value: profile.color.contrast });
+          patches.push({ op: 'replace', path: `/layers/${colLayer.id}/params/saturation`, value: profile.color.saturation });
+        }
+
+        // Patch subtitle layer
+        const subLayer = currentPlan.layers?.find((l: any) => l.layer === 'subtitle');
+        if (subLayer) {
+          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/style`, value: profile.typography.style });
+          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/font`, value: profile.typography.font });
+          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/highlightColor`, value: profile.typography.highlightColor });
+          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/size`, value: profile.typography.size });
+        }
+
+        // Patch music layer
+        const musLayer = currentPlan.layers?.find((l: any) => l.layer === 'music');
+        if (musLayer) {
+          patches.push({ op: 'replace', path: `/layers/${musLayer.id}/params/duckUnderSpeech`, value: profile.audio.duckUnderSpeech });
+          patches.push({ op: 'replace', path: `/layers/${musLayer.id}/params/volume`, value: profile.audio.musicVolume });
+        }
+      }
+
+      // Aspect Ratio Re-framing / Short-form Extraction
+      if (
+        instruction.includes('9:16') ||
+        instruction.includes('vertical') ||
+        instruction.includes('short') ||
+        instruction.includes('tiktok') ||
+        instruction.includes('reel')
+      ) {
+        patches.push({ op: 'replace', path: '/global/aspect', value: '9:16' });
+      }
+
       return {
         provider: 'gemini',
         model: 'rule-engine-v1',
@@ -603,11 +650,59 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       aspect = '16:9';
     }
 
+    // Reference-Style Analysis Without Copying Assets
+    const isStyleTransfer =
+      instruction.includes('style') ||
+      instruction.includes('reference') ||
+      instruction.includes('hormozi') ||
+      instruction.includes('abdaal') ||
+      instruction.includes('vox');
+
+    const styleProfile = isStyleTransfer
+      ? ReferenceStyleService.analyzeStyle(instruction)
+      : null;
+
     const layers: any[] = [];
     let layerCounter = 1;
 
+    // Short-form extraction trimming if long video has highlights
+    const isShortRequested =
+      aspect === '9:16' ||
+      instruction.includes('short') ||
+      instruction.includes('tiktok') ||
+      instruction.includes('reel');
+
+    if (isShortRequested && totalDurationSec > 45 && ctx.highlights && ctx.highlights.length > 0) {
+      const topHl = ctx.highlights[0];
+      const hlStart = Math.max(0, topHl.startSec || 0);
+      const hlEnd = Math.min(totalDurationSec, topHl.endSec || Math.min(totalDurationSec, hlStart + 60));
+
+      if (hlStart > 1.0) {
+        layers.push({
+          id: `lyr_cut_short_pre_${layerCounter++}`,
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: 0, end: Number(hlStart.toFixed(2)) },
+          params: { reason: 'short_extraction_trim' },
+        });
+      }
+      if (hlEnd < totalDurationSec - 1.0) {
+        layers.push({
+          id: `lyr_cut_short_post_${layerCounter++}`,
+          layer: 'cut',
+          enabled: true,
+          timebase: 'source',
+          range: { start: Number(hlEnd.toFixed(2)), end: Number(totalDurationSec.toFixed(2)) },
+          params: { reason: 'short_extraction_trim' },
+        });
+      }
+    }
+
     // 1. Cut Layer (silences from audio analysis)
     const isSilenceRequested =
+      isStyleTransfer ||
+      isShortRequested ||
       instruction.includes('silence') ||
       instruction.includes('cut') ||
       instruction.includes('quiet') ||
@@ -616,6 +711,7 @@ export class GeminiPlannerAdapter implements PlannerProvider {
 
     if (isSilenceRequested) {
       const silences = ctx.audioAnalysis?.silenceIntervalsSec || [];
+      const padding = styleProfile ? styleProfile.pacing.silencePaddingSec : 0.15;
       for (const s of silences) {
         if (s.end > s.start) {
           layers.push({
@@ -629,7 +725,7 @@ export class GeminiPlannerAdapter implements PlannerProvider {
             },
             params: {
               reason: 'silence',
-              padding: 0.15,
+              padding,
             },
           });
         }
@@ -637,7 +733,9 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     }
 
     // 2. Color Preset Layer
-    const preset = instruction.includes('warm')
+    const preset = styleProfile
+      ? styleProfile.color.preset
+      : instruction.includes('warm')
       ? 'warm'
       : instruction.includes('cool')
         ? 'cool'
@@ -654,16 +752,18 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       timebase: 'global',
       params: {
         preset,
-        contrast: 1.15,
-        saturation: preset === 'bw' ? 0 : 0.95,
-        vignette: 0.25,
-        grain: instruction.includes('grain') || instruction.includes('vintage') ? 0.2 : 0,
-        lut: ctx.availableCatalog?.luts?.[0]?.id || 'teal_orange',
+        contrast: styleProfile ? styleProfile.color.contrast : 1.15,
+        saturation: preset === 'bw' ? 0 : styleProfile ? styleProfile.color.saturation : 0.95,
+        vignette: styleProfile?.color.vignette ?? 0.25,
+        grain: styleProfile?.color.grain ?? (instruction.includes('grain') || instruction.includes('vintage') ? 0.2 : 0),
+        lut: styleProfile?.color.lut || ctx.availableCatalog?.luts?.[0]?.id || 'teal_orange',
       },
     });
 
     // 3. Subtitle Layer
     const wantsSubtitles =
+      isStyleTransfer ||
+      isShortRequested ||
       instruction.includes('sub') ||
       instruction.includes('caption') ||
       instruction.includes('word') ||
@@ -673,7 +773,11 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       instruction.length === 0;
 
     if (wantsSubtitles) {
-      const style = instruction.includes('karaoke') ? 'karaoke' : 'word_pop';
+      const style = styleProfile
+        ? styleProfile.typography.style
+        : instruction.includes('karaoke')
+          ? 'karaoke'
+          : 'word_pop';
       layers.push({
         id: `lyr_sub_${layerCounter++}`,
         layer: 'subtitle',
@@ -681,12 +785,12 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         timebase: 'source',
         params: {
           style,
-          font: ctx.availableCatalog?.fonts?.[0] || 'Montserrat',
-          size: 52,
-          position: 'bottom',
-          primaryColor: '#FFFFFF',
-          highlightColor: '#FFD84D',
-          maxWordsPerLine: 4,
+          font: styleProfile?.typography.font || ctx.availableCatalog?.fonts?.[0] || 'Montserrat',
+          size: styleProfile?.typography.size || (isShortRequested ? 58 : 52),
+          position: styleProfile?.typography.position || 'bottom',
+          primaryColor: styleProfile?.typography.primaryColor || '#FFFFFF',
+          highlightColor: styleProfile?.typography.highlightColor || (isShortRequested ? '#FFD700' : '#FFD84D'),
+          maxWordsPerLine: styleProfile?.typography.maxWordsPerLine || (isShortRequested ? 3 : 4),
         },
       });
     }
@@ -770,6 +874,8 @@ export class GeminiPlannerAdapter implements PlannerProvider {
 
     // 7. Music
     if (
+      isStyleTransfer ||
+      isShortRequested ||
       instruction.includes('music') ||
       instruction.includes('audio') ||
       instruction.includes('song') ||
@@ -782,8 +888,8 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         timebase: 'output',
         params: {
           trackId: ctx.availableCatalog?.music?.[0]?.id || 'tpl_lofi_beat',
-          volume: 0.35,
-          duckUnderSpeech: true,
+          volume: styleProfile?.audio.musicVolume ?? 0.35,
+          duckUnderSpeech: styleProfile?.audio.duckUnderSpeech ?? true,
           fadeIn: 1.5,
           fadeOut: 2.5,
           beatSync: instruction.includes('beat'),

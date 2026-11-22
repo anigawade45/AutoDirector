@@ -70,6 +70,26 @@ export interface AnalysisSummaryData {
   cues?: TranscriptCue[];
   silences?: Array<{ startMs: number; endMs: number; durationMs: number }>;
   sceneCuts?: Array<{ timeMs: number }>;
+  highlights?: Array<{
+    id?: string;
+    startMs: number;
+    endMs: number;
+    score: number;
+    reason: string;
+  }>;
+  chapters?: Array<{
+    id: string;
+    startMs: number;
+    endMs: number;
+    title: string;
+    summary?: string;
+  }>;
+  hook?: {
+    startMs: number;
+    endMs: number;
+    score: number;
+    reason: string;
+  } | null;
 }
 
 export interface EditorStoreState {

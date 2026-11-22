@@ -244,6 +244,9 @@ export class ProjectsController {
             cuesCount: cues.length,
             wordCount: totalWords,
             transcriptSnippet: snippet || undefined,
+            highlights: analysis?.highlights || [],
+            chapters: analysis?.chapters || [],
+            hook: analysis?.hook || null,
             cues: cues.map((c: any, cIdx: number) => {
               const cueText = String(
                 c.text ||

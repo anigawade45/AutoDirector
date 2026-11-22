@@ -14,6 +14,7 @@ import { JobScratchDirectory } from '../services/storage/jobScratchDirectory.js'
 import { StorageKeys } from '../config/s3.js';
 import { MediaProbeService } from '../services/media/mediaProbeService.js';
 import { TranscriptionService, CaptionCue } from '../services/ai/transcriptionService.js';
+import { HighlightDiscoveryService } from '../services/ai/highlightDiscoveryService.js';
 import { AssGenerator } from '../services/compiler/assGenerator.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { env } from '../config/env.js';
@@ -216,7 +217,17 @@ export function startAnalysisWorker() {
           beatGrid.push(t);
         }
 
-        // 8. Save Analysis Results to MongoDB (idempotent upsert)
+        // 8. Discover Highlights, Hooks, and Semantic Chapters
+        console.log(`[AnalysisWorker] Discovering viral hooks, chapters, and highlights...`);
+        const discovery = HighlightDiscoveryService.discover({
+          cues,
+          silences,
+          sceneCuts,
+          durationMs: metadata.durationMs,
+          bpm: estimatedBpm,
+        });
+
+        // Save Analysis Results to MongoDB (idempotent upsert)
         console.log(`[AnalysisWorker] Persisting AnalysisResult document...`);
         const analysis = await AnalysisResultModel.findOneAndUpdate(
           { assetId: asset._id },
@@ -235,14 +246,9 @@ export function startAnalysisWorker() {
                 truePeakDb: loudness.truePeakDb,
               },
               transcriptRef: captionSet._id,
-              highlights: [
-                {
-                  startMs: 0,
-                  endMs: Math.min(5000, metadata.durationMs),
-                  score: 0.95,
-                  reason: 'Opening introduction hook',
-                },
-              ],
+              highlights: discovery.highlights,
+              chapters: discovery.chapters,
+              hook: discovery.hook,
             },
           },
           { upsert: true, new: true }
