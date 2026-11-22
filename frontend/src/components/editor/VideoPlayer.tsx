@@ -173,9 +173,7 @@ export const VideoPlayer: React.FC = () => {
   const activeCue = activeCueIdx !== -1 && cues ? cues[activeCueIdx] : null;
 
   // Background Music Live Synchronization & Real-Time Speech Ducking Preview
-  const musicLayer = effectivePlan?.layers.find(
-    (l) => l.enabled && l.layer === 'music'
-  ) as any;
+  const musicLayer = effectivePlan?.layers.find((l) => l.enabled && l.layer === 'music') as any;
 
   useEffect(() => {
     if (isVideoBaked || !musicLayer) {
@@ -207,7 +205,9 @@ export const VideoPlayer: React.FC = () => {
     musicAudioRef.current.volume = Math.max(0, Math.min(1, targetVolume));
     musicAudioRef.current.muted = playback.muted;
 
-    const isVideoPlaying = videoRef.current ? !videoRef.current.paused : playback.status === 'playing';
+    const isVideoPlaying = videoRef.current
+      ? !videoRef.current.paused
+      : playback.status === 'playing';
     if (isVideoPlaying) {
       if (musicAudioRef.current.paused) {
         const loopDur = musicAudioRef.current.duration || 180;
@@ -585,13 +585,13 @@ export const VideoPlayer: React.FC = () => {
       const imageUrl = preset
         ? preset.previewUrl
         : asset.startsWith('http') || asset.startsWith('data:')
-        ? asset
-        : null;
+          ? asset
+          : null;
       const label = preset
         ? preset.name
         : p.prompt
-        ? `AI: ${p.prompt.slice(0, 22)}...`
-        : 'Visual Cutaway';
+          ? `AI: ${p.prompt.slice(0, 22)}...`
+          : 'Visual Cutaway';
 
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
@@ -1020,7 +1020,10 @@ export const VideoPlayer: React.FC = () => {
                 />
                 <div className="flex items-center justify-between gap-2 text-xs pt-1">
                   <span className="text-[10px] text-[#FFF5F5]/40 font-mono hidden sm:inline">
-                    <kbd className="px-1 py-0.5 bg-[#2A2C2F] rounded text-[#FFF5F5]/70">Enter</kbd> save • <kbd className="px-1 py-0.5 bg-[#2A2C2F] rounded text-[#FFF5F5]/70">Esc</kbd> cancel
+                    <kbd className="px-1 py-0.5 bg-[#2A2C2F] rounded text-[#FFF5F5]/70">Enter</kbd>{' '}
+                    save •{' '}
+                    <kbd className="px-1 py-0.5 bg-[#2A2C2F] rounded text-[#FFF5F5]/70">Esc</kbd>{' '}
+                    cancel
                   </span>
                   <div className="flex items-center gap-2 ml-auto">
                     <button

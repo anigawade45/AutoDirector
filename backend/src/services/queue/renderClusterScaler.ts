@@ -94,7 +94,8 @@ export class RenderClusterScaler {
     // 1. Spawn N render workers
     for (let i = 0; i < renderWorkerCount; i++) {
       const workerId = `render-node-${process.pid}-w${i + 1}-${crypto.randomBytes(3).toString('hex')}`;
-      const concurrency = options?.concurrency ?? env.WORKER_CONCURRENCY ?? QUEUE_CONFIGS.render.concurrency;
+      const concurrency =
+        options?.concurrency ?? env.WORKER_CONCURRENCY ?? QUEUE_CONFIGS.render.concurrency;
 
       const workerInstance = starter('render', {
         concurrency,
@@ -121,7 +122,8 @@ export class RenderClusterScaler {
     // 2. Spawn N preview workers
     for (let i = 0; i < previewWorkerCount; i++) {
       const workerId = `preview-node-${process.pid}-w${i + 1}-${crypto.randomBytes(3).toString('hex')}`;
-      const concurrency = options?.concurrency ?? env.WORKER_CONCURRENCY ?? QUEUE_CONFIGS.preview.concurrency;
+      const concurrency =
+        options?.concurrency ?? env.WORKER_CONCURRENCY ?? QUEUE_CONFIGS.preview.concurrency;
 
       const workerInstance = starter('preview', {
         concurrency,
@@ -275,14 +277,24 @@ export class RenderClusterScaler {
 
     try {
       if (renderQueue && typeof renderQueue.getJobCounts === 'function') {
-        const renderCounts = await renderQueue.getJobCounts('waiting', 'active', 'completed', 'failed');
+        const renderCounts = await renderQueue.getJobCounts(
+          'waiting',
+          'active',
+          'completed',
+          'failed'
+        );
         waitingJobs += renderCounts.waiting || 0;
         activeJobs += renderCounts.active || 0;
         completedJobs += renderCounts.completed || 0;
         failedJobs += renderCounts.failed || 0;
       }
       if (previewQueue && typeof previewQueue.getJobCounts === 'function') {
-        const previewCounts = await previewQueue.getJobCounts('waiting', 'active', 'completed', 'failed');
+        const previewCounts = await previewQueue.getJobCounts(
+          'waiting',
+          'active',
+          'completed',
+          'failed'
+        );
         waitingJobs += previewCounts.waiting || 0;
         activeJobs += previewCounts.active || 0;
         completedJobs += previewCounts.completed || 0;

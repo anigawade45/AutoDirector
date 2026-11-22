@@ -226,7 +226,13 @@ export const TimelineView: React.FC = () => {
         toast.info('No cut or layer under playhead to split', 'Split Cut');
       }
     }
-  }, [playback.currentTime, timeline.selectedLayerIds, splitLayerAtTime, splitSubtitleCueAtTime, project]);
+  }, [
+    playback.currentTime,
+    timeline.selectedLayerIds,
+    splitLayerAtTime,
+    splitSubtitleCueAtTime,
+    project,
+  ]);
 
   // Handle interactive edge trimming (resizing clip start or end boundary)
   const handleStartTrim = (
@@ -354,11 +360,7 @@ export const TimelineView: React.FC = () => {
   };
 
   // Handle interactive horizontal clip moving (Drag & Drop)
-  const handleStartMoveClip = (
-    e: React.MouseEvent,
-    clip: TrackClipVM,
-    track: DerivedTrackVM
-  ) => {
+  const handleStartMoveClip = (e: React.MouseEvent, clip: TrackClipVM, track: DerivedTrackVM) => {
     if (timeline.toolMode === 'razor') return;
     if (track.locked) {
       toast.warning('Track is locked. Unlock to move clips.', 'Track Locked');
@@ -465,7 +467,9 @@ export const TimelineView: React.FC = () => {
   const [editingTimelineCueSpeaker, setEditingTimelineCueSpeaker] = useState<string>('Speaker 1');
 
   // State for direct timeline color preset & parameter picker
-  const [editingTimelineColorLayerId, setEditingTimelineColorLayerId] = useState<string | null>(null);
+  const [editingTimelineColorLayerId, setEditingTimelineColorLayerId] = useState<string | null>(
+    null
+  );
   const colorDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleStartTimelineCueEdit = (index: number, text: string, speaker = 'Speaker 1') => {
@@ -621,7 +625,9 @@ export const TimelineView: React.FC = () => {
         if (selectedId) {
           e.preventDefault();
           const nudgeSec = (e.shiftKey ? 1.0 : 0.1) * (e.key === '[' ? -1 : 1);
-          const clip = derivedTracks.flatMap((t) => t.clips).find((c) => (c.layerId || c.id) === selectedId);
+          const clip = derivedTracks
+            .flatMap((t) => t.clips)
+            .find((c) => (c.layerId || c.id) === selectedId);
           if (clip) {
             const newStart = Math.max(0, clip.startSec + nudgeSec);
             const newEnd = newStart + clip.durSec;
@@ -634,7 +640,15 @@ export const TimelineView: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [timeline.selectedLayerIds, deleteSelectedLayers, handleSplitAtPlayhead, setToolMode, derivedTracks, moveClip, setCurrentTime]);
+  }, [
+    timeline.selectedLayerIds,
+    deleteSelectedLayers,
+    handleSplitAtPlayhead,
+    setToolMode,
+    derivedTracks,
+    moveClip,
+    setCurrentTime,
+  ]);
 
   // Generate ruler tick marks based on zoom level
   const tickStep = zoom > 120 ? 1 : zoom > 50 ? 5 : 10;
@@ -744,8 +758,7 @@ export const TimelineView: React.FC = () => {
     >
       {/* Killer Demo: Viral Shorts Switcher Bar */}
       {(() => {
-        const shortsList =
-          effectivePlan?.shorts || (effectivePlan?.meta as any)?.shorts || [];
+        const shortsList = effectivePlan?.shorts || (effectivePlan?.meta as any)?.shorts || [];
         if (!shortsList || shortsList.length === 0) return null;
 
         return (
@@ -803,7 +816,9 @@ export const TimelineView: React.FC = () => {
             </div>
             <div className="flex items-center space-x-2 text-[10px] font-mono text-[#F7D7D1]/90 shrink-0">
               <span className="bg-[#2E2729] px-2.5 py-0.5 rounded border border-[#E3B5BE]/40 text-[#F7D7D1] flex items-center space-x-1">
-                <span>✨ 2 Repeated Takes Cut • Opening Tightened • 2 B-Roll Added • Ready to Render</span>
+                <span>
+                  ✨ 2 Repeated Takes Cut • Opening Tightened • 2 B-Roll Added • Ready to Render
+                </span>
               </span>
             </div>
           </div>
@@ -909,13 +924,41 @@ export const TimelineView: React.FC = () => {
                   New Timeline Layer
                 </div>
                 {[
-                  { id: 'overlay', label: 'B-Roll & Visual Media', icon: <ImageIcon className="w-3 h-3 text-cyan-300" /> },
-                  { id: 'subtitle', label: 'Captions & Subtitles', icon: <Type className="w-3 h-3 text-[#E3B5BE]" /> },
-                  { id: 'music', label: 'Audio Soundtrack', icon: <Music className="w-3 h-3 text-[#F7D7D1]" /> },
-                  { id: 'audio', label: 'Audio Cleanup & Voice', icon: <Sliders className="w-3 h-3 text-emerald-300" /> },
-                  { id: 'text', label: 'Graphic Text', icon: <Layers className="w-3 h-3 text-[#FFF5F5]" /> },
-                  { id: 'color', label: 'Color Grade FX', icon: <Palette className="w-3 h-3 text-[#E3B5BE]" /> },
-                  { id: 'cut', label: 'Razor Cut Exclude', icon: <Scissors className="w-3 h-3 text-red-300" /> },
+                  {
+                    id: 'overlay',
+                    label: 'B-Roll & Visual Media',
+                    icon: <ImageIcon className="w-3 h-3 text-cyan-300" />,
+                  },
+                  {
+                    id: 'subtitle',
+                    label: 'Captions & Subtitles',
+                    icon: <Type className="w-3 h-3 text-[#E3B5BE]" />,
+                  },
+                  {
+                    id: 'music',
+                    label: 'Audio Soundtrack',
+                    icon: <Music className="w-3 h-3 text-[#F7D7D1]" />,
+                  },
+                  {
+                    id: 'audio',
+                    label: 'Audio Cleanup & Voice',
+                    icon: <Sliders className="w-3 h-3 text-emerald-300" />,
+                  },
+                  {
+                    id: 'text',
+                    label: 'Graphic Text',
+                    icon: <Layers className="w-3 h-3 text-[#FFF5F5]" />,
+                  },
+                  {
+                    id: 'color',
+                    label: 'Color Grade FX',
+                    icon: <Palette className="w-3 h-3 text-[#E3B5BE]" />,
+                  },
+                  {
+                    id: 'cut',
+                    label: 'Razor Cut Exclude',
+                    icon: <Scissors className="w-3 h-3 text-red-300" />,
+                  },
                 ].map((item) => (
                   <button
                     key={item.id}
@@ -1071,7 +1114,11 @@ export const TimelineView: React.FC = () => {
                     }`}
                     title={track.muted ? 'Unmute Track' : 'Mute Track'}
                   >
-                    {track.muted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                    {track.muted ? (
+                      <VolumeX className="w-3 h-3" />
+                    ) : (
+                      <Volume2 className="w-3 h-3" />
+                    )}
                   </button>
                 )}
 
@@ -1228,8 +1275,14 @@ export const TimelineView: React.FC = () => {
 
                     // Viewport culling for 500+ timeline operations scaling: skip offscreen clips
                     const viewportLeft = (timeline.scrollX || 0) - 400;
-                    const viewportRight = (timeline.scrollX || 0) + (scrollContainerRef.current?.clientWidth || 1200) + 400;
-                    if (!isSelected && (leftPx + widthPx < viewportLeft || leftPx > viewportRight)) {
+                    const viewportRight =
+                      (timeline.scrollX || 0) +
+                      (scrollContainerRef.current?.clientWidth || 1200) +
+                      400;
+                    if (
+                      !isSelected &&
+                      (leftPx + widthPx < viewportLeft || leftPx > viewportRight)
+                    ) {
                       return null;
                     }
 
@@ -1302,7 +1355,9 @@ export const TimelineView: React.FC = () => {
                           } else if (clip.type === 'color' && clip.layerId) {
                             selectLayer(clip.layerId);
                             setEditingTimelineColorLayerId(
-                              editingTimelineColorLayerId === clip.layerId ? null : (clip.layerId || null)
+                              editingTimelineColorLayerId === clip.layerId
+                                ? null
+                                : clip.layerId || null
                             );
                           }
                         }}
@@ -1373,7 +1428,8 @@ export const TimelineView: React.FC = () => {
                                 />
                               </div>
                               <span className="text-[#FFF5F5]/40">
-                                {clip.startSec.toFixed(2)}s - {(clip.startSec + clip.durSec).toFixed(2)}s
+                                {clip.startSec.toFixed(2)}s -{' '}
+                                {(clip.startSec + clip.durSec).toFixed(2)}s
                               </span>
                             </div>
 
@@ -1446,7 +1502,9 @@ export const TimelineView: React.FC = () => {
                                     onClick={() => {
                                       const p = (COLOR_PRESETS as any)[preset.id];
                                       updateDraft((d) => {
-                                        const c = d.layers.find((l) => l.id === clip.layerId) as any;
+                                        const c = d.layers.find(
+                                          (l) => l.id === clip.layerId
+                                        ) as any;
                                         if (c) {
                                           c.params.preset = preset.id;
                                           if (p) {
@@ -1494,7 +1552,9 @@ export const TimelineView: React.FC = () => {
                                       onChange={(e) => {
                                         const val = parseFloat(e.target.value);
                                         updateDraft((d) => {
-                                          const l = d.layers.find((lyr) => lyr.id === clip.layerId) as any;
+                                          const l = d.layers.find(
+                                            (lyr) => lyr.id === clip.layerId
+                                          ) as any;
                                           if (l) l.params.contrast = val;
                                         });
                                         syncColorChangesToServer();
@@ -1520,7 +1580,9 @@ export const TimelineView: React.FC = () => {
                                       onChange={(e) => {
                                         const val = parseFloat(e.target.value);
                                         updateDraft((d) => {
-                                          const l = d.layers.find((lyr) => lyr.id === clip.layerId) as any;
+                                          const l = d.layers.find(
+                                            (lyr) => lyr.id === clip.layerId
+                                          ) as any;
                                           if (l) l.params.saturation = val;
                                         });
                                         syncColorChangesToServer();
@@ -1547,7 +1609,9 @@ export const TimelineView: React.FC = () => {
                                       onChange={(e) => {
                                         const val = parseFloat(e.target.value);
                                         updateDraft((d) => {
-                                          const l = d.layers.find((lyr) => lyr.id === clip.layerId) as any;
+                                          const l = d.layers.find(
+                                            (lyr) => lyr.id === clip.layerId
+                                          ) as any;
                                           if (l) l.params.brightness = val;
                                         });
                                         syncColorChangesToServer();
@@ -1565,9 +1629,16 @@ export const TimelineView: React.FC = () => {
                                 type="button"
                                 onClick={() => {
                                   updateDraft((d) => {
-                                    const l = d.layers.find((lyr) => lyr.id === clip.layerId) as any;
+                                    const l = d.layers.find(
+                                      (lyr) => lyr.id === clip.layerId
+                                    ) as any;
                                     if (l) {
-                                      l.params = { preset: 'cinematic', contrast: 1, saturation: 1, brightness: 0 };
+                                      l.params = {
+                                        preset: 'cinematic',
+                                        contrast: 1,
+                                        saturation: 1,
+                                        brightness: 0,
+                                      };
                                     }
                                   });
                                   toast.info('Reset color grade to standard', 'Color Grade');
@@ -1643,7 +1714,9 @@ export const TimelineView: React.FC = () => {
                               e.stopPropagation();
                               selectLayer(clip.layerId!);
                               setEditingTimelineColorLayerId(
-                                editingTimelineColorLayerId === clip.layerId ? null : (clip.layerId || null)
+                                editingTimelineColorLayerId === clip.layerId
+                                  ? null
+                                  : clip.layerId || null
                               );
                             }}
                             className="p-0.5 rounded hover:bg-white/20 text-[#FFF5F5] mr-1 shrink-0 z-20 pointer-events-auto"
@@ -1672,14 +1745,17 @@ export const TimelineView: React.FC = () => {
                         {/* Floating Trim Timecode Badge */}
                         {activeTrim && activeTrim.layerId === (clip.layerId || clip.id) && (
                           <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-black/95 text-[#F7D7D1] text-[10px] font-mono px-2 py-0.5 rounded shadow-xl border border-[#E3B5BE] z-50 pointer-events-none whitespace-nowrap">
-                            {activeTrim.currentStart.toFixed(2)}s - {activeTrim.currentEnd.toFixed(2)}s ({(activeTrim.currentEnd - activeTrim.currentStart).toFixed(2)}s)
+                            {activeTrim.currentStart.toFixed(2)}s -{' '}
+                            {activeTrim.currentEnd.toFixed(2)}s (
+                            {(activeTrim.currentEnd - activeTrim.currentStart).toFixed(2)}s)
                           </div>
                         )}
 
                         {/* Floating Move Timecode Badge */}
                         {activeMove && activeMove.clipId === (clip.layerId || clip.id) && (
                           <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-amber-400 text-black font-bold text-[10px] font-mono px-2.5 py-0.5 rounded shadow-xl z-50 pointer-events-none whitespace-nowrap animate-in zoom-in-95">
-                            Moving: {activeMove.currentStart.toFixed(2)}s - {(activeMove.currentStart + activeMove.durSec).toFixed(2)}s
+                            Moving: {activeMove.currentStart.toFixed(2)}s -{' '}
+                            {(activeMove.currentStart + activeMove.durSec).toFixed(2)}s
                           </div>
                         )}
                       </div>

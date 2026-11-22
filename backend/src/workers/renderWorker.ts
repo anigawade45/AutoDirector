@@ -429,7 +429,9 @@ async function bootstrapStandalone() {
     1,
     parseInt(process.env.RENDER_CLUSTER_SIZE || process.env.WORKER_REPLICAS || '1', 10)
   );
-  console.log(`--- Starting Standalone Render Worker Cluster (${clusterSize} worker instances) ---`);
+  console.log(
+    `--- Starting Standalone Render Worker Cluster (${clusterSize} worker instances) ---`
+  );
   await connectDatabase();
   console.log('[MongoDB] Connected successfully');
   await redisConnection.ping();

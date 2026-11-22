@@ -371,7 +371,10 @@ If there is no spoken dialogue in the audio, return: [].`;
 
               let cleanText = (responseText || '').trim();
               if (cleanText.startsWith('```')) {
-                cleanText = cleanText.replace(/^```(json)?\n?/, '').replace(/\n?```$/, '').trim();
+                cleanText = cleanText
+                  .replace(/^```(json)?\n?/, '')
+                  .replace(/\n?```$/, '')
+                  .trim();
               }
 
               let parsed: any;
@@ -442,9 +445,19 @@ If there is no spoken dialogue in the audio, return: [].`;
       const cueObj = c && typeof c.toObject === 'function' ? c.toObject() : c;
 
       const rawCueStart =
-        cueObj.startMs ?? cueObj.start_ms ?? cueObj.start ?? cueObj.startTime ?? cueObj.start_time ?? cueObj.s;
+        cueObj.startMs ??
+        cueObj.start_ms ??
+        cueObj.start ??
+        cueObj.startTime ??
+        cueObj.start_time ??
+        cueObj.s;
       const rawCueEnd =
-        cueObj.endMs ?? cueObj.end_ms ?? cueObj.end ?? cueObj.endTime ?? cueObj.end_time ?? cueObj.e;
+        cueObj.endMs ??
+        cueObj.end_ms ??
+        cueObj.end ??
+        cueObj.endTime ??
+        cueObj.end_time ??
+        cueObj.e;
 
       const parsedCueStart =
         rawCueStart !== undefined ? this.parseTimestampToMs(rawCueStart, isSeconds) : null;
@@ -461,10 +474,8 @@ If there is no spoken dialogue in the audio, return: [].`;
 
       let words: CaptionWord[] = rawWords
         .map((w: any) => {
-          const rawWs =
-            w.s ?? w.start ?? w.startMs ?? w.start_ms ?? w.startTime ?? w.start_time;
-          const rawWe =
-            w.e ?? w.end ?? w.endMs ?? w.end_ms ?? w.endTime ?? w.end_time;
+          const rawWs = w.s ?? w.start ?? w.startMs ?? w.start_ms ?? w.startTime ?? w.start_time;
+          const rawWe = w.e ?? w.end ?? w.endMs ?? w.end_ms ?? w.endTime ?? w.end_time;
           const s = this.parseTimestampToMs(rawWs, isSeconds);
           const rawE = this.parseTimestampToMs(rawWe, isSeconds);
           const e = Math.max(s + 60, rawE);
@@ -473,22 +484,18 @@ If there is no spoken dialogue in the audio, return: [].`;
             s,
             e,
             conf:
-              typeof w.conf === 'number'
-                ? w.conf
-                : typeof w.score === 'number'
-                  ? w.score
-                  : 0.95,
+              typeof w.conf === 'number' ? w.conf : typeof w.score === 'number' ? w.score : 0.95,
           };
         })
         .filter((w: CaptionWord) => w.w.length > 0);
 
       const rawText = String(
         cueObj.text ||
-        cueObj.sentence ||
-        cueObj.caption ||
-        cueObj.transcript ||
-        words.map((w) => w.w).join(' ') ||
-        ''
+          cueObj.sentence ||
+          cueObj.caption ||
+          cueObj.transcript ||
+          words.map((w) => w.w).join(' ') ||
+          ''
       ).trim();
 
       const textTokens = rawText.split(/\s+/).filter(Boolean);
@@ -516,8 +523,7 @@ If there is no spoken dialogue in the audio, return: [].`;
       }
 
       const startMs = parsedCueStart ?? (words.length > 0 ? words[0].s : 0);
-      const lastWordEnd =
-        words.length > 0 ? words[words.length - 1].e : startMs + 1000;
+      const lastWordEnd = words.length > 0 ? words[words.length - 1].e : startMs + 1000;
       const endMs = Math.max(startMs + 100, parsedCueEnd ?? lastWordEnd);
 
       return {
@@ -703,11 +709,11 @@ If there is no spoken dialogue in the audio, return: [].`;
       const cueEnd = Number(cueObj.endMs) || cueStart + 1000;
       const cueText = String(
         cueObj.text ||
-        cueObj.sentence ||
-        cueObj.caption ||
-        cueObj.transcript ||
-        (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-        ''
+          cueObj.sentence ||
+          cueObj.caption ||
+          cueObj.transcript ||
+          (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
+          ''
       ).trim();
 
       let targetStart = cueStart;
@@ -738,10 +744,7 @@ If there is no spoken dialogue in the audio, return: [].`;
         let closestSeg = sortedSegs[0];
         let minDistance = Infinity;
         for (const seg of sortedSegs) {
-          const dist = Math.min(
-            Math.abs(seg.startMs - cueStart),
-            Math.abs(seg.endMs - cueEnd)
-          );
+          const dist = Math.min(Math.abs(seg.startMs - cueStart), Math.abs(seg.endMs - cueEnd));
           if (dist < minDistance) {
             minDistance = dist;
             closestSeg = seg;
@@ -765,20 +768,23 @@ If there is no spoken dialogue in the audio, return: [].`;
       const oldDur = Math.max(100, cueEnd - cueStart);
       const newDur = Math.max(100, targetEnd - targetStart);
 
-      const words = (cueObj.words || []).map((w: any) => {
-        const wS = w.s ?? w.startMs ?? cueStart;
-        const wE = w.e ?? w.endMs ?? cueEnd;
-        const relS = Math.max(0, Math.min(1, (wS - cueStart) / oldDur));
-        const relE = Math.max(relS + 0.05, Math.min(1, (wE - cueStart) / oldDur));
-        const s = Math.round(targetStart + relS * newDur);
-        const e = Math.min(targetEnd, Math.max(s + 40, Math.round(targetStart + relE * newDur)));
-        return {
-          w: String(w.w || w.word || '').trim(),
-          s,
-          e,
-          conf: typeof w.conf === 'number' ? w.conf : typeof w.score === 'number' ? w.score : 0.95,
-        };
-      }).filter((w: any) => w.w.length > 0);
+      const words = (cueObj.words || [])
+        .map((w: any) => {
+          const wS = w.s ?? w.startMs ?? cueStart;
+          const wE = w.e ?? w.endMs ?? cueEnd;
+          const relS = Math.max(0, Math.min(1, (wS - cueStart) / oldDur));
+          const relE = Math.max(relS + 0.05, Math.min(1, (wE - cueStart) / oldDur));
+          const s = Math.round(targetStart + relS * newDur);
+          const e = Math.min(targetEnd, Math.max(s + 40, Math.round(targetStart + relE * newDur)));
+          return {
+            w: String(w.w || w.word || '').trim(),
+            s,
+            e,
+            conf:
+              typeof w.conf === 'number' ? w.conf : typeof w.score === 'number' ? w.score : 0.95,
+          };
+        })
+        .filter((w: any) => w.w.length > 0);
 
       return {
         id: cueObj.id || `cue_${idx + 1}`,
@@ -960,11 +966,11 @@ If there is no spoken dialogue in the audio, return: [].`;
       const cueObj = (c as any).toObject ? (c as any).toObject() : c;
       const text = String(
         cueObj.text ||
-        cueObj.sentence ||
-        cueObj.caption ||
-        cueObj.transcript ||
-        (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-        ''
+          cueObj.sentence ||
+          cueObj.caption ||
+          cueObj.transcript ||
+          (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
+          ''
       ).trim();
       const tokens = text.split(/\s+/).filter(Boolean);
       return Math.max(1, tokens.length);
@@ -1000,11 +1006,11 @@ If there is no spoken dialogue in the audio, return: [].`;
 
       const cueText = String(
         cueObj.text ||
-        cueObj.sentence ||
-        cueObj.caption ||
-        cueObj.transcript ||
-        (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-        ''
+          cueObj.sentence ||
+          cueObj.caption ||
+          cueObj.transcript ||
+          (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
+          ''
       ).trim();
       const tokens = cueText.split(/\s+/).filter(Boolean);
       const cueDur = Math.max(200, endMs - startMs);
@@ -1065,10 +1071,10 @@ If there is no spoken dialogue in the audio, return: [].`;
         const cueObj = (cue as any).toObject ? (cue as any).toObject() : cue;
         const text = String(
           cueObj.text ||
-          cueObj.sentence ||
-          cueObj.caption ||
-          (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-          ''
+            cueObj.sentence ||
+            cueObj.caption ||
+            (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
+            ''
         ).trim();
         const startMs = Math.round(cue.startMs * scale);
         const endMs = Math.min(
@@ -1101,10 +1107,10 @@ If there is no spoken dialogue in the audio, return: [].`;
       const cueObj = (cue as any).toObject ? (cue as any).toObject() : cue;
       const text = String(
         cueObj.text ||
-        cueObj.sentence ||
-        cueObj.caption ||
-        (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-        ''
+          cueObj.sentence ||
+          cueObj.caption ||
+          (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
+          ''
       ).trim();
       const startMs = Math.min(totalDurationMs - 100, Math.max(0, cue.startMs));
       const endMs = Math.min(totalDurationMs, Math.max(startMs + 100, cue.endMs));
@@ -1145,11 +1151,11 @@ If there is no spoken dialogue in the audio, return: [].`;
       const cueObj = (cues[0] as any).toObject ? (cues[0] as any).toObject() : cues[0];
       const text = String(
         cueObj.text ||
-        cueObj.sentence ||
-        cueObj.caption ||
-        cueObj.transcript ||
-        (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-        ''
+          cueObj.sentence ||
+          cueObj.caption ||
+          cueObj.transcript ||
+          (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
+          ''
       ).trim();
       const single: CaptionCue = {
         ...cueObj,
@@ -1173,11 +1179,11 @@ If there is no spoken dialogue in the audio, return: [].`;
       const cueObj = (c as any).toObject ? (c as any).toObject() : c;
       const text = String(
         cueObj.text ||
-        cueObj.sentence ||
-        cueObj.caption ||
-        cueObj.transcript ||
-        (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-        ''
+          cueObj.sentence ||
+          cueObj.caption ||
+          cueObj.transcript ||
+          (cueObj.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
+          ''
       ).trim();
       return {
         ...cueObj,

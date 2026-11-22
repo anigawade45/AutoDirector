@@ -410,57 +410,57 @@ export const ChatPanel: React.FC = () => {
               />
             </button>
 
-          {isModelMenuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-72 bg-[#222326] border border-[#393B3F] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 text-xs backdrop-blur-md">
-              <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-[#FFF5F5]/60 font-semibold border-b border-[#393B3F] flex items-center justify-between font-mono">
-                <span>Director Models</span>
-                <span className="text-[9px] text-[#F7D7D1]">
-                  {AVAILABLE_GEMINI_MODELS.length} Available
-                </span>
-              </div>
-              <div className="max-h-72 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                {AVAILABLE_GEMINI_MODELS.map((model) => {
-                  const isSelected = model.id === selectedAiModel;
-                  return (
-                    <button
-                      key={model.id}
-                      onClick={() => {
-                        setSelectedAiModel(model.id);
-                        setIsModelMenuOpen(false);
-                      }}
-                      className={`w-full text-left p-2 rounded-lg transition-all flex items-start justify-between space-x-2 border ${
-                        isSelected
-                          ? 'bg-[#E3B5BE]/15 border-[#E3B5BE] text-[#F7D7D1] shadow-sm'
-                          : 'bg-[#18191B] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-transparent'
-                      }`}
-                    >
-                      <div className="space-y-0.5 flex-1 min-w-0">
-                        <div className="flex items-center space-x-1.5">
-                          <span className="font-semibold text-[11px] truncate">{model.name}</span>
-                          <span
-                            className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
-                              isSelected
-                                ? 'bg-[#E3B5BE]/30 text-[#FFF5F5] border border-[#E3B5BE]/40'
-                                : 'bg-[#2A2C2F] text-[#FFF5F5]/50 border border-[#393B3F]'
-                            }`}
-                          >
-                            {model.tag}
-                          </span>
+            {isModelMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-[#222326] border border-[#393B3F] rounded-xl shadow-2xl z-50 p-2 space-y-1.5 text-xs backdrop-blur-md">
+                <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-[#FFF5F5]/60 font-semibold border-b border-[#393B3F] flex items-center justify-between font-mono">
+                  <span>Director Models</span>
+                  <span className="text-[9px] text-[#F7D7D1]">
+                    {AVAILABLE_GEMINI_MODELS.length} Available
+                  </span>
+                </div>
+                <div className="max-h-72 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                  {AVAILABLE_GEMINI_MODELS.map((model) => {
+                    const isSelected = model.id === selectedAiModel;
+                    return (
+                      <button
+                        key={model.id}
+                        onClick={() => {
+                          setSelectedAiModel(model.id);
+                          setIsModelMenuOpen(false);
+                        }}
+                        className={`w-full text-left p-2 rounded-lg transition-all flex items-start justify-between space-x-2 border ${
+                          isSelected
+                            ? 'bg-[#E3B5BE]/15 border-[#E3B5BE] text-[#F7D7D1] shadow-sm'
+                            : 'bg-[#18191B] hover:bg-[#2A2C2F] text-[#FFF5F5]/70 border-transparent'
+                        }`}
+                      >
+                        <div className="space-y-0.5 flex-1 min-w-0">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="font-semibold text-[11px] truncate">{model.name}</span>
+                            <span
+                              className={`text-[9px] px-1.5 py-0.5 rounded font-mono ${
+                                isSelected
+                                  ? 'bg-[#E3B5BE]/30 text-[#FFF5F5] border border-[#E3B5BE]/40'
+                                  : 'bg-[#2A2C2F] text-[#FFF5F5]/50 border border-[#393B3F]'
+                              }`}
+                            >
+                              {model.tag}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-[#FFF5F5]/50 leading-tight">
+                            {model.description}
+                          </p>
                         </div>
-                        <p className="text-[10px] text-[#FFF5F5]/50 leading-tight">
-                          {model.description}
-                        </p>
-                      </div>
-                      {isSelected && (
-                        <Check className="w-3.5 h-3.5 text-[#E3B5BE] flex-shrink-0 mt-0.5" />
-                      )}
-                    </button>
-                  );
-                })}
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-[#E3B5BE] flex-shrink-0 mt-0.5" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -724,7 +724,10 @@ export const ChatPanel: React.FC = () => {
         </form>
       </div>
 
-      <VersionHistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} />
+      <VersionHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+      />
     </aside>
   );
 };

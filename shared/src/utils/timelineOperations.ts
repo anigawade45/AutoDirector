@@ -96,7 +96,9 @@ function mapLayerToTimelineOperation(layer: EditLayer): TimelineOperationItem | 
   const startSec = layer.range?.start;
   const endSec = layer.range?.end;
   const durSec =
-    startSec !== undefined && endSec !== undefined ? Number((endSec - startSec).toFixed(3)) : undefined;
+    startSec !== undefined && endSec !== undefined
+      ? Number((endSec - startSec).toFixed(3))
+      : undefined;
 
   switch (layer.layer) {
     case 'cut': {
@@ -289,16 +291,16 @@ function mapLayerToTimelineOperation(layer: EditLayer): TimelineOperationItem | 
         (asset.startsWith('http') || asset.startsWith('data:')
           ? 'image'
           : p.prompt
-          ? 'generative'
-          : 'broll');
+            ? 'generative'
+            : 'broll');
       const mode = p.mode || 'cutaway';
       const opacity = Math.round((p.opacity ?? 1.0) * 100);
       const title =
         mediaType === 'generative'
           ? 'AI Generative Media Cutaway'
           : mediaType === 'image'
-          ? 'Image Overlay'
-          : 'B-Roll Cutaway';
+            ? 'Image Overlay'
+            : 'B-Roll Cutaway';
 
       return {
         id: layer.id,

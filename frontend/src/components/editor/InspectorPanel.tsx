@@ -91,7 +91,9 @@ export const InspectorPanel: React.FC = () => {
   // B-Roll & Generative Media Studio states
   const [brollTab, setBrollTab] = useState<'stock' | 'generative' | 'custom'>('stock');
   const [generativePrompt, setGenerativePrompt] = useState('');
-  const [generativeStyle, setGenerativeStyle] = useState<'cinematic' | 'photorealistic' | '3d' | 'cyberpunk'>('cinematic');
+  const [generativeStyle, setGenerativeStyle] = useState<
+    'cinematic' | 'photorealistic' | '3d' | 'cyberpunk'
+  >('cinematic');
   const [isGeneratingMedia, setIsGeneratingMedia] = useState(false);
 
   // Background Music Audition State
@@ -357,7 +359,10 @@ export const InspectorPanel: React.FC = () => {
   const maxCueMs = cues.length > 0 ? Math.max(...cues.map((c) => c.endMs || 0)) : 0;
   const hasDurationDrift = videoDurationMs > 5000 && maxCueMs > videoDurationMs + 2000;
   const isCollapsed =
-    videoDurationMs > 15000 && maxCueMs > 0 && maxCueMs < videoDurationMs * 0.25 && cues.length >= 3;
+    videoDurationMs > 15000 &&
+    maxCueMs > 0 &&
+    maxCueMs < videoDurationMs * 0.25 &&
+    cues.length >= 3;
   const overlappingCues = detectCueOverlaps(cues);
   const hasOverlaps = overlappingCues.length > 0;
 
@@ -370,7 +375,10 @@ export const InspectorPanel: React.FC = () => {
     );
     const distributed = distributeCuesAcrossSpeech(cues, speechSegments, videoDurationMs);
     updateCues(distributed);
-    toast.success('Paced and synchronized all dialogue cues across video speech', 'Captions Pacing');
+    toast.success(
+      'Paced and synchronized all dialogue cues across video speech',
+      'Captions Pacing'
+    );
 
     setCaptionSaveStatus('saving');
     api
@@ -1151,13 +1159,20 @@ export const InspectorPanel: React.FC = () => {
                     <div className="flex items-center justify-between text-[10px] font-mono text-[#FFF5F5]/60">
                       <span>Timeline Boundaries</span>
                       <span className="text-[#F7D7D1]">
-                        Duration: {((activeLayer.range?.end ?? playback.duration ?? 60) - (activeLayer.range?.start ?? 0)).toFixed(2)}s
+                        Duration:{' '}
+                        {(
+                          (activeLayer.range?.end ?? playback.duration ?? 60) -
+                          (activeLayer.range?.start ?? 0)
+                        ).toFixed(2)}
+                        s
                       </span>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-[11px]">
                       <div className="bg-[#222326] p-2 rounded border border-[#393B3F] space-y-1">
-                        <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">Start (sec)</span>
+                        <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">
+                          Start (sec)
+                        </span>
                         <input
                           type="number"
                           step="0.05"
@@ -1177,7 +1192,10 @@ export const InspectorPanel: React.FC = () => {
                             const cur = Number(playback.currentTime.toFixed(2));
                             const endVal = activeLayer.range?.end ?? (playback.duration || 60);
                             updateLayerRange(activeLayer.id, cur, Math.max(cur + 0.1, endVal));
-                            toast.success(`Set color start to ${cur.toFixed(2)}s (Pink Line)`, 'Color Grade Updated');
+                            toast.success(
+                              `Set color start to ${cur.toFixed(2)}s (Pink Line)`,
+                              'Color Grade Updated'
+                            );
                           }}
                           className="w-full text-left text-[10px] text-[#E3B5BE] hover:underline flex items-center gap-1 font-mono pt-0.5"
                           title="Align color start to pink playhead"
@@ -1188,15 +1206,22 @@ export const InspectorPanel: React.FC = () => {
                       </div>
 
                       <div className="bg-[#222326] p-2 rounded border border-[#393B3F] space-y-1">
-                        <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">End (sec)</span>
+                        <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">
+                          End (sec)
+                        </span>
                         <input
                           type="number"
                           step="0.05"
                           min={activeLayer.range?.start ?? 0}
-                          value={Number((activeLayer.range?.end ?? (playback.duration || 60)).toFixed(2))}
+                          value={Number(
+                            (activeLayer.range?.end ?? (playback.duration || 60)).toFixed(2)
+                          )}
                           onChange={(e) => {
                             const startVal = activeLayer.range?.start ?? 0;
-                            const val = Math.max(startVal + 0.1, parseFloat(e.target.value) || startVal + 1);
+                            const val = Math.max(
+                              startVal + 0.1,
+                              parseFloat(e.target.value) || startVal + 1
+                            );
                             updateLayerRange(activeLayer.id, startVal, val);
                           }}
                           className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
@@ -1206,8 +1231,15 @@ export const InspectorPanel: React.FC = () => {
                           onClick={() => {
                             const cur = Number(playback.currentTime.toFixed(2));
                             const startVal = activeLayer.range?.start ?? 0;
-                            updateLayerRange(activeLayer.id, Math.min(startVal, Math.max(0, cur - 0.1)), cur);
-                            toast.success(`Set color end to ${cur.toFixed(2)}s (Pink Line)`, 'Color Grade Updated');
+                            updateLayerRange(
+                              activeLayer.id,
+                              Math.min(startVal, Math.max(0, cur - 0.1)),
+                              cur
+                            );
+                            toast.success(
+                              `Set color end to ${cur.toFixed(2)}s (Pink Line)`,
+                              'Color Grade Updated'
+                            );
                           }}
                           className="w-full text-left text-[10px] text-[#E3B5BE] hover:underline flex items-center gap-1 font-mono pt-0.5"
                           title="Align color end to pink playhead"
@@ -1222,7 +1254,10 @@ export const InspectorPanel: React.FC = () => {
                       type="button"
                       onClick={() => {
                         updateLayerRange(activeLayer.id, 0, playback.duration || 60);
-                        toast.success('Applied color grade to full video (0s to end)', 'Color Grade');
+                        toast.success(
+                          'Applied color grade to full video (0s to end)',
+                          'Color Grade'
+                        );
                       }}
                       className="w-full py-1 rounded bg-[#2A2C2F] hover:bg-[#34373B] text-[10px] font-mono text-[#FFF5F5]/70 hover:text-[#FFF5F5] transition-colors"
                     >
@@ -1733,9 +1768,10 @@ export const InspectorPanel: React.FC = () => {
                       </button>
                     </div>
                     <p className="text-[10px] text-indigo-200/90 leading-relaxed">
-                      Your {cues.length} subtitle cues only span {formatCueTime(maxCueMs)}, while your video is{' '}
-                      {formatCueTime(videoDurationMs)}. Click <strong>Sync to Spoken Voice</strong> to automatically
-                      align and pace all dialogue lines and words across your video's audio waveform.
+                      Your {cues.length} subtitle cues only span {formatCueTime(maxCueMs)}, while
+                      your video is {formatCueTime(videoDurationMs)}. Click{' '}
+                      <strong>Sync to Spoken Voice</strong> to automatically align and pace all
+                      dialogue lines and words across your video's audio waveform.
                     </p>
                   </div>
                 )}
@@ -1882,7 +1918,11 @@ export const InspectorPanel: React.FC = () => {
 
                             <textarea
                               rows={2}
-                              value={cue.text || (cue.words && cue.words.map((w: any) => w.word || w.w).join(' ')) || ''}
+                              value={
+                                cue.text ||
+                                (cue.words && cue.words.map((w: any) => w.word || w.w).join(' ')) ||
+                                ''
+                              }
                               onChange={(e) => handleUpdateCueText(origIdx, e.target.value)}
                               placeholder="Subtitle text..."
                               className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded p-1.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/30 resize-none focus:outline-none transition-colors"
@@ -1892,7 +1932,9 @@ export const InspectorPanel: React.FC = () => {
                             <div className="mt-2 pt-2 border-t border-[#393B3F]/50 text-[10px] text-[#FFF5F5]/60 font-mono space-y-2">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-1.5">
-                                  <span className="text-[#FFF5F5]/50 text-[9px] uppercase tracking-wide">Start:</span>
+                                  <span className="text-[#FFF5F5]/50 text-[9px] uppercase tracking-wide">
+                                    Start:
+                                  </span>
                                   <input
                                     type="number"
                                     step="0.1"
@@ -1910,7 +1952,9 @@ export const InspectorPanel: React.FC = () => {
                                   <span className="text-[#FFF5F5]/40 text-[9px]">s</span>
                                 </div>
                                 <div className="flex items-center space-x-1.5">
-                                  <span className="text-[#FFF5F5]/50 text-[9px] uppercase tracking-wide">End:</span>
+                                  <span className="text-[#FFF5F5]/50 text-[9px] uppercase tracking-wide">
+                                    End:
+                                  </span>
                                   <input
                                     type="number"
                                     step="0.1"
@@ -2219,7 +2263,9 @@ export const InspectorPanel: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[#FFF5F5]/70 text-[11px] block">Speech Ducking</span>
-                  <span className="text-[10px] text-[#FFF5F5]/40">-12 dB auto-attenuation when speech detected</span>
+                  <span className="text-[10px] text-[#FFF5F5]/40">
+                    -12 dB auto-attenuation when speech detected
+                  </span>
                 </div>
                 <button
                   type="button"
@@ -2349,10 +2395,22 @@ export const InspectorPanel: React.FC = () => {
                 </label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {[
-                    { label: 'YouTube / Web', lufs: -14, desc: 'Maximum punch for social algorithms' },
-                    { label: 'Podcast / Speech', lufs: -16, desc: 'Balanced spoken dialogue standard' },
+                    {
+                      label: 'YouTube / Web',
+                      lufs: -14,
+                      desc: 'Maximum punch for social algorithms',
+                    },
+                    {
+                      label: 'Podcast / Speech',
+                      lufs: -16,
+                      desc: 'Balanced spoken dialogue standard',
+                    },
                     { label: 'Warm Master', lufs: -18, desc: 'Natural dynamic range & warmth' },
-                    { label: 'Broadcast EBU', lufs: -23, desc: 'Television & Netflix broadcast spec' },
+                    {
+                      label: 'Broadcast EBU',
+                      lufs: -23,
+                      desc: 'Television & Netflix broadcast spec',
+                    },
                   ].map((preset) => {
                     const isActive = (activeLayer.params?.normalizeLufs ?? -16) === preset.lufs;
                     return (
@@ -2373,9 +2431,13 @@ export const InspectorPanel: React.FC = () => {
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-medium">{preset.label}</span>
-                          <span className="text-[10px] font-mono text-[#F7D7D1]">{preset.lufs} LUFS</span>
+                          <span className="text-[10px] font-mono text-[#F7D7D1]">
+                            {preset.lufs} LUFS
+                          </span>
                         </div>
-                        <span className="text-[9px] text-[#FFF5F5]/40 block truncate">{preset.desc}</span>
+                        <span className="text-[9px] text-[#FFF5F5]/40 block truncate">
+                          {preset.desc}
+                        </span>
                       </button>
                     );
                   })}
@@ -2463,7 +2525,9 @@ export const InspectorPanel: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F] space-y-1">
-                  <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">Start Cut (sec)</span>
+                  <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">
+                    Start Cut (sec)
+                  </span>
                   <input
                     type="number"
                     step="0.05"
@@ -2481,11 +2545,7 @@ export const InspectorPanel: React.FC = () => {
                     onClick={() => {
                       const cur = Number(playback.currentTime.toFixed(2));
                       const endVal = activeLayer.range?.end ?? cur + 1.0;
-                      updateLayerRange(
-                        activeLayer.id,
-                        cur,
-                        Math.max(cur + 0.1, endVal)
-                      );
+                      updateLayerRange(activeLayer.id, cur, Math.max(cur + 0.1, endVal));
                       toast.success(
                         `Set cut start to ${cur.toFixed(2)}s (Pink Line)`,
                         'Cut Updated'
@@ -2500,14 +2560,19 @@ export const InspectorPanel: React.FC = () => {
                 </div>
 
                 <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F] space-y-1">
-                  <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">End Cut (sec)</span>
+                  <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">
+                    End Cut (sec)
+                  </span>
                   <input
                     type="number"
                     step="0.05"
                     min={activeLayer.range?.start ?? 0}
                     value={Number((activeLayer.range?.end || 1.0).toFixed(2))}
                     onChange={(e) => {
-                      const val = Math.max((activeLayer.range?.start || 0) + 0.05, parseFloat(e.target.value) || 1.0);
+                      const val = Math.max(
+                        (activeLayer.range?.start || 0) + 0.05,
+                        parseFloat(e.target.value) || 1.0
+                      );
                       updateLayerRange(activeLayer.id, activeLayer.range?.start || 0, val);
                     }}
                     className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
@@ -2517,15 +2582,8 @@ export const InspectorPanel: React.FC = () => {
                     onClick={() => {
                       const cur = Number(playback.currentTime.toFixed(2));
                       const startVal = activeLayer.range?.start ?? 0;
-                      updateLayerRange(
-                        activeLayer.id,
-                        Math.min(startVal, cur - 0.1),
-                        cur
-                      );
-                      toast.success(
-                        `Set cut end to ${cur.toFixed(2)}s (Pink Line)`,
-                        'Cut Updated'
-                      );
+                      updateLayerRange(activeLayer.id, Math.min(startVal, cur - 0.1), cur);
+                      toast.success(`Set cut end to ${cur.toFixed(2)}s (Pink Line)`, 'Cut Updated');
                     }}
                     className="w-full text-left text-[10px] text-[#E3B5BE] hover:underline flex items-center gap-1 font-mono pt-1"
                     title="Align cut end to current pink playhead line"
@@ -2658,9 +2716,24 @@ export const InspectorPanel: React.FC = () => {
                 </label>
                 <div className="grid grid-cols-3 gap-1 bg-[#121314] p-1 rounded-lg border border-[#393B3F]">
                   {[
-                    { id: 'cutaway', label: 'B-Roll Cutaway', icon: <Film className="w-3 h-3" />, title: 'Full-screen B-Roll cutaway overlay' },
-                    { id: 'pip', label: 'Picture-in-Pic', icon: <Tv className="w-3 h-3" />, title: 'Picture-in-Picture window overlay' },
-                    { id: 'sticker', label: 'Graphic PIP', icon: <Layout className="w-3 h-3" />, title: 'Floating graphic / sticker overlay' },
+                    {
+                      id: 'cutaway',
+                      label: 'B-Roll Cutaway',
+                      icon: <Film className="w-3 h-3" />,
+                      title: 'Full-screen B-Roll cutaway overlay',
+                    },
+                    {
+                      id: 'pip',
+                      label: 'Picture-in-Pic',
+                      icon: <Tv className="w-3 h-3" />,
+                      title: 'Picture-in-Picture window overlay',
+                    },
+                    {
+                      id: 'sticker',
+                      label: 'Graphic PIP',
+                      icon: <Layout className="w-3 h-3" />,
+                      title: 'Floating graphic / sticker overlay',
+                    },
                   ].map((m) => {
                     const currentMode = activeLayer.params?.mode || 'cutaway';
                     const isActive = currentMode === m.id;
@@ -2682,7 +2755,9 @@ export const InspectorPanel: React.FC = () => {
                         title={m.title}
                       >
                         <span className="mb-0.5">{m.icon}</span>
-                        <span className="truncate max-w-full px-0.5 text-center leading-tight">{m.label}</span>
+                        <span className="truncate max-w-full px-0.5 text-center leading-tight">
+                          {m.label}
+                        </span>
                       </button>
                     );
                   })}
@@ -2808,7 +2883,9 @@ export const InspectorPanel: React.FC = () => {
 
                   {/* Style selector */}
                   <div className="space-y-1">
-                    <span className="text-[10px] text-[#FFF5F5]/60 block font-mono">Visual Style</span>
+                    <span className="text-[10px] text-[#FFF5F5]/60 block font-mono">
+                      Visual Style
+                    </span>
                     <div className="flex flex-wrap gap-1">
                       {(['cinematic', 'photorealistic', '3d', 'cyberpunk'] as const).map((st) => (
                         <button
@@ -2871,8 +2948,12 @@ export const InspectorPanel: React.FC = () => {
 
                   {activeLayer.params?.prompt && (
                     <div className="p-2 rounded bg-black/40 border border-[#393B3F] space-y-1">
-                      <span className="text-[10px] text-cyan-300 font-mono block">Active Generative Prompt:</span>
-                      <p className="text-[11px] text-[#FFF5F5]/80 italic">"{activeLayer.params.prompt}"</p>
+                      <span className="text-[10px] text-cyan-300 font-mono block">
+                        Active Generative Prompt:
+                      </span>
+                      <p className="text-[11px] text-[#FFF5F5]/80 italic">
+                        "{activeLayer.params.prompt}"
+                      </p>
                     </div>
                   )}
                 </div>
@@ -2910,12 +2991,17 @@ export const InspectorPanel: React.FC = () => {
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-[#FFF5F5]/70 font-mono">Duration</span>
                   <span className="font-mono text-cyan-300 font-semibold">
-                    {activeLayer.range ? (activeLayer.range.end - activeLayer.range.start).toFixed(2) : 3.0}s
+                    {activeLayer.range
+                      ? (activeLayer.range.end - activeLayer.range.start).toFixed(2)
+                      : 3.0}
+                    s
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div className="bg-[#222326] p-2.5 rounded-lg border border-[#393B3F] space-y-1">
-                    <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">Start (sec)</span>
+                    <span className="text-[#FFF5F5]/60 block text-[10px] font-mono">
+                      Start (sec)
+                    </span>
                     <input
                       type="number"
                       step="0.05"
@@ -2923,7 +3009,9 @@ export const InspectorPanel: React.FC = () => {
                       value={Number((activeLayer.range?.start || 0).toFixed(2))}
                       onChange={(e) => {
                         const s = Math.max(0, parseFloat(e.target.value) || 0);
-                        const dur = activeLayer.range ? activeLayer.range.end - activeLayer.range.start : 3.0;
+                        const dur = activeLayer.range
+                          ? activeLayer.range.end - activeLayer.range.start
+                          : 3.0;
                         updateLayerRange(activeLayer.id, s, s + Math.max(0.2, dur));
                       }}
                       className="w-full bg-[#18191B] border border-[#393B3F] focus:border-cyan-400 rounded px-2 py-1 text-xs text-[#F7D7D1] font-mono focus:outline-none"
@@ -2932,9 +3020,14 @@ export const InspectorPanel: React.FC = () => {
                       type="button"
                       onClick={() => {
                         const cur = Number(playback.currentTime.toFixed(2));
-                        const dur = activeLayer.range ? activeLayer.range.end - activeLayer.range.start : 3.0;
+                        const dur = activeLayer.range
+                          ? activeLayer.range.end - activeLayer.range.start
+                          : 3.0;
                         updateLayerRange(activeLayer.id, cur, cur + Math.max(0.2, dur));
-                        toast.success(`Set B-roll start to ${cur.toFixed(2)}s (Pink Line)`, 'Timeline');
+                        toast.success(
+                          `Set B-roll start to ${cur.toFixed(2)}s (Pink Line)`,
+                          'Timeline'
+                        );
                       }}
                       className="w-full text-left text-[10px] text-cyan-300 hover:underline flex items-center gap-1 font-mono pt-1"
                     >
@@ -2964,7 +3057,10 @@ export const InspectorPanel: React.FC = () => {
                         const s = activeLayer.range?.start || 0;
                         if (cur > s) {
                           updateLayerRange(activeLayer.id, s, cur);
-                          toast.success(`Set B-roll end to ${cur.toFixed(2)}s (Pink Line)`, 'Timeline');
+                          toast.success(
+                            `Set B-roll end to ${cur.toFixed(2)}s (Pink Line)`,
+                            'Timeline'
+                          );
                         }
                       }}
                       className="w-full text-left text-[10px] text-cyan-300 hover:underline flex items-center gap-1 font-mono pt-1"
@@ -3042,7 +3138,8 @@ export const InspectorPanel: React.FC = () => {
                 Subtitle Cue #{selectedCueIndex + 1}
               </span>
               <span className="font-mono text-[10px] text-[#F7D7D1]">
-                ({(selectedCue.startMs / 1000).toFixed(2)}s - {(selectedCue.endMs / 1000).toFixed(2)}s)
+                ({(selectedCue.startMs / 1000).toFixed(2)}s -{' '}
+                {(selectedCue.endMs / 1000).toFixed(2)}s)
               </span>
             </div>
 

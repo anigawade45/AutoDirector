@@ -165,7 +165,12 @@ export class PlanNormalizer {
           l.layer = 'color';
         else if (idLower.includes('cut') || idLower.includes('trim')) l.layer = 'cut';
         else if (idLower.includes('mus') || idLower.includes('bgm')) l.layer = 'music';
-        else if (idLower.includes('aud') || idLower.includes('denoise') || idLower.includes('clean') || idLower.includes('lufs'))
+        else if (
+          idLower.includes('aud') ||
+          idLower.includes('denoise') ||
+          idLower.includes('clean') ||
+          idLower.includes('lufs')
+        )
           l.layer = 'audio';
       }
 
@@ -548,13 +553,16 @@ export class PlanNormalizer {
 
           const mediaType = ['broll', 'image', 'generative'].includes(params.mediaType)
             ? params.mediaType
-            : String(params.asset || '').startsWith('http') || String(params.asset || '').startsWith('data:')
-            ? 'image'
-            : params.prompt
-            ? 'generative'
-            : 'broll';
+            : String(params.asset || '').startsWith('http') ||
+                String(params.asset || '').startsWith('data:')
+              ? 'image'
+              : params.prompt
+                ? 'generative'
+                : 'broll';
 
-          const mode = ['cutaway', 'pip', 'sticker'].includes(params.mode) ? params.mode : 'cutaway';
+          const mode = ['cutaway', 'pip', 'sticker'].includes(params.mode)
+            ? params.mode
+            : 'cutaway';
           const fit = ['cover', 'contain'].includes(params.fit) ? params.fit : 'cover';
 
           normalizedLayers.push({
@@ -843,8 +851,15 @@ export class PlanNormalizer {
         enabled: true,
         timebase: 'global',
         params: {
-          normalizeLufs: promptLower.includes('-14') ? -14 : promptLower.includes('-23') ? -23 : -16,
-          denoise: promptLower.includes('denoise') || promptLower.includes('noise') || promptLower.includes('clean'),
+          normalizeLufs: promptLower.includes('-14')
+            ? -14
+            : promptLower.includes('-23')
+              ? -23
+              : -16,
+          denoise:
+            promptLower.includes('denoise') ||
+            promptLower.includes('noise') ||
+            promptLower.includes('clean'),
         },
       });
     }

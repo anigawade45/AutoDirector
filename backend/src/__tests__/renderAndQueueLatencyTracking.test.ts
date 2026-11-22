@@ -158,20 +158,38 @@ describe('P95 Render & Queue Latency Tracking Suite', () => {
     it('isolates 480p preview, 1080p export, and 4K export metrics into independent percentiles', () => {
       // 1. Record 20 preview samples (queue: 500ms, render: 8,000ms)
       for (let i = 0; i < 20; i++) {
-        RenderLatencyTracker.recordQueueLatency(500 + i * 10, { profile: 'preview_480p', type: 'preview' });
-        RenderLatencyTracker.recordRenderLatency(8000 + i * 50, { profile: 'preview_480p', type: 'preview' });
+        RenderLatencyTracker.recordQueueLatency(500 + i * 10, {
+          profile: 'preview_480p',
+          type: 'preview',
+        });
+        RenderLatencyTracker.recordRenderLatency(8000 + i * 50, {
+          profile: 'preview_480p',
+          type: 'preview',
+        });
       }
 
       // 2. Record 10 1080p export samples (queue: 4,000ms, render: 28,000ms)
       for (let i = 0; i < 10; i++) {
-        RenderLatencyTracker.recordQueueLatency(4000 + i * 100, { profile: 'final_1080p', type: 'export' });
-        RenderLatencyTracker.recordRenderLatency(28000 + i * 200, { profile: 'final_1080p', type: 'export' });
+        RenderLatencyTracker.recordQueueLatency(4000 + i * 100, {
+          profile: 'final_1080p',
+          type: 'export',
+        });
+        RenderLatencyTracker.recordRenderLatency(28000 + i * 200, {
+          profile: 'final_1080p',
+          type: 'export',
+        });
       }
 
       // 3. Record 5 4K export samples (queue: 12,000ms, render: 95,000ms)
       for (let i = 0; i < 5; i++) {
-        RenderLatencyTracker.recordQueueLatency(12000 + i * 200, { profile: 'final_4k', type: 'export' });
-        RenderLatencyTracker.recordRenderLatency(95000 + i * 500, { profile: 'final_4k', type: 'export' });
+        RenderLatencyTracker.recordQueueLatency(12000 + i * 200, {
+          profile: 'final_4k',
+          type: 'export',
+        });
+        RenderLatencyTracker.recordRenderLatency(95000 + i * 500, {
+          profile: 'final_4k',
+          type: 'export',
+        });
       }
 
       const report = RenderLatencyTracker.getLatencyReport();

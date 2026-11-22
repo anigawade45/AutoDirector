@@ -90,9 +90,7 @@ describe('PlansController - Version History & Plan Reversion Suite', () => {
           model: 'gemini-3.5-flash-lite',
           createdAt: new Date('2026-11-20T10:15:00Z'),
           plan: {
-            layers: [
-              { id: 'lyr_cut1', layer: 'cut', enabled: true },
-            ],
+            layers: [{ id: 'lyr_cut1', layer: 'cut', enabled: true }],
           },
         },
         {

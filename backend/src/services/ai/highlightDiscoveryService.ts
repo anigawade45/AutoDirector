@@ -60,7 +60,8 @@ export class HighlightDiscoveryService {
     let bestScore = 0.8;
     let bestReason = 'Opening introduction hook';
 
-    const hookWordsRegex = /\b(why|how|what|did you know|secret|stop|never|always|best|crazy|shocking|imagine|truth)\b/i;
+    const hookWordsRegex =
+      /\b(why|how|what|did you know|secret|stop|never|always|best|crazy|shocking|imagine|truth)\b/i;
 
     for (const cue of candidates) {
       const durSec = Math.max(0.5, (cue.endMs - cue.startMs) / 1000);
@@ -142,7 +143,10 @@ export class HighlightDiscoveryService {
     const selectedSplits: number[] = [];
     let lastSplit = 0;
     for (const split of rawSplits) {
-      if (split - lastSplit >= minChapterGap && durationMs - split >= Math.min(8000, minChapterGap / 2)) {
+      if (
+        split - lastSplit >= minChapterGap &&
+        durationMs - split >= Math.min(8000, minChapterGap / 2)
+      ) {
         selectedSplits.push(split);
         lastSplit = split;
       }
@@ -162,7 +166,10 @@ export class HighlightDiscoveryService {
         (c) => (c.startMs >= cStart && c.startMs < cEnd) || (c.endMs > cStart && c.endMs <= cEnd)
       );
 
-      const combinedText = chapterCues.map((c) => c.text).join(' ').trim();
+      const combinedText = chapterCues
+        .map((c) => c.text)
+        .join(' ')
+        .trim();
       let title = `Chapter ${i + 1}`;
 
       if (i === 0) {
@@ -174,9 +181,16 @@ export class HighlightDiscoveryService {
         const words = combinedText
           .replace(/[^\w\s]/g, '')
           .split(/\s+/)
-          .filter((w) => w.length > 4 && !['about', 'there', 'which', 'their', 'would', 'could'].includes(w.toLowerCase()));
+          .filter(
+            (w) =>
+              w.length > 4 &&
+              !['about', 'there', 'which', 'their', 'would', 'could'].includes(w.toLowerCase())
+          );
         if (words.length > 0) {
-          title = words.slice(0, 3).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          title = words
+            .slice(0, 3)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
         } else {
           title = `Discussion Part ${i + 1}`;
         }
@@ -187,7 +201,9 @@ export class HighlightDiscoveryService {
         startMs: cStart,
         endMs: cEnd,
         title,
-        summary: combinedText.slice(0, 80) || `Section spanning ${Math.round(cStart / 1000)}s - ${Math.round(cEnd / 1000)}s`,
+        summary:
+          combinedText.slice(0, 80) ||
+          `Section spanning ${Math.round(cStart / 1000)}s - ${Math.round(cEnd / 1000)}s`,
       });
     }
 
@@ -261,7 +277,8 @@ export class HighlightDiscoveryService {
         score += 0.04;
       }
 
-      const punchyKeywords = /\b(key|secret|important|future|best|amazing|solution|problem|strategy|result|win)\b/i;
+      const punchyKeywords =
+        /\b(key|secret|important|future|best|amazing|solution|problem|strategy|result|win)\b/i;
       if (punchyKeywords.test(fullText)) {
         score += 0.05;
         reason = 'High-impact value statement with key takeaways';

@@ -19,7 +19,8 @@ export class ReferenceStyleService {
   private static readonly PRESET_ARCHETYPES: Record<string, ReferenceStyleProfile> = {
     hormozi: {
       styleName: 'Alex Hormozi Retention Style',
-      description: 'Ultra-fast pacing, snappy silence cuts, punchy bold yellow word-pop subtitles, high-contrast grade, and ducked high-energy music.',
+      description:
+        'Ultra-fast pacing, snappy silence cuts, punchy bold yellow word-pop subtitles, high-contrast grade, and ducked high-energy music.',
       pacing: {
         targetCutDurationSec: 1.5,
         silencePaddingSec: 0.05,
@@ -51,7 +52,8 @@ export class ReferenceStyleService {
     },
     abdaal: {
       styleName: 'Ali Abdaal Thoughtful Aesthetic',
-      description: 'Calm narrative pacing, warm filmic color grade, minimalist Inter captions, gentle lo-fi background beats.',
+      description:
+        'Calm narrative pacing, warm filmic color grade, minimalist Inter captions, gentle lo-fi background beats.',
       pacing: {
         targetCutDurationSec: 3.5,
         silencePaddingSec: 0.15,
@@ -83,7 +85,8 @@ export class ReferenceStyleService {
     },
     vox: {
       styleName: 'Vox Documentary Explainer',
-      description: 'Documentary pacing, rich cinematic color palette, elegant typography, ambient atmospheric soundtrack with clean narrative focus.',
+      description:
+        'Documentary pacing, rich cinematic color palette, elegant typography, ambient atmospheric soundtrack with clean narrative focus.',
       pacing: {
         targetCutDurationSec: 4.0,
         silencePaddingSec: 0.2,
@@ -115,7 +118,8 @@ export class ReferenceStyleService {
     },
     viral_tiktok: {
       styleName: 'TikTok / Shorts Viral Hook Style',
-      description: 'Dynamic 9:16 vertical framing, rapid-fire word animations, vibrant high-energy color grade, and trending beat-synced audio.',
+      description:
+        'Dynamic 9:16 vertical framing, rapid-fire word animations, vibrant high-energy color grade, and trending beat-synced audio.',
       pacing: {
         targetCutDurationSec: 1.2,
         silencePaddingSec: 0.03,
@@ -147,7 +151,8 @@ export class ReferenceStyleService {
     },
     cinematic_film: {
       styleName: 'Cinematic 35mm Film Noir',
-      description: 'Moody contrast, film grain texture, widescreen cinematic pacing, classical typographic titles, and orchestral score.',
+      description:
+        'Moody contrast, film grain texture, widescreen cinematic pacing, classical typographic titles, and orchestral score.',
       pacing: {
         targetCutDurationSec: 5.0,
         silencePaddingSec: 0.25,
@@ -219,11 +224,17 @@ export class ReferenceStyleService {
     let preset: 'cinematic' | 'warm' | 'cool' | 'bw' | 'vivid' | 'faded' = 'cinematic';
     if (lower.includes('warm') || lower.includes('golden')) preset = 'warm';
     else if (lower.includes('cool') || lower.includes('blue')) preset = 'cool';
-    else if (lower.includes('bw') || lower.includes('black and white') || lower.includes('monochrome')) preset = 'bw';
+    else if (
+      lower.includes('bw') ||
+      lower.includes('black and white') ||
+      lower.includes('monochrome')
+    )
+      preset = 'bw';
     else if (lower.includes('vivid') || lower.includes('saturated')) preset = 'vivid';
     else if (lower.includes('faded') || lower.includes('vintage')) preset = 'faded';
 
-    const grain = lower.includes('grain') || lower.includes('film') || lower.includes('retro') ? 0.2 : 0;
+    const grain =
+      lower.includes('grain') || lower.includes('film') || lower.includes('retro') ? 0.2 : 0;
     const vignette = lower.includes('vignette') || lower.includes('dramatic') ? 0.3 : 0.15;
 
     let font = 'Montserrat';

@@ -146,7 +146,10 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({ isOpen
               <History className="w-4 h-4" />
             </div>
             <div>
-              <h3 id="version-history-title" className="text-sm font-semibold text-[#FFF5F5] flex items-center gap-2">
+              <h3
+                id="version-history-title"
+                className="text-sm font-semibold text-[#FFF5F5] flex items-center gap-2"
+              >
                 <span>Sequence Version History</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#2A2C2F] text-[#F7D7D1] border border-[#393B3F]">
                   v{plan.version} active
@@ -198,9 +201,12 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({ isOpen
           {!loading && versions.length === 0 && !error && (
             <div className="py-12 text-center text-[#FFF5F5]/40 space-y-2">
               <History className="w-8 h-8 mx-auto opacity-40 text-[#E3B5BE]" />
-              <p className="text-xs font-medium text-[#FFF5F5]/80">No historical versions recorded yet</p>
+              <p className="text-xs font-medium text-[#FFF5F5]/80">
+                No historical versions recorded yet
+              </p>
               <p className="text-[11px] max-w-xs mx-auto">
-                Edits submitted through the AI Director or timeline operations will generate versioned checkpoints here.
+                Edits submitted through the AI Director or timeline operations will generate
+                versioned checkpoints here.
               </p>
             </div>
           )}
@@ -293,7 +299,9 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({ isOpen
                     )}
                     <span className="opacity-80">{ver.model}</span>
                     {ver.parentVersion !== null && (
-                      <span className="text-[#FFF5F5]/40">· branched from v{ver.parentVersion}</span>
+                      <span className="text-[#FFF5F5]/40">
+                        · branched from v{ver.parentVersion}
+                      </span>
                     )}
                   </div>
 

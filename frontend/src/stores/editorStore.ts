@@ -209,7 +209,9 @@ export interface EditorStoreState {
   ) => void;
   duplicateLayer: (layerId: string) => void;
   duplicateCue: (cueIndex: number) => void;
-  addTimelineLayer: (type: 'text' | 'music' | 'color' | 'cut' | 'overlay' | 'subtitle' | 'audio') => void;
+  addTimelineLayer: (
+    type: 'text' | 'music' | 'color' | 'cut' | 'overlay' | 'subtitle' | 'audio'
+  ) => void;
   toggleTrackMute: (trackId: string) => void;
   toggleTrackLock: (trackId: string) => void;
   toggleTrackHidden: (trackId: string) => void;
@@ -769,8 +771,14 @@ export const useEditorStore = create<EditorStoreState>()(
       const secondWords = allWords.filter((w: any) => (w.startMs ?? w.s ?? 0) > curMs);
 
       // Fallback if boundary wasn't clean between words: split tokens by index proportion
-      let text1 = firstWords.map((w: any) => w.word || w.w || '').join(' ').trim();
-      let text2 = secondWords.map((w: any) => w.word || w.w || '').join(' ').trim();
+      let text1 = firstWords
+        .map((w: any) => w.word || w.w || '')
+        .join(' ')
+        .trim();
+      let text2 = secondWords
+        .map((w: any) => w.word || w.w || '')
+        .join(' ')
+        .trim();
 
       if (!text1 || !text2) {
         const midIdx = Math.max(1, Math.floor(cueTokens.length / 2));
@@ -783,7 +791,11 @@ export const useEditorStore = create<EditorStoreState>()(
         id: cue.id || `cue_${cueIdx + 1}`,
         endMs: curMs,
         text: text1,
-        words: computeNaturalWordTimings(text1.split(/\s+/).filter(Boolean), cue.startMs, curMs) as any,
+        words: computeNaturalWordTimings(
+          text1.split(/\s+/).filter(Boolean),
+          cue.startMs,
+          curMs
+        ) as any,
       };
 
       const cue2 = {
@@ -1433,9 +1445,7 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
     });
   } else {
     // Sort cuts chronologically
-    const sortedCuts = [...cutLayers].sort(
-      (a, b) => (a.range?.start || 0) - (b.range?.start || 0)
-    );
+    const sortedCuts = [...cutLayers].sort((a, b) => (a.range?.start || 0) - (b.range?.start || 0));
 
     let cursor = mainVideoStart;
     let clipNum = 1;
@@ -1544,14 +1554,14 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
           (ov.params?.asset?.startsWith('http') || ov.params?.asset?.startsWith('data:')
             ? 'image'
             : ov.params?.prompt
-            ? 'generative'
-            : 'broll');
+              ? 'generative'
+              : 'broll');
         const mode = ov.params?.mode || 'cutaway';
         const label = ov.params?.prompt
           ? `AI Gen: "${ov.params.prompt.slice(0, 20)}..."`
           : mediaType === 'image'
-          ? `Image: ${ov.params?.asset?.replace(/^.*[\\/]/, '') || 'graphic'}`
-          : `B-Roll: ${ov.params?.asset || 'cutaway'}`;
+            ? `Image: ${ov.params?.asset?.replace(/^.*[\\/]/, '') || 'graphic'}`
+            : `B-Roll: ${ov.params?.asset || 'cutaway'}`;
 
         return {
           id: ov.id,

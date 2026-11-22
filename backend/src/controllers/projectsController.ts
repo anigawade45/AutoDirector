@@ -606,10 +606,7 @@ export class ProjectsController {
             ? (analysisQuery as any).lean()
             : analysisQuery;
 
-        const [analysis, captionSet] = await Promise.all([
-          analysisPromise,
-          captionPromise,
-        ]);
+        const [analysis, captionSet] = await Promise.all([analysisPromise, captionPromise]);
 
         if (analysis || captionSet) {
           let rawCues = (captionSet?.cues || []).map((c: any, cIdx: number) => {
@@ -617,19 +614,26 @@ export class ProjectsController {
             const words = (cueObj.words || [])
               .map((w: any) => ({
                 w: String(w.w || w.word || '').trim(),
-                s: Number(w.s !== undefined ? w.s : w.startMs !== undefined ? w.startMs : w.start) || 0,
+                s:
+                  Number(w.s !== undefined ? w.s : w.startMs !== undefined ? w.startMs : w.start) ||
+                  0,
                 e: Number(w.e !== undefined ? w.e : w.endMs !== undefined ? w.endMs : w.end) || 0,
-                conf: typeof w.conf === 'number' ? w.conf : typeof w.score === 'number' ? w.score : 0.95,
+                conf:
+                  typeof w.conf === 'number'
+                    ? w.conf
+                    : typeof w.score === 'number'
+                      ? w.score
+                      : 0.95,
               }))
               .filter((w: any) => w.w.length > 0);
 
             const text = String(
               cueObj.text ||
-              cueObj.sentence ||
-              cueObj.caption ||
-              cueObj.transcript ||
-              words.map((w: any) => w.w).join(' ') ||
-              ''
+                cueObj.sentence ||
+                cueObj.caption ||
+                cueObj.transcript ||
+                words.map((w: any) => w.w).join(' ') ||
+                ''
             ).trim();
 
             return {
@@ -646,9 +650,10 @@ export class ProjectsController {
               ? (project as any).durationSec * 1000
               : project.stats?.durationMs || 0);
 
-          const cues = rawCues.length > 0 && durationMs > 0
-            ? TranscriptionService.normalizeRawCues(rawCues, durationMs)
-            : rawCues;
+          const cues =
+            rawCues.length > 0 && durationMs > 0
+              ? TranscriptionService.normalizeRawCues(rawCues, durationMs)
+              : rawCues;
           const totalWords = cues.reduce((sum: number, c: any) => sum + (c.words?.length || 0), 0);
           const snippet = cues
             .slice(0, 3)
@@ -676,9 +681,7 @@ export class ProjectsController {
             hook: analysis?.hook || null,
             cues: cues.map((c: any, cIdx: number) => {
               const cueText = String(
-                c.text ||
-                (c.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-                ''
+                c.text || (c.words || []).map((w: any) => w.w || w.word || '').join(' ') || ''
               ).trim();
               return {
                 id: c.id || `cue_${cIdx + 1}`,
@@ -1008,10 +1011,9 @@ export class ProjectsController {
         throw new AppError(400, 'INVALID_CUES', 'cues must be an array of caption cues');
       }
 
-      const durationMs =
-        ((project as any).durationSec
-          ? (project as any).durationSec * 1000
-          : project.stats?.durationMs || 0);
+      const durationMs = (project as any).durationSec
+        ? (project as any).durationSec * 1000
+        : project.stats?.durationMs || 0;
 
       const isSeconds = TranscriptionService.detectIfSeconds(cues, durationMs);
 

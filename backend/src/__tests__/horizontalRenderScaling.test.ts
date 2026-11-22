@@ -5,7 +5,12 @@ import {
   ClusterMetrics,
   SegmentedRenderPlan,
 } from '../services/queue/renderClusterScaler.js';
-import { QUEUE_CONFIGS, renderQueue, previewQueue, JobEventsPublisher } from '../services/queue/queueService.js';
+import {
+  QUEUE_CONFIGS,
+  renderQueue,
+  previewQueue,
+  JobEventsPublisher,
+} from '../services/queue/queueService.js';
 import { RenderJobLifecycle } from '../services/jobs/renderJobLifecycle.js';
 import { RenderJobModel } from '../models/RenderJob.js';
 import { StorageKeys } from '../config/s3.js';
@@ -269,7 +274,9 @@ describe('N Workers Horizontal Render Scaling Architecture Suite', () => {
 
       expect(plan.totalChunks).toBe(10);
       expect(plan.chunks.length).toBe(10);
-      expect(plan.finalOutputKey).toBe('users/usr_scale_test/projects/prj_scale_test/renders/job_master_123.mp4');
+      expect(plan.finalOutputKey).toBe(
+        'users/usr_scale_test/projects/prj_scale_test/renders/job_master_123.mp4'
+      );
 
       // Check first chunk
       expect(plan.chunks[0].chunkIndex).toBe(0);

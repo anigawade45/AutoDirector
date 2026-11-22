@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { Undo2, Redo2, Download, Film, Sparkles, ArrowLeft, Loader2, User, History } from 'lucide-react';
+import {
+  Undo2,
+  Redo2,
+  Download,
+  Film,
+  Sparkles,
+  ArrowLeft,
+  Loader2,
+  User,
+  History,
+} from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
 import { useAuthStore } from '../../stores/authStore';
 import { api } from '../../api/client';
@@ -207,7 +217,10 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ onBack }) => {
       </header>
 
       <ExportModal isOpen={isExportModalOpen} onClose={() => setIsExportModalOpen(false)} />
-      <VersionHistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} />
+      <VersionHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+      />
     </>
   );
 };

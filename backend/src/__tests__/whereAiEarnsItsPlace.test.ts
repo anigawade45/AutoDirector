@@ -151,7 +151,9 @@ describe('Where AI Earns Its Place: 5 Frontier Capabilities Acceptance Suite', (
             baseAssetId: 'ast_base',
             targetVersion: 1,
             videoMeta: { durationMs: 120000, fps: 30, resolution: '1920x1080' },
-            highlights: [{ id: 'hl_1', startSec: 15, endSec: 75, score: 0.96, reason: 'Viral peak' }],
+            highlights: [
+              { id: 'hl_1', startSec: 15, endSec: 75, score: 0.96, reason: 'Viral peak' },
+            ],
             audioAnalysis: { silenceIntervalsSec: [] },
           },
         }),
@@ -260,7 +262,11 @@ describe('Where AI Earns Its Place: 5 Frontier Capabilities Acceptance Suite', (
       expect(ops.operations.length).toBeGreaterThan(0);
       expect(ops.operations.some((op) => op.trackName.includes('Subtitles'))).toBe(true);
       expect(ops.operations.some((op) => op.trackName.includes('Color'))).toBe(true);
-      expect(ops.operations.some((op) => op.trackName.includes('Music') || op.trackName.includes('Audio'))).toBe(true);
+      expect(
+        ops.operations.some(
+          (op) => op.trackName.includes('Music') || op.trackName.includes('Audio')
+        )
+      ).toBe(true);
     });
   });
 

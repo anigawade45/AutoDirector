@@ -274,14 +274,14 @@ export class RenderLatencyTracker {
         const finishedAt = job.timings?.finishedAt ? new Date(job.timings.finishedAt).getTime() : 0;
 
         if (queuedAt > 0 && startedAt >= queuedAt) {
-          const qWait = job.timings?.queueWaitMs ?? (startedAt - queuedAt);
+          const qWait = job.timings?.queueWaitMs ?? startedAt - queuedAt;
           append('overall', queueSamples, qWait);
           if (job.profile) append(job.profile, queueSamples, qWait);
           if (job.type) append(job.type, queueSamples, qWait);
         }
 
         if (startedAt > 0 && finishedAt >= startedAt) {
-          const rDur = job.timings?.durationMs ?? (finishedAt - startedAt);
+          const rDur = job.timings?.durationMs ?? finishedAt - startedAt;
           append('overall', renderSamples, rDur);
           if (job.profile) append(job.profile, renderSamples, rDur);
           if (job.type) append(job.type, renderSamples, rDur);

@@ -232,9 +232,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
           return etag;
         }
 
-        lastErr = new Error(
-          `Storage service returned HTTP ${putRes.status}: ${putRes.statusText}`
-        );
+        lastErr = new Error(`Storage service returned HTTP ${putRes.status}: ${putRes.statusText}`);
       } catch (err: any) {
         if (err.name === 'AbortError' || isCancelledRef.current || isPausedRef.current) {
           throw err;
@@ -445,10 +443,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ onClose, onProjectCrea
 
     setProgressPercent(100);
     setStepLabel('Analysis enqueued! Redirecting to editor...');
-    toast.success(
-      `"${title}" uploaded! Video analysis & transcription queued.`,
-      'Media Uploaded'
-    );
+    toast.success(`"${title}" uploaded! Video analysis & transcription queued.`, 'Media Uploaded');
     setTimeout(() => {
       onProjectCreated(projectId);
     }, 800);

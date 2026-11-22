@@ -201,7 +201,9 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       // Repeated takes removal & opening tightening
       const isTighten15 =
         instruction.includes('tighten') &&
-        (instruction.includes('15') || instruction.includes('first') || instruction.includes('opening'));
+        (instruction.includes('15') ||
+          instruction.includes('first') ||
+          instruction.includes('opening'));
       const isRemoveRepeated =
         instruction.includes('repeated') ||
         instruction.includes('take') ||
@@ -490,8 +492,13 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       ) {
         const audLayer = currentPlan.layers?.find((l: any) => l.layer === 'audio');
         const audId = audLayer?.id || 'lyr_aud_1';
-        const targetLufs = instruction.includes('-14') ? -14 : instruction.includes('-23') ? -23 : -16;
-        const wantDenoise = !instruction.includes('disable denoise') && !instruction.includes('no denoise');
+        const targetLufs = instruction.includes('-14')
+          ? -14
+          : instruction.includes('-23')
+            ? -23
+            : -16;
+        const wantDenoise =
+          !instruction.includes('disable denoise') && !instruction.includes('no denoise');
 
         if (audLayer) {
           patches.push({
@@ -586,7 +593,15 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         instruction.includes('stock')
       ) {
         let asset = 'broll_tech';
-        for (const k of ['tech', 'city', 'nature', 'workspace', 'cyberpunk', 'abstract', 'finance']) {
+        for (const k of [
+          'tech',
+          'city',
+          'nature',
+          'workspace',
+          'cyberpunk',
+          'abstract',
+          'finance',
+        ]) {
           if (instruction.includes(k)) {
             asset = `broll_${k}`;
             break;
@@ -595,8 +610,8 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         const mediaType = instruction.includes('generative')
           ? 'generative'
           : instruction.includes('image')
-          ? 'image'
-          : 'broll';
+            ? 'image'
+            : 'broll';
 
         const sStart = Math.min(totalDurationSec - 2, 2.5);
         const sEnd = Math.min(totalDurationSec, sStart + 3.0);
@@ -634,25 +649,61 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         // Patch color layer
         const colLayer = currentPlan.layers?.find((l: any) => l.layer === 'color');
         if (colLayer) {
-          patches.push({ op: 'replace', path: `/layers/${colLayer.id}/params/preset`, value: profile.color.preset });
-          patches.push({ op: 'replace', path: `/layers/${colLayer.id}/params/contrast`, value: profile.color.contrast });
-          patches.push({ op: 'replace', path: `/layers/${colLayer.id}/params/saturation`, value: profile.color.saturation });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${colLayer.id}/params/preset`,
+            value: profile.color.preset,
+          });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${colLayer.id}/params/contrast`,
+            value: profile.color.contrast,
+          });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${colLayer.id}/params/saturation`,
+            value: profile.color.saturation,
+          });
         }
 
         // Patch subtitle layer
         const subLayer = currentPlan.layers?.find((l: any) => l.layer === 'subtitle');
         if (subLayer) {
-          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/style`, value: profile.typography.style });
-          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/font`, value: profile.typography.font });
-          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/highlightColor`, value: profile.typography.highlightColor });
-          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/size`, value: profile.typography.size });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subLayer.id}/params/style`,
+            value: profile.typography.style,
+          });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subLayer.id}/params/font`,
+            value: profile.typography.font,
+          });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subLayer.id}/params/highlightColor`,
+            value: profile.typography.highlightColor,
+          });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subLayer.id}/params/size`,
+            value: profile.typography.size,
+          });
         }
 
         // Patch music layer
         const musLayer = currentPlan.layers?.find((l: any) => l.layer === 'music');
         if (musLayer) {
-          patches.push({ op: 'replace', path: `/layers/${musLayer.id}/params/duckUnderSpeech`, value: profile.audio.duckUnderSpeech });
-          patches.push({ op: 'replace', path: `/layers/${musLayer.id}/params/volume`, value: profile.audio.musicVolume });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${musLayer.id}/params/duckUnderSpeech`,
+            value: profile.audio.duckUnderSpeech,
+          });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${musLayer.id}/params/volume`,
+            value: profile.audio.musicVolume,
+          });
         }
       }
 
@@ -708,8 +759,16 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         // Update subtitle styling to bold viral word-pop
         const subLayer = currentPlan.layers?.find((l: any) => l.layer === 'subtitle');
         if (subLayer) {
-          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/style`, value: 'word_pop' });
-          patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/highlightColor`, value: '#FFD700' });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subLayer.id}/params/style`,
+            value: 'word_pop',
+          });
+          patches.push({
+            op: 'replace',
+            path: `/layers/${subLayer.id}/params/highlightColor`,
+            value: '#FFD700',
+          });
           patches.push({ op: 'replace', path: `/layers/${subLayer.id}/params/size`, value: 58 });
         } else {
           patches.push({
@@ -796,9 +855,7 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       instruction.includes('abdaal') ||
       instruction.includes('vox');
 
-    const styleProfile = isStyleTransfer
-      ? ReferenceStyleService.analyzeStyle(instruction)
-      : null;
+    const styleProfile = isStyleTransfer ? ReferenceStyleService.analyzeStyle(instruction) : null;
 
     const layers: any[] = [];
     let layerCounter = 1;
@@ -813,7 +870,10 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     if (isShortRequested && totalDurationSec > 45 && ctx.highlights && ctx.highlights.length > 0) {
       const topHl = ctx.highlights[0];
       const hlStart = Math.max(0, topHl.startSec || 0);
-      const hlEnd = Math.min(totalDurationSec, topHl.endSec || Math.min(totalDurationSec, hlStart + 60));
+      const hlEnd = Math.min(
+        totalDurationSec,
+        topHl.endSec || Math.min(totalDurationSec, hlStart + 60)
+      );
 
       if (hlStart > 1.0) {
         layers.push({
@@ -840,7 +900,9 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     // 1. Cut Layer (silences, repeated takes, and opening tightening)
     const isTighten15Init =
       instruction.includes('tighten') &&
-      (instruction.includes('15') || instruction.includes('first') || instruction.includes('opening'));
+      (instruction.includes('15') ||
+        instruction.includes('first') ||
+        instruction.includes('opening'));
     const isRemoveRepeatedInit =
       instruction.includes('repeated') ||
       instruction.includes('take') ||
@@ -910,14 +972,14 @@ export class GeminiPlannerAdapter implements PlannerProvider {
     const preset = styleProfile
       ? styleProfile.color.preset
       : instruction.includes('warm')
-      ? 'warm'
-      : instruction.includes('cool')
-        ? 'cool'
-        : instruction.includes('bw') || instruction.includes('monochrome')
-          ? 'bw'
-          : instruction.includes('vivid')
-            ? 'vivid'
-            : 'cinematic';
+        ? 'warm'
+        : instruction.includes('cool')
+          ? 'cool'
+          : instruction.includes('bw') || instruction.includes('monochrome')
+            ? 'bw'
+            : instruction.includes('vivid')
+              ? 'vivid'
+              : 'cinematic';
 
     layers.push({
       id: `lyr_col_${layerCounter++}`,
@@ -929,7 +991,9 @@ export class GeminiPlannerAdapter implements PlannerProvider {
         contrast: styleProfile ? styleProfile.color.contrast : 1.15,
         saturation: preset === 'bw' ? 0 : styleProfile ? styleProfile.color.saturation : 0.95,
         vignette: styleProfile?.color.vignette ?? 0.25,
-        grain: styleProfile?.color.grain ?? (instruction.includes('grain') || instruction.includes('vintage') ? 0.2 : 0),
+        grain:
+          styleProfile?.color.grain ??
+          (instruction.includes('grain') || instruction.includes('vintage') ? 0.2 : 0),
         lut: styleProfile?.color.lut || ctx.availableCatalog?.luts?.[0]?.id || 'teal_orange',
       },
     });
@@ -963,7 +1027,8 @@ export class GeminiPlannerAdapter implements PlannerProvider {
           size: styleProfile?.typography.size || (isShortRequested ? 58 : 52),
           position: styleProfile?.typography.position || 'bottom',
           primaryColor: styleProfile?.typography.primaryColor || '#FFFFFF',
-          highlightColor: styleProfile?.typography.highlightColor || (isShortRequested ? '#FFD700' : '#FFD84D'),
+          highlightColor:
+            styleProfile?.typography.highlightColor || (isShortRequested ? '#FFD700' : '#FFD84D'),
           maxWordsPerLine: styleProfile?.typography.maxWordsPerLine || (isShortRequested ? 3 : 4),
         },
       });
@@ -1103,8 +1168,8 @@ export class GeminiPlannerAdapter implements PlannerProvider {
       const mediaType = instruction.includes('generative')
         ? 'generative'
         : instruction.includes('image')
-        ? 'image'
-        : 'broll';
+          ? 'image'
+          : 'broll';
 
       const sStart = Math.min(totalDurationSec - 2, 2.5);
       const sEnd = Math.min(totalDurationSec, sStart + 3.0);

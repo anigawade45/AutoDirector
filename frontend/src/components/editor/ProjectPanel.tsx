@@ -26,11 +26,7 @@ import {
   Zap,
   Bookmark,
 } from 'lucide-react';
-import {
-  useEditorStore,
-  selectEffectivePlan,
-  selectMediaIndex,
-} from '../../stores/editorStore';
+import { useEditorStore, selectEffectivePlan, selectMediaIndex } from '../../stores/editorStore';
 import { api } from '../../api/client';
 import { toast } from '../../stores/toastStore';
 import { computeNaturalWordTimings } from '../../utils/subtitleTiming';
@@ -207,19 +203,21 @@ export const ProjectPanel: React.FC = () => {
   // Filtered dialogue cues
   const filteredCues = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return cues.map((cue, originalIndex) => ({ cue, originalIndex })).filter(({ cue }) => {
-      if (selectedSpeakerFilter && (cue.speaker || 'Speaker 1') !== selectedSpeakerFilter) {
-        return false;
-      }
-      if (q) {
-        const textMatch = (cue.text || '').toLowerCase().includes(q);
-        const wordMatch = cue.words?.some((w: any) =>
-          ((w as any).word || (w as any).w || '').toLowerCase().includes(q)
-        );
-        return textMatch || wordMatch;
-      }
-      return true;
-    });
+    return cues
+      .map((cue, originalIndex) => ({ cue, originalIndex }))
+      .filter(({ cue }) => {
+        if (selectedSpeakerFilter && (cue.speaker || 'Speaker 1') !== selectedSpeakerFilter) {
+          return false;
+        }
+        if (q) {
+          const textMatch = (cue.text || '').toLowerCase().includes(q);
+          const wordMatch = cue.words?.some((w: any) =>
+            ((w as any).word || (w as any).w || '').toLowerCase().includes(q)
+          );
+          return textMatch || wordMatch;
+        }
+        return true;
+      });
   }, [cues, searchQuery, selectedSpeakerFilter]);
 
   return (
@@ -264,7 +262,9 @@ export const ProjectPanel: React.FC = () => {
           </div>
           <div className="space-y-0.5">
             <span className="text-[#FFF5F5]/50 block">Aspect Ratio</span>
-            <span className="font-mono text-[#FFF5F5] font-medium">{project?.aspect || '16:9'}</span>
+            <span className="font-mono text-[#FFF5F5] font-medium">
+              {project?.aspect || '16:9'}
+            </span>
           </div>
         </div>
       </div>
@@ -306,9 +306,13 @@ export const ProjectPanel: React.FC = () => {
           >
             <FileText className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Transcript</span>
-            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
-              activeTab === 'transcript' ? 'bg-[#18191B]/20 text-[#18191B]' : 'bg-white/10 text-[#FFF5F5]/60'
-            }`}>
+            <span
+              className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
+                activeTab === 'transcript'
+                  ? 'bg-[#18191B]/20 text-[#18191B]'
+                  : 'bg-white/10 text-[#FFF5F5]/60'
+              }`}
+            >
               {cues.length}
             </span>
           </button>
@@ -325,9 +329,13 @@ export const ProjectPanel: React.FC = () => {
           >
             <Video className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Scenes</span>
-            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
-              activeTab === 'scenes' ? 'bg-[#18191B]/20 text-[#18191B]' : 'bg-white/10 text-[#FFF5F5]/60'
-            }`}>
+            <span
+              className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
+                activeTab === 'scenes'
+                  ? 'bg-[#18191B]/20 text-[#18191B]'
+                  : 'bg-white/10 text-[#FFF5F5]/60'
+              }`}
+            >
               {mediaIndex.scenes.length}
             </span>
           </button>
@@ -344,9 +352,13 @@ export const ProjectPanel: React.FC = () => {
           >
             <Users className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Speakers</span>
-            <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
-              activeTab === 'speakers' ? 'bg-[#18191B]/20 text-[#18191B]' : 'bg-white/10 text-[#FFF5F5]/60'
-            }`}>
+            <span
+              className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full shrink-0 font-bold ${
+                activeTab === 'speakers'
+                  ? 'bg-[#18191B]/20 text-[#18191B]'
+                  : 'bg-white/10 text-[#FFF5F5]/60'
+              }`}
+            >
               {mediaIndex.speakers.length}
             </span>
           </button>
@@ -385,7 +397,11 @@ export const ProjectPanel: React.FC = () => {
                 onClick={() => setIsEditing(!isEditing)}
                 className="px-2 py-1 rounded text-[10px] bg-[#222326] hover:bg-[#2A2C2F] text-[#FFF5F5] border border-[#393B3F] flex items-center space-x-1 shrink-0"
               >
-                {isEditing ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Edit3 className="w-2.5 h-2.5 text-[#E3B5BE]" />}
+                {isEditing ? (
+                  <Check className="w-2.5 h-2.5 text-emerald-400" />
+                ) : (
+                  <Edit3 className="w-2.5 h-2.5 text-[#E3B5BE]" />
+                )}
                 <span>{isEditing ? 'Done' : 'Edit'}</span>
               </button>
 
@@ -496,7 +512,9 @@ export const ProjectPanel: React.FC = () => {
                           {cue.text?.trim() ? (
                             `"${cue.text.trim()}"`
                           ) : (
-                            <span className="text-red-400 italic">[Empty Caption — Click Edit to add text]</span>
+                            <span className="text-red-400 italic">
+                              [Empty Caption — Click Edit to add text]
+                            </span>
                           )}
                         </p>
                       )}
@@ -659,7 +677,9 @@ export const ProjectPanel: React.FC = () => {
                     </div>
 
                     <div className="flex items-center justify-between text-[10px] text-[#FFF5F5]/50 font-mono">
-                      <span>{spk.cuesCount} cues • {spk.wordCount} words</span>
+                      <span>
+                        {spk.cuesCount} cues • {spk.wordCount} words
+                      </span>
                       <span>Active in {spk.sceneIndices.length} scene(s)</span>
                     </div>
                   </div>
@@ -842,7 +862,8 @@ export const ProjectPanel: React.FC = () => {
                     {op.startSec !== undefined && (
                       <span className="font-mono text-[#FFF5F5]/60 text-[9px] flex items-center gap-1 group-hover:text-[#E3B5BE]">
                         <Clock className="w-2.5 h-2.5" />
-                        {op.startSec.toFixed(1)}s{op.endSec !== undefined ? ` - ${op.endSec.toFixed(1)}s` : ''}
+                        {op.startSec.toFixed(1)}s
+                        {op.endSec !== undefined ? ` - ${op.endSec.toFixed(1)}s` : ''}
                       </span>
                     )}
                   </div>
@@ -852,9 +873,7 @@ export const ProjectPanel: React.FC = () => {
                     </span>
                     <ChevronRight className="w-3 h-3 text-[#FFF5F5]/30 group-hover:text-[#E3B5BE] group-hover:translate-x-0.5 transition-transform shrink-0" />
                   </div>
-                  <p className="text-[10px] text-[#FFF5F5]/60 truncate font-mono">
-                    {op.summary}
-                  </p>
+                  <p className="text-[10px] text-[#FFF5F5]/60 truncate font-mono">{op.summary}</p>
                 </div>
               ))}
               {ops.length > 100 && (

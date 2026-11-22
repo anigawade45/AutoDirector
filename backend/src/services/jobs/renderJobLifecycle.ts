@@ -158,7 +158,10 @@ export class RenderJobLifecycle {
       job.timings.finishedAt = now;
       job.percent = 100;
       if (job.timings.startedAt) {
-        const renderDurationMs = Math.max(0, now.getTime() - new Date(job.timings.startedAt).getTime());
+        const renderDurationMs = Math.max(
+          0,
+          now.getTime() - new Date(job.timings.startedAt).getTime()
+        );
         job.timings.durationMs = renderDurationMs;
         RenderLatencyTracker.recordRenderLatency(renderDurationMs, {
           type: job.type,

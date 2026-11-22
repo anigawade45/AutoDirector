@@ -333,7 +333,9 @@ export function resolveCueOverlaps<
 
   const sorted = [...cues].map((c) => ({
     ...c,
-    text: String(c.text || (c.words || []).map((w: any) => w.word || w.w || '').join(' ') || '').trim(),
+    text: String(
+      c.text || (c.words || []).map((w: any) => w.word || w.w || '').join(' ') || ''
+    ).trim(),
     startMs: Math.max(0, Math.round(Number(c.startMs) || 0)),
     endMs: Math.max(0, Math.round(Number(c.endMs) || 0)),
     words: Array.isArray(c.words) ? [...c.words] : [],
@@ -629,9 +631,7 @@ export function alignCuesToSpeechIntervals<
     const cueStart = Number(cue.startMs) || 0;
     const cueEnd = Number(cue.endMs) || cueStart + 1000;
     const cueText = String(
-      cue.text ||
-      (cue.words || []).map((w: any) => w.w || w.word || '').join(' ') ||
-      ''
+      cue.text || (cue.words || []).map((w: any) => w.w || w.word || '').join(' ') || ''
     ).trim();
 
     let targetStart = cueStart;

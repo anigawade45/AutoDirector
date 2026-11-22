@@ -117,7 +117,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose }) => 
             <>
               {(() => {
                 const activePlan = plan.draft || plan.current;
-                const shortsList = (activePlan as any)?.shorts || (activePlan?.meta as any)?.shorts || [];
+                const shortsList =
+                  (activePlan as any)?.shorts || (activePlan?.meta as any)?.shorts || [];
                 if (!shortsList || shortsList.length === 0) return null;
                 return (
                   <div className="p-3 rounded-xl bg-gradient-to-r from-[#2A2326] to-[#1F2023] border border-[#E3B5BE]/60 text-xs text-[#FFF5F5] flex items-center justify-between">

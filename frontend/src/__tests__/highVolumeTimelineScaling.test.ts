@@ -103,7 +103,11 @@ describe('High-Volume Timeline Operations Scaling & Latency Benchmark (500+ to 1
       parentVersion: null,
       global: { aspect: '16:9', fps: 30, resolution: '1080p' },
       layers,
-      meta: { prompt: 'High volume scaling test', model: 'ai-director', createdAt: new Date().toISOString() },
+      meta: {
+        prompt: 'High volume scaling test',
+        model: 'ai-director',
+        createdAt: new Date().toISOString(),
+      },
     };
   }
 

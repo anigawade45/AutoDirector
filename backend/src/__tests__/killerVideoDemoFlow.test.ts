@@ -192,7 +192,9 @@ describe('Killer Video Demo Architecture & End-to-End Flow Verification', () => 
       expect(cue1.text).toContain('check the mic'); // Take 1 stumble (0s - 4.2s)
       expect(cue1.startMs).toBe(0);
       expect(cue2.text).toContain('start with the hook'); // Take 2 restart (6.2s - 11.4s)
-      expect(cue3.text).toContain('Today, we are revealing the secret to 10x developer productivity'); // Take 3 winner (13.0s)
+      expect(cue3.text).toContain(
+        'Today, we are revealing the secret to 10x developer productivity'
+      ); // Take 3 winner (13.0s)
 
       // AnalysisResult assertions: Verify 3 highlights for Shorts extraction
       expect(createdAnalysisDoc.highlights.length).toBe(3);
@@ -347,7 +349,9 @@ describe('Killer Video Demo Architecture & End-to-End Flow Verification', () => 
       expect(hasTightenPacing).toBe(true);
 
       // Verify patch operation for 3 Shorts
-      const shortsPatch = output.patch.find((p) => p.path === '/shorts' || p.path === '/meta/shorts');
+      const shortsPatch = output.patch.find(
+        (p) => p.path === '/shorts' || p.path === '/meta/shorts'
+      );
       expect(shortsPatch).toBeDefined();
       expect(shortsPatch.value.length).toBe(3);
     });
@@ -454,7 +458,8 @@ describe('Killer Video Demo Architecture & End-to-End Flow Verification', () => 
           },
         ],
         meta: {
-          prompt: 'Tighten the first 15 seconds, remove repeated takes, add B-roll and generate three Shorts',
+          prompt:
+            'Tighten the first 15 seconds, remove repeated takes, add B-roll and generate three Shorts',
           model: 'rule-engine-v1',
           createdAt: new Date().toISOString(),
         },

@@ -169,7 +169,10 @@ export async function request<T>(endpoint: string, options: RequestInit = {}): P
     const detailsSummary =
       Array.isArray(payload?.error?.details) && payload.error.details.length > 0
         ? payload.error.details
-            .map((d: any) => `${d.field ? d.field + ': ' : ''}${d.issue || d.message || JSON.stringify(d)}`)
+            .map(
+              (d: any) =>
+                `${d.field ? d.field + ': ' : ''}${d.issue || d.message || JSON.stringify(d)}`
+            )
             .join('; ')
         : null;
 
@@ -253,8 +256,7 @@ export const api = {
       method: 'POST',
     }),
 
-  getUploadStatus: (uploadId: string) =>
-    request<UploadStatusResponseData>(`/uploads/${uploadId}`),
+  getUploadStatus: (uploadId: string) => request<UploadStatusResponseData>(`/uploads/${uploadId}`),
 
   getActiveProjectUpload: (projectId: string) =>
     request<UploadStatusResponseData | { hasActiveUpload: false }>(

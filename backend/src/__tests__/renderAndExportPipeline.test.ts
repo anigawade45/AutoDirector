@@ -117,21 +117,26 @@ describe('Asynchronous Render and Export Pipeline Suite', () => {
       await RendersController.enqueuePreview(mockReq as Request, mockRes as Response, nextFn);
 
       expect(statusMock).toHaveBeenCalledWith(202);
-      expect(previewQueue.add).toHaveBeenCalledWith('render-preview', expect.objectContaining({
-        projectId: 'prj_preview_test',
-        planVersion: 2,
-        profile: 'preview_480p',
-        type: 'preview',
-      }));
-      expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-        data: expect.objectContaining({
-          jobId: 'job_672b22222222222222222222',
-          state: 'queued',
+      expect(previewQueue.add).toHaveBeenCalledWith(
+        'render-preview',
+        expect.objectContaining({
+          projectId: 'prj_preview_test',
+          planVersion: 2,
+          profile: 'preview_480p',
           type: 'preview',
-          eventsUrl: '/api/jobs/job_672b22222222222222222222/events',
-        }),
-      }));
+        })
+      );
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            jobId: 'job_672b22222222222222222222',
+            state: 'queued',
+            type: 'preview',
+            eventsUrl: '/api/jobs/job_672b22222222222222222222/events',
+          }),
+        })
+      );
     });
 
     it('returns existing cached preview job (HTTP 200) when identical snapshot is already rendered', async () => {
@@ -166,15 +171,17 @@ describe('Asynchronous Render and Export Pipeline Suite', () => {
 
       expect(statusMock).toHaveBeenCalledWith(200);
       expect(previewQueue.add).not.toHaveBeenCalled();
-      expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-        data: expect.objectContaining({
-          jobId: 'job_672b88888888888888888888',
-          state: 'completed',
-          type: 'preview',
-          downloadUrl: '/api/jobs/job_672b88888888888888888888/download',
-        }),
-      }));
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            jobId: 'job_672b88888888888888888888',
+            state: 'completed',
+            type: 'preview',
+            downloadUrl: '/api/jobs/job_672b88888888888888888888/download',
+          }),
+        })
+      );
     });
   });
 
@@ -228,28 +235,37 @@ describe('Asynchronous Render and Export Pipeline Suite', () => {
       mockReq = {
         params: { id: 'prj_export_ok' },
         body: { profile: 'final_1080p' },
-        user: { _id: '672b99999999999999999999', id: '672b99999999999999999999', tier: 'pro' } as any,
+        user: {
+          _id: '672b99999999999999999999',
+          id: '672b99999999999999999999',
+          tier: 'pro',
+        } as any,
         id: 'req_export_1',
       };
 
       await RendersController.enqueueExport(mockReq as Request, mockRes as Response, nextFn);
 
       expect(QuotaService.checkRenderMinutesQuota).toHaveBeenCalledWith('672b99999999999999999999');
-      expect(renderQueue.add).toHaveBeenCalledWith('render-export', expect.objectContaining({
-        projectId: 'prj_export_ok',
-        planVersion: 3,
-        profile: 'final_1080p',
-        type: 'export',
-      }));
+      expect(renderQueue.add).toHaveBeenCalledWith(
+        'render-export',
+        expect.objectContaining({
+          projectId: 'prj_export_ok',
+          planVersion: 3,
+          profile: 'final_1080p',
+          type: 'export',
+        })
+      );
       expect(statusMock).toHaveBeenCalledWith(202);
-      expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-        data: expect.objectContaining({
-          jobId: 'job_672b33333333333333333333',
-          state: 'queued',
-          type: 'render',
-        }),
-      }));
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            jobId: 'job_672b33333333333333333333',
+            state: 'queued',
+            type: 'render',
+          }),
+        })
+      );
     });
   });
 
@@ -302,13 +318,15 @@ describe('Asynchronous Render and Export Pipeline Suite', () => {
         3600
       );
       expect(statusMock).toHaveBeenCalledWith(200);
-      expect(jsonMock).toHaveBeenCalledWith(expect.objectContaining({
-        success: true,
-        data: expect.objectContaining({
-          url: expect.stringContaining('https://s3.amazonaws.com/test-bucket/final_render.mp4'),
-          expiresInSeconds: 3600,
-        }),
-      }));
+      expect(jsonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            url: expect.stringContaining('https://s3.amazonaws.com/test-bucket/final_render.mp4'),
+            expiresInSeconds: 3600,
+          }),
+        })
+      );
     });
   });
 
@@ -335,11 +353,9 @@ describe('Asynchronous Render and Export Pipeline Suite', () => {
         durationMs: 120000, // 2 minutes video
       };
 
-      const completed = await RenderJobLifecycle.transition(
-        mockJobDoc._id,
-        'completed',
-        { output: outputMeta }
-      );
+      const completed = await RenderJobLifecycle.transition(mockJobDoc._id, 'completed', {
+        output: outputMeta,
+      });
 
       expect(completed?.state).toBe('completed');
       expect(completed?.percent).toBe(100);

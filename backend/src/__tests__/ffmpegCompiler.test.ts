@@ -310,7 +310,7 @@ describe('Phase 3 Task 2: Pure FFmpeg Compiler compile(plan, analysis, profile)'
 
       const filterStr = result.args.join(' ');
       expect(filterStr).toContain('colorchannelmixer=aa=0.85');
-      expect(filterStr).toContain("between(t,4.00,10.00)");
+      expect(filterStr).toContain('between(t,4.00,10.00)');
     });
   });
 });
