@@ -17,6 +17,7 @@ export interface PlanValidationContext {
   assetDurationSec: number;
   fps?: number;
   maxDurationSec?: number;
+  maxLayers?: number;
 }
 
 export interface ValidationIssue {
@@ -90,10 +91,11 @@ export function validateEditPlan(
     return finalizeResult(issues);
   }
 
-  if (plan.layers.length > 200) {
+  const maxBudget = context.maxLayers ?? 2000;
+  if (plan.layers.length > maxBudget) {
     issues.push({
       field: 'layers',
-      message: `Layer count ${plan.layers.length} exceeds maximum allowed budget of 200.`,
+      message: `Layer count ${plan.layers.length} exceeds maximum allowed budget of ${maxBudget}.`,
       severity: 'error',
     });
   }

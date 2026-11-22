@@ -95,7 +95,7 @@ describe('Phase 5 Task 5: EditPlan Validation & Frame-Grid Alignment Engine', ()
         });
       }
 
-      const res = validateEditPlan(plan, { assetDurationSec: 30 });
+      const res = validateEditPlan(plan, { assetDurationSec: 30, maxLayers: 200 });
       expect(res.valid).toBe(false);
       expect(res.errors.some((e) => e.includes('exceeds maximum allowed budget of 200'))).toBe(
         true

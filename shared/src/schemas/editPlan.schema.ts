@@ -265,7 +265,7 @@ export const EditPlanSchema = z.object({
   version: z.number().int().nonnegative(),
   parentVersion: z.number().int().nonnegative().nullable().optional(),
   global: GlobalVideoSettingsSchema,
-  layers: z.array(EditLayerSchema).max(200),
+  layers: z.array(EditLayerSchema).max(2000),
   meta: EditPlanMetaSchema,
 });
 

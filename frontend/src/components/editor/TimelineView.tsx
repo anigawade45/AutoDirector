@@ -1141,6 +1141,14 @@ export const TimelineView: React.FC = () => {
                     const isSelected = !!clip.layerId && selectedLayerIds.includes(clip.layerId);
                     const leftPx = clip.startSec * zoom;
                     const widthPx = Math.max(14, clip.durSec * zoom);
+
+                    // Viewport culling for 500+ timeline operations scaling: skip offscreen clips
+                    const viewportLeft = (timeline.scrollX || 0) - 400;
+                    const viewportRight = (timeline.scrollX || 0) + (scrollContainerRef.current?.clientWidth || 1200) + 400;
+                    if (!isSelected && (leftPx + widthPx < viewportLeft || leftPx > viewportRight)) {
+                      return null;
+                    }
+
                     const isEditingCue = editingTimelineCueIndex === clip.cueIndex;
                     const isEditingColor = editingTimelineColorLayerId === clip.layerId;
 

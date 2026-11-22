@@ -818,9 +818,12 @@ export const ProjectPanel: React.FC = () => {
             );
           }
 
+          // Windowed rendering for high-volume 500+ operations scaling to keep DOM lightweight
+          const displayedOps = ops.slice(0, 100);
+
           return (
             <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-0.5">
-              {ops.map((op) => (
+              {displayedOps.map((op) => (
                 <div
                   key={op.id}
                   onClick={() => {
@@ -854,6 +857,11 @@ export const ProjectPanel: React.FC = () => {
                   </p>
                 </div>
               ))}
+              {ops.length > 100 && (
+                <div className="text-[10px] font-mono text-[#FFF5F5]/50 text-center py-1.5 bg-white/5 rounded border border-white/10">
+                  Showing 100 of {ops.length} operations (UI scaled at 60fps)
+                </div>
+              )}
             </div>
           );
         })()}

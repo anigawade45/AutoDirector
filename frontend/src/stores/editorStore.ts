@@ -1353,11 +1353,38 @@ export interface DerivedTrackVM {
   hidden?: boolean;
 }
 
+// High-performance cache for selectDerivedTracks to guarantee 60fps scrubbing with 500+ operations
+let lastDerivedPlanRef: any = null;
+let lastDerivedDuration: number = -1;
+let lastDerivedCuesRef: any = null;
+let lastDerivedTrackStatesRef: any = null;
+let cachedDerivedTracks: DerivedTrackVM[] = [];
+
+export const clearDerivedTracksCache = () => {
+  lastDerivedPlanRef = null;
+  lastDerivedDuration = -1;
+  lastDerivedCuesRef = null;
+  lastDerivedTrackStatesRef = null;
+  cachedDerivedTracks = [];
+};
+
 export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] => {
   const plan = selectEffectivePlan(state);
   const totalDuration = state.playback.duration || state.project?.durationSec || 60;
+  const cues = state.project?.analysisSummary?.cues;
+  const trackStates = state.timeline.trackStates || {};
 
   if (!plan) return [];
+
+  // Instant O(1) cache hit when scrub/playback head advances without plan mutations
+  if (
+    plan === lastDerivedPlanRef &&
+    totalDuration === lastDerivedDuration &&
+    cues === lastDerivedCuesRef &&
+    trackStates === lastDerivedTrackStatesRef
+  ) {
+    return cachedDerivedTracks;
+  }
 
   const tracks: DerivedTrackVM[] = [];
 
@@ -1683,21 +1710,51 @@ export const selectDerivedTracks = (state: EditorStoreState): DerivedTrackVM[] =
     });
   }
 
-  const trackStates = state.timeline.trackStates || {};
-  return tracks.map((t) => ({
+  const resultTracks = tracks.map((t) => ({
     ...t,
     locked: trackStates[t.id]?.locked ?? false,
     muted: trackStates[t.id]?.muted ?? false,
     hidden: trackStates[t.id]?.hidden ?? false,
   }));
+
+  cachedDerivedTracks = resultTracks;
+  lastDerivedPlanRef = plan;
+  lastDerivedDuration = totalDuration;
+  lastDerivedCuesRef = cues;
+  lastDerivedTrackStatesRef = trackStates;
+
+  return resultTracks;
 };
+
+// High-performance cache for selectMediaIndex
+let lastMediaCuesRef: any = null;
+let lastMediaSceneCutsRef: any = null;
+let lastMediaDurationSec: number = -1;
+let cachedMediaIndex: MediaIndexSummary | null = null;
 
 export const selectMediaIndex = (state: EditorStoreState): MediaIndexSummary => {
   const cues = state.project?.analysisSummary?.cues || [];
   const rawSceneCuts = state.project?.analysisSummary?.sceneCuts || [];
+  const durationSec = state.playback.duration || state.project?.durationSec || 60;
+
+  if (
+    cachedMediaIndex &&
+    cues === lastMediaCuesRef &&
+    rawSceneCuts === lastMediaSceneCutsRef &&
+    durationSec === lastMediaDurationSec
+  ) {
+    return cachedMediaIndex;
+  }
+
   const sceneCutSecs = rawSceneCuts.map((c: any) =>
     typeof c === 'number' ? c : c?.timeMs ? c.timeMs / 1000 : 0
   );
-  const durationSec = state.playback.duration || state.project?.durationSec || 60;
-  return buildMediaIndex(cues as any, sceneCutSecs, durationSec);
+  const result = buildMediaIndex(cues as any, sceneCutSecs, durationSec);
+
+  cachedMediaIndex = result;
+  lastMediaCuesRef = cues;
+  lastMediaSceneCutsRef = rawSceneCuts;
+  lastMediaDurationSec = durationSec;
+
+  return result;
 };

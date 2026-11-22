@@ -68,7 +68,7 @@ export class PlanNormalizer {
     // Raw layers
     let layers: any[] = Array.isArray(plan.layers) ? plan.layers : [];
 
-    // Filter out unknown layer types & clamp layers budget to max 200 (Spec §3.7 #5)
+    // Filter out unknown layer types & clamp layers budget to max 2000
     const allowedLayerTypes = [
       'cut',
       'speed',
@@ -175,8 +175,9 @@ export class PlanNormalizer {
     layers = layers.filter(
       (l) => l && typeof l === 'object' && allowedLayerTypes.includes(l.layer)
     );
-    if (layers.length > 200) {
-      layers = layers.slice(0, 200);
+    const maxLayers = options.maxLayers || 2000;
+    if (layers.length > maxLayers) {
+      layers = layers.slice(0, maxLayers);
     }
 
     let layerIdx = 1;
