@@ -17,13 +17,13 @@ export const QUEUE_CONFIGS: Record<'analysis' | 'preview' | 'render', QueueConfi
   analysis: {
     name: 'analysis',
     concurrency: 2,
-    timeoutMs: 20 * 60 * 1000, // 20 minutes
+    timeoutMs: 60 * 60 * 1000, // 60 minutes for up to 3 hours raw footage
     attempts: 3, // 2 retries, exponential backoff
     backoff: {
       type: 'exponential',
       delay: 5000,
     },
-    lockDurationMs: 120000, // 2 minutes with auto-renewal
+    lockDurationMs: 300000, // 5 minutes with auto-renewal
   },
   preview: {
     name: 'preview',

@@ -132,15 +132,21 @@ export class HighlightDiscoveryService {
     // Merge split points and sort
     const rawSplits = Array.from(new Set([...longPauses, ...majorCuts])).sort((a, b) => a - b);
 
-    // Filter splits so chapters are at least 10s apart
+    // Dynamic split spacing: for standard clips (<= 5m) use 10s min gap;
+    // for long-form footage (up to 3 hours), scale minChapterGap proportionally across the timeline
+    const minChapterGap =
+      durationMs > 300000 ? Math.max(60000, Math.floor(durationMs / 12)) : 10000;
+    const maxSplits = durationMs > 300000 ? 9 : 4; // up to 10 chapters for long-form, 5 for standard
+
+    // Filter splits so chapters are sufficiently separated
     const selectedSplits: number[] = [];
     let lastSplit = 0;
     for (const split of rawSplits) {
-      if (split - lastSplit >= 10000 && durationMs - split >= 8000) {
+      if (split - lastSplit >= minChapterGap && durationMs - split >= Math.min(8000, minChapterGap / 2)) {
         selectedSplits.push(split);
         lastSplit = split;
       }
-      if (selectedSplits.length >= 4) break; // Max 5 chapters total
+      if (selectedSplits.length >= maxSplits) break;
     }
 
     // Build chapter boundaries: [0, ...splits, durationMs]
@@ -211,9 +217,13 @@ export class HighlightDiscoveryService {
       ];
     }
 
-    // Windows of ~20s-45s across the video
+    // Windows of ~20s-45s across the video, stepped proportionally for long-form footage
     const windowDurMs = Math.min(30000, durationMs);
-    const stepMs = Math.max(10000, Math.floor(windowDurMs / 2));
+    const stepMs =
+      durationMs > 300000
+        ? Math.max(30000, Math.floor(durationMs / 20))
+        : Math.max(10000, Math.floor(windowDurMs / 2));
+    const maxCandidateWindows = durationMs > 300000 ? 15 : 6;
 
     let windowId = 1;
     for (let wStart = 0; wStart + 15000 <= durationMs; wStart += stepMs) {
@@ -265,7 +275,7 @@ export class HighlightDiscoveryService {
         reason,
       });
 
-      if (highlights.length >= 6) break;
+      if (highlights.length >= maxCandidateWindows) break;
     }
 
     // Sort by score descending and take top 4

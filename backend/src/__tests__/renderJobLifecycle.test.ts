@@ -35,15 +35,15 @@ describe('Phase 3 Task 1: RenderJob Lifecycle & BullMQ Queue Configurations', ()
   });
 
   describe('BullMQ Queue Configuration & Policies (API Contract §5.1)', () => {
-    it('configures analysis queue with concurrency 2, 20m timeout, and 2 retries with exponential backoff', () => {
+    it('configures analysis queue with concurrency 2, 60m timeout for long-form indexing, and 2 retries with exponential backoff', () => {
       const cfg = QUEUE_CONFIGS.analysis;
       expect(cfg.name).toBe('analysis');
       expect(cfg.concurrency).toBe(2);
-      expect(cfg.timeoutMs).toBe(20 * 60 * 1000); // 1,200,000 ms
+      expect(cfg.timeoutMs).toBe(60 * 60 * 1000); // 3,600,000 ms for up to 3 hours raw footage
       expect(cfg.attempts).toBe(3); // Initial + 2 retries
       expect(cfg.backoff.type).toBe('exponential');
       expect(cfg.backoff.delay).toBe(5000);
-      expect(cfg.lockDurationMs).toBe(120000);
+      expect(cfg.lockDurationMs).toBe(300000); // 5 minutes with auto-renewal
     });
 
     it('configures preview queue with concurrency 3, 5m timeout, and 1 retry', () => {

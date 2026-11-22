@@ -47,12 +47,19 @@ export function startAnalysisWorker() {
       const localAssPath = scratch.resolve(`${assetId}_subs_v1.ass`);
       const localCaptionedPreviewPath = scratch.resolve(`${assetId}_captioned_preview.mp4`);
 
-      try {
+      const reportProgress = async (percent: number) => {
         await JobEventsPublisher.publishProgress(jobId, {
           jobId,
           state: 'processing',
-          percent: 5,
+          percent,
         });
+        if (typeof job?.updateProgress === 'function') {
+          await job.updateProgress(percent).catch(() => {});
+        }
+      };
+
+      try {
+        await reportProgress(5);
 
         const asset = await AssetModel.findOne({ publicId: assetId });
         const project = await ProjectModel.findOne({ publicId: projectId });
@@ -84,11 +91,7 @@ export function startAnalysisWorker() {
           await asset.save();
         }
 
-        await JobEventsPublisher.publishProgress(jobId, {
-          jobId,
-          state: 'processing',
-          percent: 20,
-        });
+        await reportProgress(20);
 
         // 2. FFprobe Technical Inspection
         console.log(`[AnalysisWorker] Inspecting media streams with ffprobe...`);
@@ -109,11 +112,7 @@ export function startAnalysisWorker() {
         };
         await asset.save();
 
-        await JobEventsPublisher.publishProgress(jobId, {
-          jobId,
-          state: 'processing',
-          percent: 35,
-        });
+        await reportProgress(35);
 
         // 3. Generate 480p proxy preview video
         console.log(`[AnalysisWorker] Generating 480p proxy preview video...`);
@@ -131,11 +130,7 @@ export function startAnalysisWorker() {
           asset.s3.proxyKey = rawKey;
         }
 
-        await JobEventsPublisher.publishProgress(jobId, {
-          jobId,
-          state: 'processing',
-          percent: 50,
-        });
+        await reportProgress(50);
 
         // 4. Extract 16kHz mono audio WAV (stored under users/{uid}/projects/{pid}/audio/{assetId}.wav)
         const audioKey = StorageKeys.audioWav(userId, projectId, assetId);
@@ -164,22 +159,14 @@ export function startAnalysisWorker() {
         asset.status = 'ready';
         await asset.save();
 
-        await JobEventsPublisher.publishProgress(jobId, {
-          jobId,
-          state: 'processing',
-          percent: 65,
-        });
+        await reportProgress(65);
 
         // 5. Scene Cuts Detection (prefer 480p proxy to speed up processing 10x and prevent OOM on long/10-minute videos)
         console.log(`[AnalysisWorker] Detecting visual scene cuts...`);
         const sceneSource = fs.existsSync(localProxyPath) ? localProxyPath : localRawPath;
         const sceneCuts = await MediaProbeService.detectSceneCuts(sceneSource, 0.3);
 
-        await JobEventsPublisher.publishProgress(jobId, {
-          jobId,
-          state: 'processing',
-          percent: 75,
-        });
+        await reportProgress(75);
 
         // 6. Speech Transcription & Word-Level Captions
         console.log(`[AnalysisWorker] Transcribing dialogue and word boundaries...`);
@@ -254,11 +241,7 @@ export function startAnalysisWorker() {
           { upsert: true, new: true }
         );
 
-        await JobEventsPublisher.publishProgress(jobId, {
-          jobId,
-          state: 'processing',
-          percent: 85,
-        });
+        await reportProgress(85);
 
         // 9. Generate baseline EditPlan (v1), ASS subtitle file, and First Captioned Preview
         console.log(`[AnalysisWorker] Generating baseline EditPlan and first captioned preview...`);

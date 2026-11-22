@@ -20,12 +20,16 @@ export interface CaptionCue {
 }
 
 export class TranscriptionService {
+  public static readonly CHUNK_DURATION_MS = 5 * 60 * 1000; // 5 minutes (9.15MB at 16kHz mono WAV, safely under 14MB Gemini & 25MB Whisper limits)
+  public static readonly CHUNK_SIZE_THRESHOLD_BYTES = 14 * 1024 * 1024; // 14MB threshold
+
   /**
-   * Main transcription pipeline with clean provider cascade:
-   * 1. Local Whisper CLI (if available)
-   * 2. OpenAI Whisper API (if configured)
-   * 3. Google Gemini Multimodal AI (speech-to-text with word boundaries)
-   * 4. Acoustic silence fallback (for offline or silent tracks)
+   * Main transcription pipeline with clean provider cascade and long-form chunking:
+   * 1. If audio > 5 minutes or > 14MB, chunks into 5-minute segments for asynchronous parallel/sequential processing.
+   * 2. Local Whisper CLI (if available)
+   * 3. OpenAI Whisper API (if configured)
+   * 4. Google Gemini Multimodal AI (speech-to-text with word boundaries)
+   * 5. Acoustic silence fallback (for offline or silent tracks)
    */
   static async transcribeAudio(
     audioWavPath: string,
@@ -39,8 +43,10 @@ export class TranscriptionService {
       return [];
     }
 
+    let fileSize = 0;
     try {
       const stats = fs.statSync(audioWavPath);
+      fileSize = stats.size;
       if (stats.size === 0 || totalDurationMs <= 0) {
         return [];
       }
@@ -56,6 +62,182 @@ export class TranscriptionService {
       return [];
     }
 
+    // 0c. Long-form raw footage handling (up to 3 hours):
+    // If audio exceeds 5 minutes or 14MB, segment into 5-minute chunks to stay within API payload limits
+    if (totalDurationMs > this.CHUNK_DURATION_MS || fileSize > this.CHUNK_SIZE_THRESHOLD_BYTES) {
+      return this.transcribeLargeAudioChunks(
+        audioWavPath,
+        totalDurationMs,
+        silences,
+        language,
+        integratedLufs
+      );
+    }
+
+    return this.transcribeAudioSingleChunk(
+      audioWavPath,
+      totalDurationMs,
+      silences,
+      language,
+      integratedLufs
+    );
+  }
+
+  /**
+   * Handles long-form raw audio up to 3 hours by chunking into <= 5-minute segments.
+   * Transcribes each segment, shifts timestamps by chunk offsets, and merges into continuous cues.
+   */
+  public static async transcribeLargeAudioChunks(
+    audioWavPath: string,
+    totalDurationMs: number,
+    silences: SilenceInterval[] = [],
+    language: string = 'en',
+    integratedLufs?: number
+  ): Promise<CaptionCue[]> {
+    const numChunks = Math.ceil(totalDurationMs / this.CHUNK_DURATION_MS);
+    console.log(
+      `[TranscriptionService] Long-form audio detected (${Math.round(totalDurationMs / 1000)}s / ${(totalDurationMs / 3600000).toFixed(1)}h). Processing across ${numChunks} chunks of ${this.CHUNK_DURATION_MS / 1000}s each.`
+    );
+
+    const allCues: CaptionCue[] = [];
+    const tmpDir = path.dirname(audioWavPath);
+    const baseName = path.basename(audioWavPath, path.extname(audioWavPath));
+
+    for (let i = 0; i < numChunks; i++) {
+      const chunkStartMs = i * this.CHUNK_DURATION_MS;
+      const chunkEndMs = Math.min((i + 1) * this.CHUNK_DURATION_MS, totalDurationMs);
+      const chunkDurationMs = chunkEndMs - chunkStartMs;
+
+      if (chunkDurationMs <= 0) continue;
+
+      const chunkSilences = silences
+        .filter((s) => s.endMs > chunkStartMs && s.startMs < chunkEndMs)
+        .map((s) => ({
+          startMs: Math.max(0, s.startMs - chunkStartMs),
+          endMs: Math.min(chunkDurationMs, s.endMs - chunkStartMs),
+          avgDb: s.avgDb,
+        }));
+
+      const chunkWavPath = path.join(tmpDir, `${baseName}_chunk_${i}.wav`);
+      const startSec = (chunkStartMs / 1000).toFixed(3);
+      const durSec = (chunkDurationMs / 1000).toFixed(3);
+
+      const sliced = await this.sliceAudioChunk(
+        audioWavPath,
+        chunkWavPath,
+        Number(startSec),
+        Number(durSec)
+      );
+
+      if (sliced) {
+        try {
+          const chunkCues = await this.transcribeAudioSingleChunk(
+            chunkWavPath,
+            chunkDurationMs,
+            chunkSilences,
+            language,
+            integratedLufs
+          );
+
+          // Shift chunk cues by chunkStartMs
+          const shiftedCues = chunkCues.map((c, cueIdx) => ({
+            ...c,
+            id: `cue_${allCues.length + cueIdx + 1}`,
+            startMs: c.startMs + chunkStartMs,
+            endMs: c.endMs + chunkStartMs,
+            words: (c.words || []).map((w) => ({
+              ...w,
+              s: w.s + chunkStartMs,
+              e: w.e + chunkStartMs,
+            })),
+          }));
+
+          allCues.push(...shiftedCues);
+        } finally {
+          try {
+            if (fs.existsSync(chunkWavPath)) {
+              fs.unlinkSync(chunkWavPath);
+            }
+          } catch {}
+        }
+      } else {
+        // If slicing unavailable (e.g. mock test audio or ffmpeg not available),
+        // synthesize acoustic speech cues for this segment
+        const chunkAcoustic = this.generateAcousticSpeechCues(chunkDurationMs, chunkSilences);
+        const shiftedCues = chunkAcoustic.map((c, cueIdx) => ({
+          ...c,
+          id: `cue_${allCues.length + cueIdx + 1}`,
+          startMs: c.startMs + chunkStartMs,
+          endMs: c.endMs + chunkStartMs,
+          words: (c.words || []).map((w) => ({
+            ...w,
+            s: w.s + chunkStartMs,
+            e: w.e + chunkStartMs,
+          })),
+        }));
+        allCues.push(...shiftedCues);
+      }
+    }
+
+    if (allCues.length === 0) {
+      const acousticFallback = this.generateAcousticSpeechCues(totalDurationMs, silences);
+      return this.normalizeRawCues(acousticFallback, totalDurationMs);
+    }
+
+    return this.normalizeRawCues(allCues, totalDurationMs);
+  }
+
+  /**
+   * Slices a WAV audio chunk using ffmpeg copy.
+   */
+  public static async sliceAudioChunk(
+    inputWavPath: string,
+    outputWavPath: string,
+    startSec: number,
+    durationSec: number
+  ): Promise<boolean> {
+    try {
+      const { spawn } = await import('child_process');
+      const ffmpegCmd = env.FFMPEG_PATH || 'ffmpeg';
+      return new Promise<boolean>((resolve) => {
+        const proc = spawn(
+          ffmpegCmd,
+          [
+            '-y',
+            '-ss',
+            String(startSec),
+            '-t',
+            String(durationSec),
+            '-i',
+            inputWavPath,
+            '-c',
+            'copy',
+            outputWavPath,
+          ],
+          { stdio: ['ignore', 'ignore', 'ignore'] }
+        );
+        proc.on('close', (code) => {
+          resolve(code === 0 && fs.existsSync(outputWavPath));
+        });
+        proc.on('error', () => {
+          resolve(false);
+        });
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Transcribes a single audio chunk (<= 5 minutes) through the provider cascade.
+   */
+  public static async transcribeAudioSingleChunk(
+    audioWavPath: string,
+    totalDurationMs: number,
+    silences: SilenceInterval[] = [],
+    language: string = 'en',
+    integratedLufs?: number
+  ): Promise<CaptionCue[]> {
     // 1. If Open-Source Local Whisper is installed/configured
     const localCues = await this.transcribeWithLocalWhisper(
       audioWavPath,
