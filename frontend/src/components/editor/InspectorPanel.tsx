@@ -1088,50 +1088,55 @@ export const InspectorPanel: React.FC = () => {
       {activeLayer ? (
         <div className="bg-[#18191B] p-3.5 rounded-xl border border-[#393B3F] space-y-4">
           {/* Layer Header: Name, ID, Enable/Disable, Delete */}
-          <div className="flex items-center justify-between pb-2 border-b border-[#393B3F]">
-            <div className="flex items-center space-x-2">
-              <span className="font-semibold text-[#FFF5F5] capitalize text-xs">
-                {activeLayer.layer} Layer Properties
-              </span>
-              <span className="font-mono text-[10px] text-[#FFF5F5]/50">({activeLayer.id})</span>
+          <div className="pb-2.5 border-b border-[#393B3F] space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <span className="font-semibold text-[#FFF5F5] capitalize text-xs truncate">
+                  {activeLayer.layer} Layer Properties
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-1 shrink-0">
+                <button
+                  onClick={() => {
+                    const willBeEnabled = !activeLayer.enabled;
+                    updateDraft((d) => {
+                      const l = d.layers.find((lyr) => lyr.id === activeLayer.id);
+                      if (l) l.enabled = willBeEnabled;
+                    });
+                    toast.info(
+                      `${activeLayer.layer} layer ${willBeEnabled ? 'enabled' : 'disabled'}`,
+                      'Layer Visibility'
+                    );
+                  }}
+                  className="p-1 rounded hover:bg-[#2A2C2F] text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors"
+                  title={activeLayer.enabled ? 'Disable layer' : 'Enable layer'}
+                >
+                  {activeLayer.enabled ? (
+                    <Eye className="w-3.5 h-3.5 text-[#E3B5BE]" />
+                  ) : (
+                    <EyeOff className="w-3.5 h-3.5 text-[#484949]" />
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
+                    const lyrName = activeLayer.layer;
+                    updateDraft((d) => {
+                      d.layers = d.layers.filter((lyr) => lyr.id !== activeLayer.id);
+                    });
+                    toast.warning(`Removed ${lyrName} layer from sequence`, 'Layer Removed');
+                  }}
+                  className="p-1 rounded hover:bg-rose-500/20 text-[#FFF5F5]/60 hover:text-rose-400 transition-colors"
+                  title="Remove layer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => {
-                  const willBeEnabled = !activeLayer.enabled;
-                  updateDraft((d) => {
-                    const l = d.layers.find((lyr) => lyr.id === activeLayer.id);
-                    if (l) l.enabled = willBeEnabled;
-                  });
-                  toast.info(
-                    `${activeLayer.layer} layer ${willBeEnabled ? 'enabled' : 'disabled'}`,
-                    'Layer Visibility'
-                  );
-                }}
-                className="p-1 text-[#FFF5F5]/60 hover:text-[#FFF5F5] transition-colors"
-                title={activeLayer.enabled ? 'Disable layer' : 'Enable layer'}
-              >
-                {activeLayer.enabled ? (
-                  <Eye className="w-3.5 h-3.5 text-[#E3B5BE]" />
-                ) : (
-                  <EyeOff className="w-3.5 h-3.5 text-[#484949]" />
-                )}
-              </button>
-
-              <button
-                onClick={() => {
-                  const lyrName = activeLayer.layer;
-                  updateDraft((d) => {
-                    d.layers = d.layers.filter((lyr) => lyr.id !== activeLayer.id);
-                  });
-                  toast.warning(`Removed ${lyrName} layer from sequence`, 'Layer Removed');
-                }}
-                className="p-1 text-[#FFF5F5]/40 hover:text-red-400 transition-colors"
-                title="Remove layer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+            <div className="font-mono text-[9px] text-[#FFF5F5]/40 truncate">
+              ID: {activeLayer.id}
             </div>
           </div>
 
@@ -1590,15 +1595,15 @@ export const InspectorPanel: React.FC = () => {
               </div>
 
               {/* Dialogue & Captions In-Place Editor */}
-              <div className="pt-3 border-t border-[#393B3F] space-y-2.5">
+              <div className="pt-3 border-t border-[#393B3F] space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-1.5">
-                    <FileText className="w-3.5 h-3.5 text-[#E3B5BE]" />
-                    <span className="font-semibold text-xs text-[#FFF5F5]">
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <FileText className="w-3.5 h-3.5 text-[#E3B5BE] shrink-0" />
+                    <span className="font-semibold text-xs text-[#FFF5F5] truncate">
                       Dialogue & Captions ({project?.analysisSummary?.cues?.length || 0})
                     </span>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1.5 shrink-0">
                     {captionSaveStatus === 'saving' && (
                       <span className="flex items-center space-x-1 text-[10px] text-[#E3B5BE]">
                         <Loader2 className="w-2.5 h-2.5 animate-spin" />
@@ -1611,55 +1616,59 @@ export const InspectorPanel: React.FC = () => {
                         <span>Saved</span>
                       </span>
                     )}
+                  </div>
+                </div>
+
+                {/* Subtitle Action Toolbar - Wrapped gracefully to avoid overflow */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleAddCueLine}
+                    className="px-2 py-1 rounded text-[10px] bg-[#E3B5BE]/15 hover:bg-[#E3B5BE]/25 text-[#F7D7D1] border border-[#E3B5BE]/40 flex items-center space-x-1 transition-colors"
+                    title="Add a subtitle line at current playhead position"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add Line</span>
+                  </button>
+                  {cues.length > 0 && videoDurationMs > 0 && (
                     <button
                       type="button"
-                      onClick={handleAddCueLine}
-                      className="px-2 py-0.5 rounded text-[10px] bg-[#E3B5BE]/15 hover:bg-[#E3B5BE]/25 text-[#F7D7D1] border border-[#E3B5BE]/40 flex items-center space-x-1 transition-colors"
-                      title="Add a subtitle line at current playhead position"
+                      onClick={handleCalibrateTimingsToVideo}
+                      className="px-2 py-1 rounded text-[10px] bg-[#393B3F] hover:bg-[#484949] text-[#FFF5F5]/80 border border-[#484949] flex items-center space-x-1 transition-colors"
+                      title="Synchronize all subtitle timestamps to fit video duration"
                     >
-                      <Plus className="w-3 h-3" />
-                      <span>Add Line</span>
+                      <RefreshCw className="w-2.5 h-2.5 text-[#E3B5BE]" />
+                      <span>Fit Video</span>
                     </button>
-                    {cues.length > 0 && videoDurationMs > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleCalibrateTimingsToVideo}
-                        className="px-2 py-0.5 rounded text-[10px] bg-[#393B3F] hover:bg-[#484949] text-[#FFF5F5]/80 border border-[#484949] flex items-center space-x-1 transition-colors"
-                        title="Synchronize all subtitle timestamps to fit video duration"
-                      >
-                        <RefreshCw className="w-2.5 h-2.5 text-[#E3B5BE]" />
-                        <span>Fit Video</span>
-                      </button>
-                    )}
-                    {hasOverlaps && (
-                      <button
-                        type="button"
-                        onClick={handleResolveOverlaps}
-                        className="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 flex items-center space-x-1 transition-colors"
-                        title="Fix overlapping subtitle start/end times"
-                      >
-                        <Scissors className="w-2.5 h-2.5 text-rose-400" />
-                        <span>Fix Overlaps</span>
-                      </button>
-                    )}
-                    {cues.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleAcousticSnap}
-                        className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1 transition-colors"
-                        title="Acoustically snap all subtitles to physical vocal speech intervals"
-                      >
-                        <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
-                        <span>Waveform Align</span>
-                      </button>
-                    )}
-                  </div>
+                  )}
+                  {hasOverlaps && (
+                    <button
+                      type="button"
+                      onClick={handleResolveOverlaps}
+                      className="px-2 py-1 rounded text-[10px] bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 flex items-center space-x-1 transition-colors"
+                      title="Fix overlapping subtitle start/end times"
+                    >
+                      <Scissors className="w-2.5 h-2.5 text-rose-400" />
+                      <span>Fix Overlaps</span>
+                    </button>
+                  )}
+                  {cues.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleAcousticSnap}
+                      className="px-2 py-1 rounded text-[10px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 flex items-center space-x-1 transition-colors"
+                      title="Acoustically snap all subtitles to physical vocal speech intervals"
+                    >
+                      <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                      <span>Waveform Align</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Timestamp Drift Warning & 1-Click Auto-Calibration */}
                 {hasDurationDrift && (
                   <div className="p-2.5 rounded-lg bg-amber-500/15 border border-amber-500/40 space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <div className="flex items-center space-x-1.5 text-amber-300 text-xs font-semibold">
                         <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                         <span>Timestamp Drift Detected</span>
@@ -1683,7 +1692,7 @@ export const InspectorPanel: React.FC = () => {
                 {/* Subtitle Overlaps Warning & 1-Click Auto-Fix */}
                 {hasOverlaps && (
                   <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/40 space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <div className="flex items-center space-x-1.5 text-rose-300 text-xs font-semibold">
                         <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
                         <span>Timing Overlaps Detected ({overlappingCues.length})</span>
@@ -1710,7 +1719,7 @@ export const InspectorPanel: React.FC = () => {
                 {/* Collapsed Subtitles Warning (spanned < 25% of video) & 1-Click Speech Calibration */}
                 {isCollapsed && (
                   <div className="p-2.5 rounded-lg bg-indigo-500/15 border border-indigo-500/40 space-y-1.5">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
                       <div className="flex items-center space-x-1.5 text-indigo-300 text-xs font-semibold">
                         <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                         <span>Timing Mismatch Detected (Collapsed Subtitles)</span>
@@ -1747,12 +1756,12 @@ export const InspectorPanel: React.FC = () => {
 
                 {/* Global Timing Sync & Slip Toolbar */}
                 {cues.length > 0 && (
-                  <div className="flex items-center justify-between bg-[#1D1E20] border border-[#393B3F] rounded-lg px-2.5 py-1.5 text-[10px]">
-                    <div className="flex items-center space-x-1.5 text-[#FFF5F5]/70">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 bg-[#1D1E20] border border-[#393B3F] rounded-lg px-2.5 py-1.5 text-[10px]">
+                    <div className="flex items-center space-x-1.5 text-[#FFF5F5]/70 shrink-0">
                       <Clock className="w-3 h-3 text-[#E3B5BE]" />
                       <span className="font-medium">Nudge Timing:</span>
                     </div>
-                    <div className="flex items-center space-x-1 font-mono">
+                    <div className="flex flex-wrap items-center gap-1 font-mono">
                       <button
                         type="button"
                         onClick={() => handleShiftAllCues(-0.5)}
@@ -1879,60 +1888,62 @@ export const InspectorPanel: React.FC = () => {
                               className="w-full bg-[#18191B] border border-[#393B3F] focus:border-[#E3B5BE] rounded p-1.5 text-xs text-[#FFF5F5] placeholder-[#FFF5F5]/30 resize-none focus:outline-none transition-colors"
                             />
 
-                            {/* Timing Adjusters */}
-                            <div className="flex items-center justify-between mt-1 pt-1 border-t border-[#393B3F]/50 text-[10px] text-[#FFF5F5]/50 font-mono">
-                              <div className="flex items-center space-x-1">
-                                <span>Start:</span>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  min="0"
-                                  value={(cue.startMs / 1000).toFixed(1)}
-                                  onChange={(e) =>
-                                    handleUpdateCueTiming(
-                                      origIdx,
-                                      parseFloat(e.target.value) || 0,
-                                      cue.endMs / 1000
-                                    )
-                                  }
-                                  className="w-16 min-w-[62px] bg-[#18191B] border border-[#393B3F] rounded px-1.5 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
-                                />
-                                <span>s</span>
+                            {/* Timing Adjusters - Clean 2-Row Layout to prevent overlap */}
+                            <div className="mt-2 pt-2 border-t border-[#393B3F]/50 text-[10px] text-[#FFF5F5]/60 font-mono space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="text-[#FFF5F5]/50 text-[9px] uppercase tracking-wide">Start:</span>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    value={(cue.startMs / 1000).toFixed(1)}
+                                    onChange={(e) =>
+                                      handleUpdateCueTiming(
+                                        origIdx,
+                                        parseFloat(e.target.value) || 0,
+                                        cue.endMs / 1000
+                                      )
+                                    }
+                                    className="w-16 bg-[#18191B] border border-[#393B3F] rounded px-1.5 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
+                                  />
+                                  <span className="text-[#FFF5F5]/40 text-[9px]">s</span>
+                                </div>
+                                <div className="flex items-center space-x-1.5">
+                                  <span className="text-[#FFF5F5]/50 text-[9px] uppercase tracking-wide">End:</span>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0.1"
+                                    value={(cue.endMs / 1000).toFixed(1)}
+                                    onChange={(e) =>
+                                      handleUpdateCueTiming(
+                                        origIdx,
+                                        cue.startMs / 1000,
+                                        parseFloat(e.target.value) || 0.1
+                                      )
+                                    }
+                                    className="w-16 bg-[#18191B] border border-[#393B3F] rounded px-1.5 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
+                                  />
+                                  <span className="text-[#FFF5F5]/40 text-[9px]">s</span>
+                                </div>
                               </div>
-                              <div className="flex items-center space-x-1">
-                                <span>End:</span>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  min="0.1"
-                                  value={(cue.endMs / 1000).toFixed(1)}
-                                  onChange={(e) =>
-                                    handleUpdateCueTiming(
-                                      origIdx,
-                                      cue.startMs / 1000,
-                                      parseFloat(e.target.value) || 0.1
-                                    )
-                                  }
-                                  className="w-16 min-w-[62px] bg-[#18191B] border border-[#393B3F] rounded px-1.5 py-0.5 text-center text-[#FFF5F5] focus:outline-none focus:border-[#E3B5BE]"
-                                />
-                                <span>s</span>
-                              </div>
-                              <div className="flex items-center space-x-1">
+                              <div className="flex items-center justify-end space-x-1.5">
                                 <button
                                   type="button"
                                   onClick={() => handleSyncCueToPlayhead(origIdx, false)}
-                                  className="px-1.5 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#E3B5BE]/20 text-[#E3B5BE] text-[9px] border border-[#E3B5BE]/30 transition-colors"
+                                  className="px-2 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#E3B5BE]/20 text-[#E3B5BE] text-[9px] border border-[#E3B5BE]/30 transition-colors"
                                   title="Snap this line's start time to current playhead position"
                                 >
-                                  Snap Here
+                                  Snap to Playhead
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleSyncCueToPlayhead(origIdx, true)}
-                                  className="px-1.5 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#E3B5BE]/20 text-[#FFF5F5]/70 hover:text-[#FFF5F5] text-[9px] border border-[#393B3F] transition-colors"
+                                  className="px-2 py-0.5 rounded bg-[#2A2B2E] hover:bg-[#E3B5BE]/20 text-[#FFF5F5]/70 hover:text-[#FFF5F5] text-[9px] border border-[#393B3F] transition-colors"
                                   title="Snap this line to playhead and shift all subsequent lines by the same offset"
                                 >
-                                  Snap & All
+                                  Snap & Shift All
                                 </button>
                               </div>
                             </div>
@@ -2647,9 +2658,9 @@ export const InspectorPanel: React.FC = () => {
                 </label>
                 <div className="grid grid-cols-3 gap-1 bg-[#121314] p-1 rounded-lg border border-[#393B3F]">
                   {[
-                    { id: 'cutaway', label: 'B-Roll Cutaway', icon: <Film className="w-3 h-3" /> },
-                    { id: 'pip', label: 'Picture-in-Pic', icon: <Tv className="w-3 h-3" /> },
-                    { id: 'sticker', label: 'Floating Graphic', icon: <Layout className="w-3 h-3" /> },
+                    { id: 'cutaway', label: 'B-Roll Cutaway', icon: <Film className="w-3 h-3" />, title: 'Full-screen B-Roll cutaway overlay' },
+                    { id: 'pip', label: 'Picture-in-Pic', icon: <Tv className="w-3 h-3" />, title: 'Picture-in-Picture window overlay' },
+                    { id: 'sticker', label: 'Graphic PIP', icon: <Layout className="w-3 h-3" />, title: 'Floating graphic / sticker overlay' },
                   ].map((m) => {
                     const currentMode = activeLayer.params?.mode || 'cutaway';
                     const isActive = currentMode === m.id;
@@ -2663,14 +2674,15 @@ export const InspectorPanel: React.FC = () => {
                             if (ov) ov.params.mode = m.id;
                           });
                         }}
-                        className={`flex flex-col items-center justify-center py-1 px-1 rounded text-[10px] font-medium transition-all ${
+                        className={`flex flex-col items-center justify-center py-1.5 px-0.5 rounded text-[9.5px] font-medium transition-all ${
                           isActive
                             ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/50 shadow-sm'
-                            : 'text-[#FFF5F5]/60 hover:text-white hover:bg-white/5'
+                            : 'text-[#FFF5F5]/60 hover:text-white hover:bg-white/5 border border-transparent'
                         }`}
+                        title={m.title}
                       >
                         <span className="mb-0.5">{m.icon}</span>
-                        <span className="truncate">{m.label}</span>
+                        <span className="truncate max-w-full px-0.5 text-center leading-tight">{m.label}</span>
                       </button>
                     );
                   })}
@@ -2687,37 +2699,40 @@ export const InspectorPanel: React.FC = () => {
                     {activeLayer.params?.mediaType || 'broll'}
                   </span>
                 </div>
-                <div className="flex bg-[#121314] p-1 rounded-lg border border-[#393B3F] text-xs">
+                <div className="grid grid-cols-3 gap-1 bg-[#121314] p-1 rounded-lg border border-[#393B3F]">
                   <button
                     type="button"
                     onClick={() => setBrollTab('stock')}
-                    className={`flex-1 py-1 text-center rounded text-[11px] font-medium transition-all ${
+                    className={`py-1.5 px-1 text-center rounded text-[10px] font-medium transition-all truncate whitespace-nowrap ${
                       brollTab === 'stock'
                         ? 'bg-[#2A2C2F] text-white font-semibold'
                         : 'text-[#FFF5F5]/60 hover:text-white'
                     }`}
+                    title="Stock B-Roll video and photo library"
                   >
                     Stock B-Roll
                   </button>
                   <button
                     type="button"
                     onClick={() => setBrollTab('generative')}
-                    className={`flex-1 py-1 text-center rounded text-[11px] font-medium transition-all ${
+                    className={`py-1.5 px-1 text-center rounded text-[10px] font-medium transition-all truncate whitespace-nowrap ${
                       brollTab === 'generative'
                         ? 'bg-cyan-950/60 text-cyan-200 font-semibold border border-cyan-500/40'
                         : 'text-[#FFF5F5]/60 hover:text-white'
                     }`}
+                    title="AI Generative Media (Imagen / Video prompt)"
                   >
-                    ✨ AI Generative
+                    ✨ AI Generate
                   </button>
                   <button
                     type="button"
                     onClick={() => setBrollTab('custom')}
-                    className={`flex-1 py-1 text-center rounded text-[11px] font-medium transition-all ${
+                    className={`py-1.5 px-1 text-center rounded text-[10px] font-medium transition-all truncate whitespace-nowrap ${
                       brollTab === 'custom'
                         ? 'bg-[#2A2C2F] text-white font-semibold'
                         : 'text-[#FFF5F5]/60 hover:text-white'
                     }`}
+                    title="Custom URL or direct asset link"
                   >
                     Custom URL
                   </button>

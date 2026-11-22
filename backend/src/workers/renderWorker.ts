@@ -20,6 +20,7 @@ import { env } from '../config/env.js';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 interface RenderJobPayload {
   jobId: string;
